@@ -39,7 +39,7 @@ class _SplashScreenState extends State<SplashScreen>
   // Controller 5 – infinite particle / glow loop
   late final AnimationController _particleCtrl;
 
-  static const Color _accent = Color(0xFF14A085);
+  static const Color _accent = Color(0xFF1976D2);
 
   @override
   void initState() {
@@ -116,8 +116,8 @@ class _SplashScreenState extends State<SplashScreen>
 
     Navigator.of(context).pushReplacement(PageRouteBuilder(
       transitionDuration: const Duration(milliseconds: 800),
-      pageBuilder: (_, __, ___) => const LoginScreen(),
-      transitionsBuilder: (_, animation, __, child) {
+      pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+      transitionsBuilder: (context, animation, secondaryAnimation, child) {
         final fade =
             CurvedAnimation(parent: animation, curve: Curves.easeIn);
         final slide =
@@ -158,10 +158,36 @@ class _SplashScreenState extends State<SplashScreen>
                   end: Alignment.bottomRight,
                   stops: [0.0, 0.45, 1.0],
                   colors: [
-                    Color(0xFF0A4F41),
-                    Color(0xFF0F6E5C),
-                    Color(0xFF14A085),
+                    Color(0xFF0A3356),
+                    Color(0xFF0F4C81),
+                    Color(0xFF1976D2),
                   ],
+                ),
+              ),
+            ),
+
+            // ── Decorative background circles ─────────────────────────────
+            Positioned(
+              top: -100,
+              right: -50,
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.05),
+                ),
+              ),
+            ),
+            Positioned(
+              bottom: -50,
+              left: -100,
+              child: Container(
+                width: 400,
+                height: 400,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white.withValues(alpha: 0.05),
                 ),
               ),
             ),
@@ -169,7 +195,7 @@ class _SplashScreenState extends State<SplashScreen>
             // ── Floating particle orbs ────────────────────────────────────
             AnimatedBuilder(
               animation: _particleCtrl,
-              builder: (_, __) => CustomPaint(
+              builder: (context, child) => CustomPaint(
                 painter: _ParticlePainter(_particleCtrl.value),
                 child: const SizedBox.expand(),
               ),
@@ -179,7 +205,7 @@ class _SplashScreenState extends State<SplashScreen>
             Center(
               child: AnimatedBuilder(
                 animation: Listenable.merge([_iconCtrl, _particleCtrl]),
-                builder: (_, __) {
+                builder: (context, child) {
                   final fadeVal = _iconFade.value.clamp(0.0, 1.0);
                   final pulse = 0.88 +
                       0.12 * math.sin(_particleCtrl.value * 2 * math.pi);
@@ -224,7 +250,7 @@ class _SplashScreenState extends State<SplashScreen>
                         // Pulsing halo
                         AnimatedBuilder(
                           animation: _particleCtrl,
-                          builder: (_, __) {
+                          builder: (context, child) {
                             final pulse = 0.85 +
                                 0.15 *
                                     math.sin(
@@ -278,7 +304,7 @@ class _SplashScreenState extends State<SplashScreen>
                           child: const Icon(
                             Icons.local_pharmacy_rounded,
                             size: 58,
-                            color: Colors.white,
+                            color: Color(0xFF0F4C81),
                           ),
                         ),
                       ],
@@ -351,7 +377,7 @@ class _SplashScreenState extends State<SplashScreen>
                       width: 200,
                       child: AnimatedBuilder(
                         animation: _progressCtrl,
-                        builder: (_, __) => ClipRRect(
+                        builder: (context, child) => ClipRRect(
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
                             value: _progressCtrl.value,

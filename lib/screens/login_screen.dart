@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -8,6 +9,9 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const Color _primaryColor = Color(0xFF0F4C81);
+  static const Color _accentColor = Color(0xFF1976D2);
+
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -43,8 +47,9 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = false;
     });
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Login simulated successfully!')),
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const DashboardScreen()),
     );
   }
 
@@ -66,8 +71,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Center(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(32),
-                    child: Container(
-                      constraints: const BoxConstraints(maxWidth: 380),
+                    child: Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: Theme.of(context).colorScheme.copyWith(
+                          primary: _primaryColor,
+                        ),
+                      ),
+                      child: Container(
+                        constraints: const BoxConstraints(maxWidth: 380),
                       child: Form(
                         key: _formKey,
                         child: Column(
@@ -77,7 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             Text(
                               'Welcome Back',
                               style: Theme.of(context).textTheme.headlineLarge?.copyWith(
-                                color: Theme.of(context).colorScheme.primary,
+                                color: _primaryColor,
                               ),
                             ),
                             const SizedBox(height: 8),
@@ -176,6 +187,10 @@ class _LoginScreenState extends State<LoginScreen> {
                               width: double.infinity,
                               height: 50,
                               child: ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: _primaryColor,
+                                  foregroundColor: Colors.white,
+                                ),
                                 onPressed: _isLoading ? null : _handleLogin,
                                 child: _isLoading
                                     ? const SizedBox(
@@ -196,14 +211,15 @@ class _LoginScreenState extends State<LoginScreen> {
                             Center(
                               child: Text(
                                 "Don't have an account? Contact admin",
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
+                                style: const TextStyle(
+                                  color: _primaryColor,
                                 ),
                               ),
                             ),
                           ],
                         ),
                       ),
+                    ),
                     ),
                   ),
                 ),
@@ -226,9 +242,9 @@ class _BrandingPanel extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF0F6E5C), // Primary
-            Color(0xFF14A085), // Accent
+          colors: const [
+            Color(0xFF0F4C81), // Primary
+            Color(0xFF1976D2), // Accent
           ],
         ),
       ),
@@ -243,7 +259,7 @@ class _BrandingPanel extends StatelessWidget {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -255,7 +271,7 @@ class _BrandingPanel extends StatelessWidget {
               height: 400,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
               ),
             ),
           ),
@@ -275,7 +291,7 @@ class _BrandingPanel extends StatelessWidget {
                   child: const Icon(
                     Icons.local_pharmacy_rounded,
                     size: 48,
-                    color: Color(0xFF0F6E5C),
+                    color: Color(0xFF0F4C81),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -340,7 +356,7 @@ class _FeatureRow extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.2),
+            color: Colors.white.withValues(alpha: 0.2),
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(
@@ -365,7 +381,7 @@ class _FeatureRow extends StatelessWidget {
             Text(
               description,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha: 0.8),
               ),
             ),
           ],
