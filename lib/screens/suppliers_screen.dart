@@ -1,6 +1,48 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../widgets/executive_header.dart';
 
 // TODO: Replace local list with real-time Firestore stream from 'suppliers' collection
+
+class _ActionButton extends StatefulWidget {
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  const _ActionButton({required this.icon, required this.color, required this.onTap, required this.tooltip});
+
+  @override
+  State<_ActionButton> createState() => _ActionButtonState();
+}
+
+class _ActionButtonState extends State<_ActionButton> {
+  bool _isHovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _isHovering = true),
+        onExit: (_) => setState(() => _isHovering = false),
+        child: InkWell(
+          onTap: widget.onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _isHovering ? widget.color.withValues(alpha: 0.1) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(widget.icon, size: 18, color: _isHovering ? widget.color : Colors.grey.shade500),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 class Supplier {
   final String id;
@@ -11,6 +53,8 @@ class Supplier {
   final String address;
   final List<String> categoriesSupplied;
   final DateTime lastOrderDate;
+  final double pendingAmount;
+  final double advanceAmount;
 
   Supplier({
     required this.id,
@@ -21,6 +65,8 @@ class Supplier {
     required this.address,
     required this.categoriesSupplied,
     required this.lastOrderDate,
+    this.pendingAmount = 0.0,
+    this.advanceAmount = 0.0,
   });
 
   Supplier copyWith({
@@ -56,8 +102,7 @@ class SuppliersScreen extends StatefulWidget {
 class _SuppliersScreenState extends State<SuppliersScreen> {
   // Theme Tokens
   static const Color _primaryColor = Color(0xFF0F4C81);
-  static const Color _accentColor = Color(0xFF1976D2);
-  static const Color _backgroundColor = Color(0xFFF4F7F6);
+    static const Color _backgroundColor = Color(0xFFF4F7F6);
 
   String _searchQuery = '';
 
@@ -184,68 +229,43 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 
-  void _openViewDialog(Supplier supplier) {
-    showDialog(
+  
+  void _recordPayment(Supplier c) {
+    showGeneralDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white,
-        child: Container(
-          width: 450,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Supplier Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: Color(0xFF1A2E2B))),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    color: Colors.grey.shade500,
-                    onPressed: () => Navigator.pop(context),
-                    splashRadius: 24,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildDetailRow('Company Name', supplier.companyName),
-              _buildDetailRow('Contact Person', supplier.contactPerson),
-              _buildDetailRow('Phone Number', supplier.phone),
-              _buildDetailRow('Email', supplier.email.isNotEmpty ? supplier.email : '--'),
-              _buildDetailRow('Address', supplier.address.isNotEmpty ? supplier.address : '--'),
-              _buildDetailRow('Last Order', '${supplier.lastOrderDate.day}/${supplier.lastOrderDate.month}/${supplier.lastOrderDate.year}'),
-              const SizedBox(height: 8),
-              const Text('Categories Supplied', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: supplier.categoriesSupplied.isEmpty 
-                    ? [const Text('--', style: TextStyle(fontWeight: FontWeight.w600))]
-                    : supplier.categoriesSupplied.map((cat) => _SmallChip(label: cat)).toList(),
-              ),
-            ],
+      barrierDismissible: true,
+      barrierLabel: 'Record Payment Dialog',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: _RecordPaymentDialog(supplier: c),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)),
-        ],
-      ),
+  void _viewLedger(Supplier c) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Supplier Ledger Dialog',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: _SupplierLedgerDialog(supplier: c),
+          ),
+        );
+      },
     );
   }
+
 
   void _confirmDelete(Supplier supplier) {
     showDialog(
@@ -289,42 +309,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
           children: [
             // ── Header ──────────────────────────────────────────────
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Suppliers',
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF1A2E2B),
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Manage your medicine suppliers',
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w400,
-                      ),
-                    ),
-                  ],
-                ),
-                ElevatedButton.icon(
-                  onPressed: () => _openAddEditDialog(),
-                  icon: const Icon(Icons.add, size: 20),
-                  label: const Text('Add Supplier'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primaryColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                    elevation: 0,
+                const Expanded(
+                  child: ExecutiveHeader(
+                    title: 'Suppliers',
+                    subtitle: 'Manage your medicine suppliers, track pending balances, and record payments.',
                   ),
                 ),
               ],
@@ -342,7 +332,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.04),
+                          color: Colors.black.withValues(alpha: 0.04),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -371,7 +361,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   decoration: BoxDecoration(
-                    color: _primaryColor.withOpacity(0.1),
+                    color: _primaryColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -390,7 +380,20 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                     ],
                   ),
                 ),
-                const Spacer(flex: 1),
+                const SizedBox(width: 12),
+                ElevatedButton.icon(
+                  onPressed: () => _openAddEditDialog(),
+                  icon: const Icon(Icons.add, size: 20),
+                  label: const Text('Add Supplier'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                    elevation: 0,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 24),
@@ -403,7 +406,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
+                      color: Colors.black.withValues(alpha: 0.03),
                       blurRadius: 10,
                       offset: const Offset(0, 4),
                     ),
@@ -463,8 +466,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               _headerCell('Company Name', flex: 2),
               _headerCell('Contact Person', flex: 2),
               _headerCell('Contact Info', flex: 2),
-              _headerCell('Categories', flex: 2),
-              _headerCell('Last Order', flex: 1),
+              _headerCell('Last Order', flex: 1, textAlign: TextAlign.center),
               const SizedBox(width: 140), // Actions space
             ],
           ),
@@ -478,7 +480,8 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
             itemBuilder: (context, index) {
               return _SupplierRow(
                 supplier: suppliers[index],
-                onView: () => _openViewDialog(suppliers[index]),
+                onPayment: () => _recordPayment(suppliers[index]),
+                onView: () => _viewLedger(suppliers[index]),
                 onEdit: () => _openAddEditDialog(suppliers[index]),
                 onDelete: () => _confirmDelete(suppliers[index]),
               );
@@ -489,11 +492,12 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     );
   }
 
-  Widget _headerCell(String title, {int flex = 1}) {
+  Widget _headerCell(String title, {int flex = 1, TextAlign? textAlign}) {
     return Expanded(
       flex: flex,
       child: Text(
         title.toUpperCase(),
+        textAlign: textAlign,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
@@ -507,12 +511,14 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
 
 class _SupplierRow extends StatefulWidget {
   final Supplier supplier;
+  final VoidCallback onPayment;
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   const _SupplierRow({
     required this.supplier,
+    required this.onPayment,
     required this.onView,
     required this.onEdit,
     required this.onDelete,
@@ -565,96 +571,53 @@ class _SupplierRowState extends State<_SupplierRow> {
               ),
             ),
             Expanded(
-              flex: 2,
-              child: Wrap(
-                spacing: 4,
-                runSpacing: 4,
-                children: _buildCategoryChips(s.categoriesSupplied),
-              ),
-            ),
-            Expanded(
               flex: 1,
               child: Text(
-                '${s.lastOrderDate.day}/${s.lastOrderDate.month}/${s.lastOrderDate.year}',
+                'N/A',
+                textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
               ),
             ),
             SizedBox(
-              width: 140,
+              width: 164,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 150),
                 opacity: _isHovered ? 1.0 : 0.0,
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.visibility_outlined, size: 20),
+                    _ActionButton(
+                      icon: Icons.credit_card_outlined,
                       color: Colors.green.shade600,
-                      onPressed: widget.onView,
-                      tooltip: 'View Supplier',
-                      splashRadius: 20,
+                      onTap: widget.onPayment,
+                      tooltip: 'Record Payment',
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 20),
-                      color: const Color(0xFF0F4C81),
-                      onPressed: widget.onEdit,
-                      tooltip: 'Edit Supplier',
-                      splashRadius: 20,
+                    const SizedBox(width: 8),
+                    _ActionButton(
+                      icon: Icons.visibility_outlined,
+                      color: const Color(0xFF7E57C2),
+                      onTap: widget.onView,
+                      tooltip: 'View Ledger',
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, size: 20),
+                    const SizedBox(width: 8),
+                    _ActionButton(
+                      icon: Icons.edit_outlined,
+                      color: const Color(0xFF1976D2),
+                      onTap: widget.onEdit,
+                      tooltip: 'Edit',
+                    ),
+                    const SizedBox(width: 8),
+                    _ActionButton(
+                      icon: Icons.delete_outline,
                       color: Colors.red.shade400,
-                      onPressed: widget.onDelete,
-                      tooltip: 'Delete Supplier',
-                      splashRadius: 20,
+                      onTap: widget.onDelete,
+                      tooltip: 'Delete',
                     ),
                   ],
                 ),
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  List<Widget> _buildCategoryChips(List<String> categories) {
-    if (categories.isEmpty) return [const Text('-')];
-    
-    List<Widget> chips = [];
-    int maxToShow = 2;
-    for (int i = 0; i < categories.length && i < maxToShow; i++) {
-      chips.add(_SmallChip(label: categories[i]));
-    }
-    
-    if (categories.length > maxToShow) {
-      chips.add(_SmallChip(label: '+${categories.length - maxToShow}'));
-    }
-    
-    return chips;
-  }
-}
-
-class _SmallChip extends StatelessWidget {
-  final String label;
-
-  const _SmallChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F4C81).withOpacity(0.08),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFF0F4C81).withOpacity(0.1)),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Color(0xFF0F4C81),
         ),
       ),
     );
@@ -673,29 +636,21 @@ class _AddEditSupplierDialog extends StatefulWidget {
 
 class _AddEditSupplierDialogState extends State<_AddEditSupplierDialog> {
   final _formKey = GlobalKey<FormState>();
+  
   late TextEditingController _companyNameController;
   late TextEditingController _contactPersonController;
   late TextEditingController _phoneController;
   late TextEditingController _emailController;
   late TextEditingController _addressController;
 
-  final List<String> _availableCategories = [
-    'Tablets', 'Syrups', 'Injections', 'Capsules', 'Ointments', 'Drops', 'First Aid', 'Vitamins', 'Supplements'
-  ];
-  List<String> _selectedCategories = [];
-
   @override
   void initState() {
     super.initState();
-    final s = widget.supplier;
-    _companyNameController = TextEditingController(text: s?.companyName ?? '');
-    _contactPersonController = TextEditingController(text: s?.contactPerson ?? '');
-    _phoneController = TextEditingController(text: s?.phone ?? '');
-    _emailController = TextEditingController(text: s?.email ?? '');
-    _addressController = TextEditingController(text: s?.address ?? '');
-    if (s != null) {
-      _selectedCategories = List.from(s.categoriesSupplied);
-    }
+    _companyNameController = TextEditingController(text: widget.supplier?.companyName ?? '');
+    _contactPersonController = TextEditingController(text: widget.supplier?.contactPerson ?? '');
+    _phoneController = TextEditingController(text: widget.supplier?.phone ?? '');
+    _emailController = TextEditingController(text: widget.supplier?.email ?? '');
+    _addressController = TextEditingController(text: widget.supplier?.address ?? '');
   }
 
   @override
@@ -708,176 +663,793 @@ class _AddEditSupplierDialogState extends State<_AddEditSupplierDialog> {
     super.dispose();
   }
 
-  void _save() {
+  void _submit() {
     if (_formKey.currentState!.validate()) {
-      final newSupplier = Supplier(
+      final supplier = Supplier(
         id: widget.supplier?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
         companyName: _companyNameController.text.trim(),
-        contactPerson: _contactPersonController.text.trim(),
         phone: _phoneController.text.trim(),
-        email: _emailController.text.trim(),
-        address: _addressController.text.trim(),
-        categoriesSupplied: _selectedCategories,
+        contactPerson: _contactPersonController.text.trim(),
+        email: '',
+        categoriesSupplied: [],
         lastOrderDate: widget.supplier?.lastOrderDate ?? DateTime.now(),
+        address: _addressController.text.trim(),
+        pendingAmount: widget.supplier?.pendingAmount ?? 0.0,
+        advanceAmount: widget.supplier?.advanceAmount ?? 0.0,
       );
-      widget.onSave(newSupplier);
-      Navigator.pop(context);
+      
+      Navigator.of(context).pop();
+      widget.onSave(supplier);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.supplier != null;
+    final isEditing = widget.supplier != null;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
       child: Container(
-        width: 500,
+        width: 550,
         padding: const EdgeInsets.all(32),
         child: Form(
           key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  isEdit ? 'Edit Supplier' : 'Add Supplier',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF0FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.person_add_alt_1, color: Color(0xFF5D5FEF), size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isEditing ? 'Edit Supplier' : 'Add New Supplier',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isEditing ? 'Update existing supplier details' : 'Create a new supplier profile',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    color: Colors.grey.shade500,
+                    onPressed: () => Navigator.of(context).pop(),
+                    splashRadius: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              // Profile Section Box
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(16),
                 ),
-                const SizedBox(height: 24),
-                _buildTextField('Company Name *', _companyNameController, required: true),
-                const SizedBox(height: 16),
-                _buildTextField('Contact Person *', _contactPersonController, required: true),
-                const SizedBox(height: 16),
-                Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: _buildTextField('Phone Number *', _phoneController, required: true)),
-                    const SizedBox(width: 16),
-                    Expanded(child: _buildTextField('Email', _emailController, required: false, isEmail: true)),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                _buildTextField('Address', _addressController, maxLines: 2),
-                const SizedBox(height: 24),
-                const Text('Categories Supplied', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _availableCategories.map((cat) {
-                    final isSelected = _selectedCategories.contains(cat);
-                    return InkWell(
-                      onTap: () {
-                        setState(() {
-                          if (isSelected) {
-                            _selectedCategories.remove(cat);
-                          } else {
-                            _selectedCategories.add(cat);
-                          }
-                        });
+                    const Text('Profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                    const SizedBox(height: 4),
+                    Text('Capture the supplier name and contact details used across invoices and ledgers.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 24),
+                    
+                    _buildField(
+                      controller: _companyNameController,
+                      label: 'Supplier name',
+                      hint: 'e.g. Al-Nafi Traders',
+                      validator: (val) => val == null || val.isEmpty ? 'Company Name is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      controller: _phoneController,
+                      label: 'Phone number',
+                      hint: 'e.g. 03001234567',
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return 'Phone number is required';
+                        return null;
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF0F4C81) : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF0F4C81) : Colors.grey.shade300,
-                          ),
-                        ),
-                        child: Text(
-                          cat,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected ? Colors.white : Colors.grey.shade700,
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 32),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
                     ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: _save,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0F4C81),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      controller: _addressController,
+                      label: 'Address',
+                      hint: 'e.g. Suite 4, Bilal Plaza, Lahore',
+                      maxLines: 3,
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 24),
+              // Actions
+              Row(
+                children: [
+                  Expanded(
+                    flex: 1,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        foregroundColor: Colors.black87,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5D5FEF),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(isEditing ? 'Save Changes' : 'Add Supplier', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTextField(
-    String label,
-    TextEditingController controller, {
-    bool required = false,
-    bool isEmail = false,
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
     int maxLines = 1,
+    String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
-        const SizedBox(height: 6),
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF4A5568))),
+        const SizedBox(height: 8),
         TextFormField(
           controller: controller,
           maxLines: maxLines,
-          style: const TextStyle(fontSize: 14),
+          validator: validator,
           decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            filled: true,
+            fillColor: Colors.white,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 2),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF5D5FEF), width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-              borderSide: const BorderSide(color: Colors.red, width: 1),
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
             ),
-            filled: true,
-            fillColor: Colors.grey.shade50,
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
           ),
-          validator: (value) {
-            if (required && (value == null || value.trim().isEmpty)) {
-              return 'This field is required';
-            }
-            if (isEmail && value != null && value.trim().isNotEmpty) {
-              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-              if (!emailRegex.hasMatch(value)) {
-                return 'Enter a valid email';
-              }
-            }
-            return null;
-          },
         ),
       ],
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// VIEW CUSTOMER LEDGER DIALOG
+// ---------------------------------------------------------------------------
+class _LedgerEntry {
+  final DateTime date;
+  final String reference;
+  final String description;
+  final double? debit;
+  final double? credit;
+  final double balance;
+
+  _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance);
+}
+
+class _SupplierLedgerDialog extends StatelessWidget {
+  final Supplier supplier;
+
+  const _SupplierLedgerDialog({required this.supplier});
+
+  @override
+  Widget build(BuildContext context) {
+    // Mock ledger entries mimicking the image
+    final entries = [
+      _LedgerEntry(DateTime(2026, 6, 27), 'INV-1', 'Invoice INV-1', null, 2800, 2800),
+      _LedgerEntry(DateTime(2026, 6, 27), 'REC-INV-1', 'Payment received for Invoice INV-1', 2800, null, 0),
+      _LedgerEntry(DateTime(2026, 6, 27), 'ADV-INV-1', 'Advance received from supplier after Invoice INV-1', 200, null, -200),
+      _LedgerEntry(DateTime(2026, 6, 27), 'SR-1', 'Sales Return SR-1 against INV-1', 224, null, -424),
+    ];
+
+    bool isAdvance = supplier.advanceAmount > 0;
+    double closingBalance = isAdvance ? supplier.advanceAmount : supplier.pendingAmount;
+    
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      child: Container(
+        width: 850,
+        padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3E5F5), // Light purple
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.receipt_long, color: Color(0xFF7E57C2), size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Supplier Ledger', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                      const SizedBox(height: 4),
+                      Text('Financial statement for ${supplier.companyName}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  color: Colors.grey.shade500,
+                  onPressed: () => Navigator.of(context).pop(),
+                  splashRadius: 24,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Main Card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade200),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Supplier Info Row
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9), // Light green
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.account_balance_wallet, color: Color(0xFF4CAF50)),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(supplier.companyName, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                            const SizedBox(height: 2),
+                            Text('Supplier statement and running receivable balance.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                            const SizedBox(height: 2),
+                            Text(supplier.phone, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(isAdvance ? 'Advance credit' : 'Pending balance', style: TextStyle(fontSize: 12, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                            const SizedBox(height: 4),
+                            Text('Rs. ${NumberFormat('#,##0').format(closingBalance)}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  // Summary Boxes
+                  Row(
+                    children: [
+                      Expanded(child: _buildSummaryBox(title: 'Opening balance', value: 'Rs. 0', subtitle: '', bgColor: Colors.blue.shade50, valueColor: Colors.blue.shade700)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildSummaryBox(title: 'Closing balance', value: 'Rs. ${NumberFormat('#,##0').format(closingBalance)}', subtitle: isAdvance ? 'Advance credit' : (supplier.pendingAmount > 0 ? 'Pending balance' : 'Cleared'), bgColor: const Color(0xFFE8F5E9), valueColor: Colors.green.shade700)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(12)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Ledger notes', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                              const SizedBox(height: 4),
+                              Text('Debits reflect incoming payments. Credits reflect outstanding invoice obligations.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Table Header
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: _headerText('DATE')),
+                  Expanded(flex: 2, child: _headerText('REFERENCE')),
+                  Expanded(flex: 4, child: _headerText('DESCRIPTION')),
+                  Expanded(flex: 2, child: _headerText('DEBIT (PAID)')),
+                  Expanded(flex: 2, child: _headerText('CREDIT (OWED)')),
+                  Expanded(flex: 2, child: _headerText('BALANCE')),
+                ],
+              ),
+            ),
+            // Table Rows
+            SizedBox(
+              height: 250,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: entries.length,
+                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF5F5F5)),
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 2, child: Text(DateFormat('dd MMM yyyy').format(entry.date), style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
+                        Expanded(flex: 2, child: Text(entry.reference, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                        Expanded(flex: 4, child: Text(entry.description, style: TextStyle(fontSize: 13, color: Colors.grey.shade800))),
+                        Expanded(flex: 2, child: Text(entry.debit != null ? 'Rs. ${NumberFormat('#,##0').format(entry.debit)}' : '-', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.green.shade600))),
+                        Expanded(flex: 2, child: Text(entry.credit != null ? 'Rs. ${NumberFormat('#,##0').format(entry.credit)}' : '-', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.red.shade500))),
+                        Expanded(flex: 2, child: Text('Rs. ${NumberFormat('#,##0').format(entry.balance)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryBox({required String title, required String value, required String subtitle, required Color bgColor, required Color valueColor}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: valueColor)),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ]
+        ],
+      ),
+    );
+  }
+
+  Widget _headerText(String text) {
+    return Text(
+      text,
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 0.5),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RECORD CUSTOMER PAYMENT DIALOG
+// ---------------------------------------------------------------------------
+class _RecordPaymentDialog extends StatefulWidget {
+  final Supplier supplier;
+
+  const _RecordPaymentDialog({required this.supplier});
+
+  @override
+  State<_RecordPaymentDialog> createState() => _RecordPaymentDialogState();
+}
+
+class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
+  final _amountController = TextEditingController(text: '0');
+  final _receiptController = TextEditingController();
+  final _notesController = TextEditingController();
+  String _paymentMethod = 'Cash';
+  bool _isGeneralReceipt = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _receiptController.text = 'PAY-CUST-${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _receiptController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isAdvance = widget.supplier.advanceAmount > 0;
+    bool hasPending = widget.supplier.pendingAmount > 0;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      child: Container(
+        width: 650,
+        padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E5F5), // Light purple
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.payment, color: Color(0xFF7E57C2), size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Receive Supplier Payment', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                        const SizedBox(height: 4),
+                        Text('Record payment from ${widget.supplier.companyName}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    color: Colors.grey.shade500,
+                    onPressed: () => Navigator.of(context).pop(),
+                    splashRadius: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Status Box (Advance/Pending)
+              if (isAdvance || hasPending)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isAdvance ? Colors.green.shade200 : Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(isAdvance ? Icons.check_circle_outline : Icons.info_outline, color: isAdvance ? Colors.green.shade600 : Colors.red.shade600, size: 28),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(isAdvance ? 'Advance credit' : 'Pending balance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                            const SizedBox(height: 4),
+                            Text('Rs. ${NumberFormat('#,##0').format(isAdvance ? widget.supplier.advanceAmount : widget.supplier.pendingAmount)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                            const SizedBox(height: 4),
+                            Text(isAdvance ? 'This supplier already has advance credit available in the ledger.' : 'This supplier has an outstanding balance.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Invoice Selection Section
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Invoice Selection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                    const SizedBox(height: 4),
+                    Text('Apply the receipt to a single invoice or keep it unassigned.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _isGeneralReceipt = true;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade200, width: _isGeneralReceipt ? 2 : 1),
+                          borderRadius: BorderRadius.circular(12),
+                          color: _isGeneralReceipt ? const Color(0xFFF3F3FF) : Colors.white,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _isGeneralReceipt ? const Color(0xFFE0E0FF) : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.account_balance_wallet_outlined, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade600),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('General receipt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade800)),
+                                  const SizedBox(height: 4),
+                                  Text('Receive payment without linking it to a specific invoice.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                ],
+                              ),
+                            ),
+                            if (_isGeneralReceipt)
+                              const Icon(Icons.check_circle, color: Color(0xFF5D5FEF)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Payment Details Section
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Payment Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                    const SizedBox(height: 4),
+                    Text('Capture the receipt amount, method, and reference number.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 24),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildField(
+                            label: 'Amount received',
+                            controller: _amountController,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Payment method', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                              const SizedBox(height: 8),
+                              Container(
+                                height: 52, // Match TextField height approximately
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    isExpanded: true,
+                                    value: _paymentMethod,
+                                    icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                                    items: ['Cash', 'Bank Transfer', 'Credit Card'].map((String value) {
+                                      return DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value, style: const TextStyle(fontSize: 14)),
+                                      );
+                                    }).toList(),
+                                    onChanged: (newValue) {
+                                      setState(() {
+                                        _paymentMethod = newValue!;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      label: 'Receipt / reference no.',
+                      controller: _receiptController,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      label: 'Notes',
+                      controller: _notesController,
+                      maxLines: 3,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              // Actions
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                    child: Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      const snackBarWidth = 400.0;
+                      final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.white, size: 20),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Payment recorded successfully',
+                                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.green.shade600,
+                          behavior: SnackBarBehavior.floating,
+                          margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5D5FEF),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Record payment', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required String label,
+    required TextEditingController controller,
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF5D5FEF), width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+

@@ -1,96 +1,16 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../widgets/executive_header.dart';
 import 'login_screen.dart';
 import 'inventory_screen.dart';
 import 'billing_screen.dart';
 import 'customers_screen.dart';
 import 'suppliers_screen.dart';
+import 'ledger_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
-
-// ---------------------------------------------------------------------------
-// SIMPLE DATA MODELS (replace with Firestore models later)
-// ---------------------------------------------------------------------------
-class SaleRecord {
-  final String invoice;
-  final String customer;
-  final String medicines;
-  final String amount;
-  final String date;
-
-  const SaleRecord({
-    required this.invoice,
-    required this.customer,
-    required this.medicines,
-    required this.amount,
-    required this.date,
-  });
-}
-
-class LowStockItem {
-  final String name;
-  final int quantity;
-  final bool critical; // true = red, false = orange
-
-  const LowStockItem({
-    required this.name,
-    required this.quantity,
-    required this.critical,
-  });
-}
-
-// ---------------------------------------------------------------------------
-// DUMMY DATA
-// ---------------------------------------------------------------------------
-
-// TODO: Replace with real-time stream from Firestore 'sales' collection,
-// filtered by date == today
-const List<SaleRecord> _dummySales = [
-  SaleRecord(
-    invoice: 'INV-1041',
-    customer: 'Ahmed Raza',
-    medicines: 'Panadol, Augmentin',
-    amount: 'Rs. 850',
-    date: '20 Jun 2026',
-  ),
-  SaleRecord(
-    invoice: 'INV-1040',
-    customer: 'Sara Khan',
-    medicines: 'Brufen 400mg',
-    amount: 'Rs. 320',
-    date: '20 Jun 2026',
-  ),
-  SaleRecord(
-    invoice: 'INV-1039',
-    customer: 'Hamid Butt',
-    medicines: 'Ciplox, ORS Sachet',
-    amount: 'Rs. 1,150',
-    date: '20 Jun 2026',
-  ),
-  SaleRecord(
-    invoice: 'INV-1038',
-    customer: 'Nadia Malik',
-    medicines: 'Vitamin C, Zinc',
-    amount: 'Rs. 540',
-    date: '20 Jun 2026',
-  ),
-  SaleRecord(
-    invoice: 'INV-1037',
-    customer: 'Usman Tariq',
-    medicines: 'Metformin 500mg',
-    amount: 'Rs. 210',
-    date: '19 Jun 2026',
-  ),
-];
-
-// TODO: Replace with Firestore query: medicines where stockQty < minStockThreshold
-const List<LowStockItem> _dummyLowStock = [
-  LowStockItem(name: 'Panadol 500mg', quantity: 5, critical: true),
-  LowStockItem(name: 'Augmentin 625mg', quantity: 8, critical: false),
-  LowStockItem(name: 'Brufen 400mg', quantity: 3, critical: true),
-  LowStockItem(name: 'ORS Sachet', quantity: 11, critical: false),
-  LowStockItem(name: 'Ciplox 500mg', quantity: 2, critical: true),
-];
+import 'purchase_orders_screen.dart';
+import 'sales_return_screen.dart';
 
 // ---------------------------------------------------------------------------
 // DASHBOARD SCREEN
@@ -107,10 +27,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final List<_NavItem> _navItems = const [
     _NavItem(label: 'Dashboard', icon: Icons.dashboard_outlined),
+    _NavItem(label: 'Sales (POS)', icon: Icons.shopping_cart_outlined),
+    _NavItem(label: 'Sales Return', icon: Icons.assignment_return_outlined),
     _NavItem(label: 'Inventory', icon: Icons.inventory_2_outlined),
-    _NavItem(label: 'Sales / Billing', icon: Icons.point_of_sale_outlined),
+    _NavItem(label: 'Purchases', icon: Icons.local_shipping_outlined),
     _NavItem(label: 'Customers', icon: Icons.people_outline),
-    _NavItem(label: 'Suppliers', icon: Icons.local_shipping_outlined),
+    _NavItem(label: 'Suppliers', icon: Icons.business_outlined),
+    _NavItem(label: 'Ledger', icon: Icons.account_balance_wallet_outlined),
     _NavItem(label: 'Reports', icon: Icons.bar_chart_outlined),
     _NavItem(label: 'Settings', icon: Icons.settings_outlined),
   ];
@@ -141,32 +64,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Expanded(
               child: Column(
                 children: [
-                  // Top bar
-                  _TopBar(
-                    pageTitle: _navItems[_selectedIndex].label,
-                    pageIcon: _navItems[_selectedIndex].icon,
-                  ),
+                  // Top bar (BillingScreen has its own matching top bar built-in)
+                  if (_selectedIndex != 1)
+                    _TopBar(
+                      pageTitle: _navItems[_selectedIndex].label,
+                      pageIcon: _navItems[_selectedIndex].icon,
+                    ),
 
                   // Scrollable body
                   Expanded(
                     child: _selectedIndex == 0
                         ? SingleChildScrollView(
                             padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
-                            child: _DashboardBody(),
+                            child: _DashboardBody(
+                              onNavigate: (index) => setState(() => _selectedIndex = index),
+                            ),
                           )
                         : _selectedIndex == 1
-                            ? const InventoryScreen()
+                            ? const BillingScreen()
                             : _selectedIndex == 2
-                                ? const BillingScreen()
+                                ? const SalesReturnScreen()
                                 : _selectedIndex == 3
-                                    ? const CustomersScreen()
+                                    ? const InventoryScreen()
                                     : _selectedIndex == 4
-                                        ? const SuppliersScreen()
+                                        ? const PurchaseOrdersScreen()
                                         : _selectedIndex == 5
-                                            ? const ReportsScreen()
+                                            ? const CustomersScreen()
                                             : _selectedIndex == 6
-                                                ? const SettingsScreen()
-                                                : const Center(child: Text('Coming Soon...')),
+                                                ? const SuppliersScreen()
+                                                : _selectedIndex == 7
+                                                    ? const LedgerScreen()
+                                                    : _selectedIndex == 8
+                                                        ? const ReportsScreen()
+                                                        : _selectedIndex == 9
+                                                            ? const SettingsScreen()
+                                                            : const Center(child: Text('Coming Soon...')),
                   ),
                 ],
               ),
@@ -217,32 +149,23 @@ class _Sidebar extends StatelessWidget {
     return Container(
       width: 250,
       decoration: const BoxDecoration(
-        color: Color(0xFF0F4C81),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 15,
-            offset: Offset(4, 0),
-          ),
-        ],
+        color: Color(0xFF0B1120), // Darker navy background matching the image
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // ── Brand header ───────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 36, 20, 28),
+            padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(9),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.18),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.3), width: 1),
+                    color: const Color(0xFF5A66F9), // Purple blue icon bg
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.local_pharmacy_rounded,
-                      color: Colors.white, size: 22),
+                  child: const Icon(Icons.local_pharmacy_rounded, color: Colors.white, size: 22),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -250,18 +173,21 @@ class _Sidebar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Sohail Medical',
+                        'New Sohail Medical Store',
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
-                        'Store',
+                        'Enterprise POS Workspace',
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.70),
-                          fontSize: 12,
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 11,
+                          height: 1.2,
                         ),
                       ),
                     ],
@@ -271,8 +197,20 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
 
-          Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
-          const SizedBox(height: 12),
+          Divider(color: Colors.white.withValues(alpha: 0.05), height: 1),
+
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 24, 24, 12),
+            child: Text(
+              'OPERATIONS',
+              style: TextStyle(
+                color: Color(0xFF8F9BB3), 
+                fontSize: 11, 
+                fontWeight: FontWeight.w700, 
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
 
           // ── Nav items ──────────────────────────────────────────────────
           Expanded(
@@ -287,19 +225,45 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
 
-          Divider(color: Colors.white.withValues(alpha: 0.15), height: 1),
-
-          // ── Logout ─────────────────────────────────────────────────────
+          // ── Footer Profile ─────────────────────────────────────────────
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: _SidebarNavItem(
-              item: const _NavItem(label: 'Logout', icon: Icons.logout_rounded),
-              isSelected: false,
-              isDestructive: true,
-              onTap: onLogout,
+            padding: const EdgeInsets.all(16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E2746).withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF0B1120),
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: const Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Alee', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text('Admin', style: TextStyle(color: Color(0xFF8F9BB3), fontSize: 11)),
+                      ],
+                    ),
+                  ),
+                  InkWell(
+                    onTap: onLogout,
+                    child: const Icon(Icons.logout, color: Color(0xFF8F9BB3), size: 18),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 8),
         ],
       ),
     );
@@ -313,94 +277,66 @@ class _SidebarNavItem extends StatelessWidget {
   final _NavItem item;
   final bool isSelected;
   final VoidCallback onTap;
-  final bool isDestructive;
 
   const _SidebarNavItem({
     required this.item,
     required this.isSelected,
     required this.onTap,
-    this.isDestructive = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = isDestructive
-        ? Colors.red.shade200
-        : isSelected
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.65);
-
-    final labelColor = isDestructive
-        ? Colors.red.shade200
-        : isSelected
-            ? Colors.white
-            : Colors.white.withValues(alpha: 0.65);
+    final iconColor = isSelected ? Colors.white : const Color(0xFF8F9BB3);
+    final labelColor = isSelected ? Colors.white : const Color(0xFF8F9BB3);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          borderRadius: BorderRadius.circular(12),
           onTap: onTap,
-          hoverColor: Colors.white.withValues(alpha: 0.08),
-          highlightColor: Colors.white.withValues(alpha: 0.12),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 250),
-            curve: Curves.easeOutCubic,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: Colors.white.withValues(alpha: 0.05),
+          child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              color: isSelected
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : Colors.transparent,
-              border: isSelected
-                  ? Border.all(
-                      color: Colors.white.withValues(alpha: 0.4), width: 1.5)
-                  : Border.all(color: Colors.transparent, width: 1.5),
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                      BoxShadow(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        blurRadius: 8,
-                        spreadRadius: -2,
-                      )
-                    ]
-                  : [],
+              color: isSelected ? const Color(0xFF1E2746) : Colors.transparent,
+              borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(
+            child: Stack(
               children: [
-                Icon(item.icon, color: iconColor, size: 22),
-                const SizedBox(width: 14),
-                Text(
-                  item.label,
-                  style: TextStyle(
-                    color: labelColor,
-                    fontWeight: isSelected
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                    fontSize: 13,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                if (isSelected && !isDestructive) ...[
-                  const Spacer(),
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
+                if (isSelected)
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: Container(
+                      width: 3,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(8),
+                          bottomLeft: Radius.circular(8),
+                        ),
+                      ),
                     ),
                   ),
-                ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(item.icon, color: iconColor, size: 20),
+                      const SizedBox(width: 16),
+                      Text(
+                        item.label,
+                        style: TextStyle(
+                          color: labelColor,
+                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -425,114 +361,155 @@ class _TopBar extends StatelessWidget {
       child: BackdropFilter(
         filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
         child: Container(
-          height: 72,
+          height: 64, // Sleeker height
           padding: const EdgeInsets.symmetric(horizontal: 28),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.85),
+            color: Colors.white.withValues(alpha: 0.95),
             border: Border(
               bottom: BorderSide(
                 color: Colors.black.withValues(alpha: 0.05),
                 width: 1,
               ),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.02),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
       child: Row(
         children: [
-          // Page title
-          Row(
+          // Page title / Breadcrumb
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF0F4C81).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  pageIcon,
-                  color: const Color(0xFF0F4C81),
-                  size: 20,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Operations',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.chevron_right, size: 14, color: Colors.grey.shade400),
+                  const SizedBox(width: 4),
+                  Text(
+                    pageTitle,
+                    style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
+              const SizedBox(height: 2),
               Text(
-                pageTitle,
-                style: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1A2E2B),
-                  letterSpacing: -0.5,
-                ),
+                'Saturday, 27 Jun - Desktop workspace', // Ideally dynamic
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
               ),
             ],
           ),
           const Spacer(),
 
           // Search field
-          SizedBox(
-            width: 220,
+          Container(
+            width: 280,
             height: 38,
-            child: TextField(
-              decoration: InputDecoration(
-                hintText: 'Search…',
-                hintStyle: TextStyle(
-                    color: Colors.grey.shade400, fontSize: 13),
-                prefixIcon: Icon(Icons.search,
-                    color: Colors.grey.shade400, size: 18),
-                contentPadding: EdgeInsets.zero,
-                filled: true,
-                fillColor: const Color(0xFFF4F7F6),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            padding: const EdgeInsets.only(left: 12, right: 4),
+            child: Row(
+              children: [
+                Icon(Icons.search, color: Colors.grey.shade400, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search products, invoices, ledgers...',
+                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
                 ),
-              ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text('Open', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                ),
+              ],
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 16),
 
           // Notification bell
-          IconButton(
-            icon: Badge(
-              label: const Text('3'),
-              child: const Icon(Icons.notifications_outlined, size: 22),
+          Container(
+            height: 38,
+            width: 38,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.grey.shade200),
+              color: Colors.white,
             ),
-            color: Colors.grey.shade600,
-            tooltip: 'Notifications',
-            onPressed: () {},
+            child: IconButton(
+              padding: EdgeInsets.zero,
+              icon: Icon(Icons.notifications_none, size: 20, color: Colors.grey.shade600),
+              onPressed: () {},
+            ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: 16),
+
+          // Data synced pill
+          Container(
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.green.shade100),
+              color: Colors.white,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 6, height: 6,
+                  decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+                const Text('Data synced', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+          const SizedBox(width: 16),
 
           // Avatar + name
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 17,
-                backgroundColor: const Color(0xFF0F4C81),
-                child: const Text(
-                  'A',
-                  style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14),
+          Container(
+            height: 42,
+            padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.grey.shade200),
+              color: Colors.white,
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: const BoxDecoration(color: Color(0xFFE8EAF6), shape: BoxShape.circle),
+                  alignment: Alignment.center,
+                  child: const Text('A', style: TextStyle(color: Color(0xFF5C6BC0), fontWeight: FontWeight.bold, fontSize: 13)),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Admin User',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                  color: Colors.grey.shade700,
+                const SizedBox(width: 8),
+                Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Alee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.1)),
+                    Text('Admin', style: TextStyle(fontSize: 10, color: Colors.grey.shade500, height: 1.1)),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade400),
+              ],
+            ),
           ),
         ],
       ),
@@ -546,38 +523,57 @@ class _TopBar extends StatelessWidget {
 // DASHBOARD BODY (stats + tables)
 // ---------------------------------------------------------------------------
 class _DashboardBody extends StatelessWidget {
+  final ValueChanged<int>? onNavigate;
+  const _DashboardBody({this.onNavigate});
+
   // TODO: Replace dummy values with Firestore aggregate queries.
   static const _stats = [
     _StatData(
-      label: 'Total Medicines',
-      value: '1,248',
-      icon: Icons.medication_outlined,
-      iconBg: const Color(0xFF0F4C81),
-      trendValue: '+2.4%',
-      isTrendUp: true,
-    ),
-    _StatData(
-      label: "Today's Sales",
+      label: 'Today Sales',
       value: 'Rs. 45,300',
-      icon: Icons.attach_money_rounded,
+      icon: Icons.point_of_sale_rounded,
       iconBg: Color(0xFF1565C0),
       trendValue: '+14%',
       isTrendUp: true,
     ),
     _StatData(
-      label: 'Low Stock Items',
-      value: '12',
-      icon: Icons.warning_amber_rounded,
-      iconBg: Color(0xFFE65100),
-      trendValue: '-3',
-      isTrendUp: true, // fewer low stock items is good
+      label: 'Today Net Sale',
+      value: 'Rs. 41,200',
+      icon: Icons.account_balance_wallet_rounded,
+      iconBg: Color(0xFF0F4C81),
+      trendValue: '+12%',
+      isTrendUp: true,
     ),
     _StatData(
-      label: 'Total Customers',
-      value: '320',
-      icon: Icons.people_alt_outlined,
+      label: 'Today Return',
+      value: 'Rs. 4,100',
+      icon: Icons.assignment_return_rounded,
+      iconBg: Color(0xFFE65100),
+      trendValue: '-2%',
+      isTrendUp: true,
+    ),
+    _StatData(
+      label: 'Monthly Net Sale',
+      value: 'Rs. 1,245,000',
+      icon: Icons.insert_chart_rounded,
       iconBg: Color(0xFF6A1B9A),
       trendValue: '+8%',
+      isTrendUp: true,
+    ),
+    _StatData(
+      label: 'Receivable Dues',
+      value: 'Rs. 18,500',
+      icon: Icons.request_quote_rounded,
+      iconBg: Color(0xFFD32F2F),
+      trendValue: '+5%',
+      isTrendUp: false,
+    ),
+    _StatData(
+      label: 'Low Stock Item',
+      value: '12',
+      icon: Icons.warning_amber_rounded,
+      iconBg: Color(0xFFEF6C00),
+      trendValue: '-3',
       isTrendUp: true,
     ),
   ];
@@ -587,62 +583,54 @@ class _DashboardBody extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ── Executive Header ─────────────────────────────────────────────
+        const ExecutiveHeader(),
+        
+        const SizedBox(height: 32),
+
         // ── Stat cards ───────────────────────────────────────────────────
         LayoutBuilder(
           builder: (_, constraints) {
-            if (constraints.maxWidth < 600) {
-              // Narrow: 2-column grid
-              return GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.6,
-                ),
-                itemCount: _stats.length,
-                itemBuilder: (_, i) => _StatCard(data: _stats[i]),
-              );
-            }
-            return Row(
-              children: _stats
-                  .map((d) => Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                              right: d != _stats.last ? 16 : 0),
-                          child: _StatCard(data: d),
-                        ),
-                      ))
-                  .toList(),
+            final crossAxisCount = constraints.maxWidth < 800 ? 2 : 3;
+            return GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: crossAxisCount,
+                crossAxisSpacing: 16,
+                mainAxisSpacing: 16,
+                childAspectRatio: constraints.maxWidth < 800 ? 1.6 : 2.2,
+              ),
+              itemCount: _stats.length,
+              itemBuilder: (_, i) => _StatCard(data: _stats[i]),
             );
           },
         ),
 
         const SizedBox(height: 24),
 
-        // ── Recent sales + low stock ─────────────────────────────────────
-        LayoutBuilder(
-          builder: (_, constraints) {
-            if (constraints.maxWidth < 700) {
-              return const Column(
-                children: [
-                  _RecentSalesTable(),
-                  SizedBox(height: 20),
-                  _LowStockList(),
-                ],
-              );
-            }
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Expanded(flex: 65, child: _RecentSalesTable()),
-                SizedBox(width: 20),
-                Expanded(flex: 35, child: _LowStockList()),
-              ],
-            );
-          },
+        // ── Quick Actions & Sales Trend ──────────────────────────────────
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _QuickActionsCard(onNavigate: onNavigate),
+            const SizedBox(height: 24),
+            const _SalesTrendCard(),
+          ],
+        ),
+        
+        const SizedBox(height: 24),
+        
+        // ── Recent Purchase, Recent Activity, Watchlist ──────────────────
+        const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _RecentPurchaseTable(),
+            SizedBox(height: 24),
+            _RecentActivityList(),
+            SizedBox(height: 24),
+            _OperationalWatchlist(),
+          ],
         ),
       ],
     );
@@ -745,7 +733,7 @@ class _StatCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const Spacer(),
           Text(
             data.label,
             style: TextStyle(
@@ -771,10 +759,14 @@ class _StatCard extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// RECENT SALES TABLE
+// SHARED CARD WIDGET
 // ---------------------------------------------------------------------------
-class _RecentSalesTable extends StatelessWidget {
-  const _RecentSalesTable();
+class _DashboardCard extends StatelessWidget {
+  final String title;
+  final Widget child;
+  final Widget? action;
+
+  const _DashboardCard({required this.title, required this.child, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -793,308 +785,326 @@ class _RecentSalesTable extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Card header
           Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
             child: Row(
               children: [
-                const Text(
-                  'Recent Sales',
-                  style: TextStyle(
+                Text(
+                  title,
+                  style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: Color(0xFF1A2E2B),
                   ),
                 ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('View All',
-                      style: TextStyle(
-                          color: const Color(0xFF0F4C81),
-                          fontWeight: FontWeight.w600)),
-                ),
+                if (action != null) ...[
+                  const Spacer(),
+                  action!,
+                ]
               ],
             ),
           ),
           Divider(height: 1, color: Colors.grey.shade100),
-
-          // Table header
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Row(
-              children: [
-                _tableHeader('Invoice #', flex: 2),
-                _tableHeader('Customer', flex: 3),
-                _tableHeader('Medicine(s)', flex: 4),
-                _tableHeader('Amount', flex: 2),
-                _tableHeader('Date', flex: 2),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: Colors.grey.shade100),
-
-          // Rows
-          // TODO: Replace _dummySales with Firestore query:
-          // FirebaseFirestore.instance.collection('sales')
-          //   .orderBy('createdAt', descending: true).limit(10).get()
-          ...List.generate(_dummySales.length, (i) {
-            final sale = _dummySales[i];
-            final isEven = i % 2 == 0;
-            return Material(
-              color: isEven ? Colors.transparent : const Color(0xFFF9FAFA),
-              child: InkWell(
-                onTap: () {}, // Add hover effect
-                hoverColor: Colors.blueGrey.shade50.withValues(alpha: 0.5),
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                  child: Row(
-                    children: [
-                      _tableCell(sale.invoice,
-                          flex: 2,
-                          style: const TextStyle(
-                              color: const Color(0xFF0F4C81),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13)),
-                      _tableCell(sale.customer, 
-                          flex: 3,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                              color: Color(0xFF1A2E2B))),
-                      _tableCell(sale.medicines, flex: 4),
-                      Expanded(
-                        flex: 2,
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.green.shade200),
-                            ),
-                            child: Text(
-                              sale.amount,
-                              style: TextStyle(
-                                  fontWeight: FontWeight.w700, 
-                                  fontSize: 12,
-                                  color: Colors.green.shade700),
-                            ),
-                          ),
-                        ),
-                      ),
-                      _tableCell(sale.date,
-                          flex: 2,
-                          style: TextStyle(
-                              color: Colors.grey.shade500, fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-          const SizedBox(height: 4),
+          child,
         ],
-      ),
-    );
-  }
-
-  Widget _tableHeader(String text, {required int flex}) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        text.toUpperCase(),
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: Colors.grey.shade400,
-          letterSpacing: 0.8,
-        ),
-      ),
-    );
-  }
-
-  Widget _tableCell(String text,
-      {required int flex, TextStyle? style}) {
-    return Expanded(
-      flex: flex,
-      child: Text(
-        text,
-        style: style ??
-            const TextStyle(fontSize: 13, color: Color(0xFF2D3A38)),
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// LOW STOCK LIST
+// QUICK ACTIONS CARD
 // ---------------------------------------------------------------------------
-class _LowStockList extends StatelessWidget {
-  const _LowStockList();
+class _QuickActionsCard extends StatelessWidget {
+  final ValueChanged<int>? onNavigate;
+  const _QuickActionsCard({this.onNavigate});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Card header
-          Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
+    return _DashboardCard(
+      title: 'Quick Actions',
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Column(
+          children: [
+            Row(
               children: [
-                const Icon(Icons.warning_amber_rounded,
-                    color: Color(0xFFE65100), size: 20),
+                Expanded(child: _ActionBtn(icon: Icons.add_shopping_cart, label: 'New Sale', color: const Color(0xFF0F4C81), onTap: () => onNavigate?.call(2))),
                 const SizedBox(width: 8),
-                const Text(
-                  'Low Stock Alerts',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                Expanded(child: _ActionBtn(icon: Icons.inventory_2_outlined, label: 'Add Stock', color: const Color(0xFF1565C0), onTap: () => onNavigate?.call(1))),
+                const SizedBox(width: 8),
+                Expanded(child: _ActionBtn(icon: Icons.assignment_return_outlined, label: 'Return', color: const Color(0xFFE65100), onTap: () => onNavigate?.call(2))),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(child: _ActionBtn(icon: Icons.person_add_alt_1_outlined, label: 'Add Customer', color: const Color(0xFF6A1B9A), onTap: () => onNavigate?.call(3))),
+                const SizedBox(width: 8),
+                Expanded(child: _ActionBtn(icon: Icons.local_shipping_outlined, label: 'Add Supplier', color: const Color(0xFF00695C), onTap: () => onNavigate?.call(4))),
+                const SizedBox(width: 8),
+                Expanded(child: _ActionBtn(icon: Icons.bar_chart_outlined, label: 'View Reports', color: const Color(0xFF455A64), onTap: () => onNavigate?.call(6))),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionBtn extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+
+  const _ActionBtn({required this.icon, required this.label, required this.color, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        hoverColor: Colors.black.withValues(alpha: 0.02),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 18),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
                     color: Color(0xFF1A2E2B),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14,
                   ),
                 ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFEBE0),
-                    borderRadius: BorderRadius.circular(10),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.black26, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// SALES TREND CARD
+// ---------------------------------------------------------------------------
+class _SalesTrendCard extends StatelessWidget {
+  const _SalesTrendCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardCard(
+      title: 'Sales Trend (Last 7 Days)',
+      action: const Icon(Icons.show_chart_rounded, color: Colors.grey),
+      child: Container(
+        height: 200,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.bar_chart_rounded, size: 48, color: Colors.grey.shade300),
+            const SizedBox(height: 8),
+            Text(
+              'Chart placeholder\n(Use fl_chart package here)',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RECENT PURCHASE TABLE
+// ---------------------------------------------------------------------------
+class _RecentPurchaseTable extends StatelessWidget {
+  const _RecentPurchaseTable();
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardCard(
+      title: 'Recent Purchases',
+      action: TextButton(
+        onPressed: () {},
+        child: const Text('View All', style: TextStyle(color: Color(0xFF0F4C81), fontWeight: FontWeight.w600)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: List.generate(4, (index) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.blueGrey.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.receipt_long_rounded, size: 20, color: Colors.blueGrey),
                   ),
-                  child: Text(
-                    '${_dummyLowStock.length}',
-                    style: const TextStyle(
-                      color: Color(0xFFE65100),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Supplier Name', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1A2E2B))),
+                        Text('INV-202$index • 2 items', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                      ],
                     ),
                   ),
-                ),
+                  const Text('Rs. 12,500', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF1A2E2B))),
+                ],
+              ),
+            );
+          }),
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RECENT ACTIVITY LIST
+// ---------------------------------------------------------------------------
+class _RecentActivityList extends StatelessWidget {
+  const _RecentActivityList();
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardCard(
+      title: 'Recent Activity',
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ActivityItem(time: '10 mins ago', text: 'New sale recorded (INV-1041)'),
+            _ActivityItem(time: '1 hour ago', text: 'Stock added for Panadol 500mg'),
+            _ActivityItem(time: '3 hours ago', text: 'Customer return processed'),
+            _ActivityItem(time: 'Yesterday', text: 'System backup completed'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActivityItem extends StatelessWidget {
+  final String time;
+  final String text;
+
+  const _ActivityItem({required this.time, required this.text});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            margin: const EdgeInsets.only(top: 4),
+            width: 8,
+            height: 8,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0F4C81),
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text(time, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
               ],
             ),
           ),
-          Divider(height: 1, color: Colors.grey.shade100),
-
-          // TODO: Replace _dummyLowStock with Firestore query:
-          // FirebaseFirestore.instance.collection('medicines')
-          //   .where('stockQty', isLessThan: minThreshold).get()
-          ...List.generate(_dummyLowStock.length, (i) {
-            final item = _dummyLowStock[i];
-            final badgeColor =
-                item.critical ? const Color(0xFFD32F2F) : const Color(0xFFE65100);
-            final badgeBg = item.critical
-                ? const Color(0xFFFFEBEE)
-                : const Color(0xFFFFEBE0);
-            final isLast = i == _dummyLowStock.length - 1;
-
-            return Column(
-              children: [
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: item.critical ? badgeColor.withValues(alpha: 0.3) : Colors.grey.shade200,
-                      width: 1,
-                    ),
-                    color: item.critical 
-                      ? badgeColor.withValues(alpha: 0.04) 
-                      : Colors.white,
-                  ),
-                  child: Row(
-                    children: [
-                      // Left colored indicator
-                      Container(
-                        width: 4,
-                        height: 50,
-                        decoration: BoxDecoration(
-                          color: badgeColor,
-                          borderRadius: const BorderRadius.horizontal(left: Radius.circular(12)),
-                        ),
-                      ),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              item.name,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFF1A2E2B),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Padding(
-                              padding: const EdgeInsets.only(right: 32),
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(4),
-                                child: LinearProgressIndicator(
-                                  value: item.quantity / 20.0, // Assuming 20 is max threshold
-                                  backgroundColor: Colors.grey.shade200,
-                                  valueColor: AlwaysStoppedAnimation<Color>(badgeColor),
-                                  minHeight: 5,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        ),
-                      ),
-                      const SizedBox(width: 24),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: badgeBg,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: badgeColor.withValues(alpha: 0.3),
-                              width: 1),
-                        ),
-                        child: Text(
-                          '${item.quantity} left',
-                          style: TextStyle(
-                            color: badgeColor,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 12,
-                          ),
-                        ),
-                        ),
-                      const SizedBox(width: 16),
-                    ],
-                  ),
-                ),
-                if (!isLast)
-                  const SizedBox(height: 2),
-              ],
-            );
-          }),
-          const SizedBox(height: 8),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// OPERATIONAL WATCHLIST
+// ---------------------------------------------------------------------------
+class _OperationalWatchlist extends StatelessWidget {
+  const _OperationalWatchlist();
+
+  @override
+  Widget build(BuildContext context) {
+    return _DashboardCard(
+      title: 'Operational Watchlist',
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _WatchlistItem(label: 'Pending Deliveries', value: '3', color: Colors.orange),
+            const SizedBox(height: 12),
+            _WatchlistItem(label: 'Expiring Soon (30 days)', value: '8', color: Colors.red),
+            const SizedBox(height: 12),
+            _WatchlistItem(label: 'Unpaid Invoices', value: '5', color: Colors.purple),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WatchlistItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final MaterialColor color;
+
+  const _WatchlistItem({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.info_outline_rounded, size: 16, color: color.shade700),
+            const SizedBox(width: 8),
+            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+          ],
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+          decoration: BoxDecoration(
+            color: color.shade50,
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Text(value, style: TextStyle(color: color.shade800, fontWeight: FontWeight.w700, fontSize: 13)),
+        ),
+      ],
     );
   }
 }

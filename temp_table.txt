@@ -1,0 +1,433 @@
+Widget _buildTable(List<Supplier> suppliers) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Table Header
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          ),
+          child: Row(
+            children: [
+              _headerCell('Company Name', flex: 2),
+              _headerCell('Contact Person', flex: 2),
+              _headerCell('Contact Info', flex: 2),
+              _headerCell('Categories', flex: 2),
+              _headerCell('Last Order', flex: 1),
+              const SizedBox(width: 140), // Actions space
+            ],
+          ),
+        ),
+        // Table Body
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.zero,
+            itemCount: suppliers.length,
+            separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100),
+            itemBuilder: (context, index) {
+              return _SupplierRow(
+                supplier: suppliers[index],
+                onView: () => _openViewDialog(suppliers[index]),
+                onEdit: () => _openAddEditDialog(suppliers[index]),
+                onDelete: () => _confirmDelete(suppliers[index]),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _headerCell(String title, {int flex = 1}) {
+    return Expanded(
+      flex: flex,
+      child: Text(
+        title.toUpperCase(),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Colors.grey.shade500,
+          letterSpacing: 0.5,
+        ),
+      ),
+    );
+  }
+}
+
+class _SupplierRow extends StatefulWidget {
+  final Supplier supplier;
+  final VoidCallback onView;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  const _SupplierRow({
+    required this.supplier,
+    required this.onView,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  @override
+  State<_SupplierRow> createState() => _SupplierRowState();
+}
+
+class _SupplierRowState extends State<_SupplierRow> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final s = widget.supplier;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        color: _isHovered ? const Color(0xFFF4F7F6) : Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        child: Row(
+          children: [
+            Expanded(
+              flex: 2,
+              child: Text(
+                s.companyName,
+                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                s.contactPerson,
+                style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(s.phone, style: TextStyle(color: Colors.grey.shade800, fontSize: 13)),
+                  if (s.email.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(s.email, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  ],
+                ],
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: _buildCategoryChips(s.categoriesSupplied),
+              ),
+            ),
+            Expanded(
+              flex: 1,
+              child: Text(
+                '${s.lastOrderDate.day}/${s.lastOrderDate.month}/${s.lastOrderDate.year}',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+            ),
+            SizedBox(
+              width: 140,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 150),
+                opacity: _isHovered ? 1.0 : 0.0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.visibility_outlined, size: 20),
+                      color: Colors.green.shade600,
+                      onPressed: widget.onView,
+                      tooltip: 'View Supplier',
+                      splashRadius: 20,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                      color: const Color(0xFF0F4C81),
+                      onPressed: widget.onEdit,
+                      tooltip: 'Edit Supplier',
+                      splashRadius: 20,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      color: Colors.red.shade400,
+                      onPressed: widget.onDelete,
+                      tooltip: 'Delete Supplier',
+                      splashRadius: 20,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildCategoryChips(List<String> categories) {
+    if (categories.isEmpty) return [const Text('-')];
+    
+    List<Widget> chips = [];
+    int maxToShow = 2;
+    for (int i = 0; i < categories.length && i < maxToShow; i++) {
+      chips.add(_SmallChip(label: categories[i]));
+    }
+    
+    if (categories.length > maxToShow) {
+      chips.add(_SmallChip(label: '+${categories.length - maxToShow}'));
+    }
+    
+    return chips;
+  }
+}
+
+class _SmallChip extends StatelessWidget {
+  final String label;
+
+  const _SmallChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F4C81).withOpacity(0.08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: const Color(0xFF0F4C81).withOpacity(0.1)),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: Color(0xFF0F4C81),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddEditSupplierDialog extends StatefulWidget {
+  final Supplier? supplier;
+  final ValueChanged<Supplier> onSave;
+
+  const _AddEditSupplierDialog({this.supplier, required this.onSave});
+
+  @override
+  State<_AddEditSupplierDialog> createState() => _AddEditSupplierDialogState();
+}
+
+class _AddEditSupplierDialogState extends State<_AddEditSupplierDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _companyNameController;
+  late TextEditingController _contactPersonController;
+  late TextEditingController _phoneController;
+  late TextEditingController _emailController;
+  late TextEditingController _addressController;
+
+  final List<String> _availableCategories = [
+    'Tablets', 'Syrups', 'Injections', 'Capsules', 'Ointments', 'Drops', 'First Aid', 'Vitamins', 'Supplements'
+  ];
+  List<String> _selectedCategories = [];
+
+  @override
+  void initState() {
+    super.initState();
+    final s = widget.supplier;
+    _companyNameController = TextEditingController(text: s?.companyName ?? '');
+    _contactPersonController = TextEditingController(text: s?.contactPerson ?? '');
+    _phoneController = TextEditingController(text: s?.phone ?? '');
+    _emailController = TextEditingController(text: s?.email ?? '');
+    _addressController = TextEditingController(text: s?.address ?? '');
+    if (s != null) {
+      _selectedCategories = List.from(s.categoriesSupplied);
+    }
+  }
+
+  @override
+  void dispose() {
+    _companyNameController.dispose();
+    _contactPersonController.dispose();
+    _phoneController.dispose();
+    _emailController.dispose();
+    _addressController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    if (_formKey.currentState!.validate()) {
+      final newSupplier = Supplier(
+        id: widget.supplier?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
+        companyName: _companyNameController.text.trim(),
+        contactPerson: _contactPersonController.text.trim(),
+        phone: _phoneController.text.trim(),
+        email: _emailController.text.trim(),
+        address: _addressController.text.trim(),
+        categoriesSupplied: _selectedCategories,
+        lastOrderDate: widget.supplier?.lastOrderDate ?? DateTime.now(),
+      );
+      widget.onSave(newSupplier);
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isEdit = widget.supplier != null;
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 500,
+        padding: const EdgeInsets.all(32),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isEdit ? 'Edit Supplier' : 'Add Supplier',
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                ),
+                const SizedBox(height: 24),
+                _buildTextField('Company Name *', _companyNameController, required: true),
+                const SizedBox(height: 16),
+                _buildTextField('Contact Person *', _contactPersonController, required: true),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: _buildTextField('Phone Number *', _phoneController, required: true)),
+                    const SizedBox(width: 16),
+                    Expanded(child: _buildTextField('Email', _emailController, required: false, isEmail: true)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _buildTextField('Address', _addressController, maxLines: 2),
+                const SizedBox(height: 24),
+                const Text('Categories Supplied', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: _availableCategories.map((cat) {
+                    final isSelected = _selectedCategories.contains(cat);
+                    return InkWell(
+                      onTap: () {
+                        setState(() {
+                          if (isSelected) {
+                            _selectedCategories.remove(cat);
+                          } else {
+                            _selectedCategories.add(cat);
+                          }
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF0F4C81) : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFF0F4C81) : Colors.grey.shade300,
+                          ),
+                        ),
+                        child: Text(
+                          cat,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected ? Colors.white : Colors.grey.shade700,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 32),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600)),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F4C81),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      child: const Text('Save', style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField(
+    String label,
+    TextEditingController controller, {
+    bool required = false,
+    bool isEmail = false,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.black87)),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: Colors.red, width: 1),
+            ),
+            filled: true,
+            fillColor: Colors.grey.shade50,
+          ),
+          validator: (value) {
+            if (required && (value == null || value.trim().isEmpty)) {
+              return 'This field is required';
+            }
+            if (isEmail && value != null && value.trim().isNotEmpty) {
+              final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+              if (!emailRegex.hasMatch(value)) {
+                return 'Enter a valid email';
+              }
+            }
+            return null;
+          },
+        ),
+      ],
+    );
+  }
+}

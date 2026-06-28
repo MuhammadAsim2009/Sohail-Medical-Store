@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/executive_header.dart';
 import 'package:intl/intl.dart';
 
 // ---------------------------------------------------------------------------
@@ -63,9 +64,7 @@ class CustomersScreen extends StatefulWidget {
 
 class _CustomersScreenState extends State<CustomersScreen> {
   // Theme Colors
-  static const Color primary = Color(0xFF0F4C81);
-  static const Color accent = Color(0xFF1976D2);
-  static const Color bg = Color(0xFFF4F7F6);
+  static const primary = Color(0xFF0F4C81);
   static const Color textDark = Color(0xFF1A2E2B);
 
   // TODO: Replace with real-time stream from Firestore 'customers' collection
@@ -188,57 +187,39 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   void _showViewCustomerDialog(Customer c) {
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: Colors.white,
-        child: Container(
-          width: 450,
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Customer Details', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    color: Colors.grey.shade500,
-                    onPressed: () => Navigator.pop(context),
-                    splashRadius: 24,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _buildDetailRow('Name', c.name),
-              _buildDetailRow('Phone Number', c.phone),
-              _buildDetailRow('Email', c.email?.isNotEmpty == true ? c.email! : '--'),
-              _buildDetailRow('Address', c.address?.isNotEmpty == true ? c.address! : '--'),
-              _buildDetailRow('Total Purchases', 'Rs. ${NumberFormat('#,##0').format(c.totalPurchases)}'),
-              _buildDetailRow('Pending Amount', 'Rs. ${NumberFormat('#,##0').format(c.pendingAmount)}'),
-              _buildDetailRow('Advance Amount', 'Rs. ${NumberFormat('#,##0').format(c.advanceAmount)}'),
-              _buildDetailRow('Last Visit', DateFormat('dd MMM yyyy').format(c.lastVisit)),
-            ],
+      barrierDismissible: true,
+      barrierLabel: 'Customer Ledger Dialog',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: _CustomerLedgerDialog(customer: c),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-          const SizedBox(height: 4),
-          Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: Colors.black87)),
-        ],
-      ),
+
+  void _recordPayment(Customer c) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Record Payment Dialog',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, animation, secondaryAnimation) {
+        return FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.95, end: 1.0).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+            child: _RecordPaymentDialog(customer: c),
+          ),
+        );
+      },
     );
   }
 
@@ -283,24 +264,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Header ──────────────────────────────────────────────
+          // ── Executive Header ──────────────────────────────────────────────
+          const ExecutiveHeader(title: 'Customers', subtitle: 'Manage customer records, ledgers, and payment history from a unified workspace.'),
+          const SizedBox(height: 32),
+
+          // ── Add Button Row ───────────────────────────────────────────────
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Customers',
-                    style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: textDark),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Manage your customer records',
-                    style: TextStyle(fontSize: 15, color: Colors.grey),
-                  ),
-                ],
-              ),
               ElevatedButton.icon(
                 onPressed: () => _showCustomerDialog(),
                 icon: const Icon(Icons.add, size: 18),
@@ -428,6 +399,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                 itemBuilder: (context, index) {
                                   return _CustomerRow(
                                     customer: displayList[index],
+                                    onPayment: () => _recordPayment(displayList[index]),
                                     onView: () => _showViewCustomerDialog(displayList[index]),
                                     onEdit: () => _showCustomerDialog(existingCustomer: displayList[index]),
                                     onDelete: () => _confirmDelete(displayList[index]),
@@ -490,6 +462,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         opacity: animation,
         child: _CustomerRow(
           customer: customer,
+          onPayment: () => _recordPayment(customer),
           onView: () => _showViewCustomerDialog(customer),
           onEdit: () => _showCustomerDialog(existingCustomer: customer),
           onDelete: () => _confirmDelete(customer),
@@ -505,6 +478,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 // ---------------------------------------------------------------------------
 class _CustomerRow extends StatefulWidget {
   final Customer customer;
+  final VoidCallback onPayment;
   final VoidCallback onView;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -512,6 +486,7 @@ class _CustomerRow extends StatefulWidget {
 
   const _CustomerRow({
     required this.customer,
+    required this.onPayment,
     required this.onView,
     required this.onEdit,
     required this.onDelete,
@@ -592,7 +567,7 @@ class _CustomerRowState extends State<_CustomerRow> {
                 ),
               ),
               SizedBox(
-                width: 140,
+                width: 160,
                 child: AnimatedOpacity(
                   opacity: _isHovering ? 1.0 : 0.0,
                   duration: const Duration(milliseconds: 150),
@@ -600,10 +575,17 @@ class _CustomerRowState extends State<_CustomerRow> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       _ActionButton(
-                        icon: Icons.visibility_outlined,
+                        icon: Icons.credit_card_outlined,
                         color: Colors.green.shade600,
+                        onTap: widget.onPayment,
+                        tooltip: 'Record Payment',
+                      ),
+                      const SizedBox(width: 8),
+                      _ActionButton(
+                        icon: Icons.visibility_outlined,
+                        color: const Color(0xFF7E57C2),
                         onTap: widget.onView,
-                        tooltip: 'View',
+                        tooltip: 'View Ledger',
                       ),
                       const SizedBox(width: 8),
                       _ActionButton(
@@ -738,7 +720,7 @@ class _CustomerDialogState extends State<_CustomerDialog> {
       backgroundColor: Colors.white,
       surfaceTintColor: Colors.transparent,
       child: Container(
-        width: 500,
+        width: 550,
         padding: const EdgeInsets.all(32),
         child: Form(
           key: _formKey,
@@ -746,84 +728,117 @@ class _CustomerDialogState extends State<_CustomerDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Header
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    isEditing ? 'Edit Customer' : 'Add Customer',
-                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B)),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEEF0FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.person_add_alt_1, color: Color(0xFF5D5FEF), size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isEditing ? 'Edit Customer' : 'Add New Customer',
+                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B)),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          isEditing ? 'Update existing customer details' : 'Create a new customer profile',
+                          style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                        ),
+                      ],
+                    ),
                   ),
                   IconButton(
                     icon: const Icon(Icons.close),
                     color: Colors.grey.shade500,
                     onPressed: () => Navigator.of(context).pop(),
                     splashRadius: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
                   ),
                 ],
               ),
               const SizedBox(height: 24),
-              _buildField(
-                controller: _nameController,
-                label: 'Customer Name',
-                hint: 'e.g. Ali Khan',
-                icon: Icons.person_outline,
-                validator: (val) => val == null || val.isEmpty ? 'Name is required' : null,
+              // Profile Section Box
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Profile', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                    const SizedBox(height: 4),
+                    Text('Capture the customer name and contact details used across invoices and ledgers.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 24),
+                    
+                    _buildField(
+                      controller: _nameController,
+                      label: 'Customer name',
+                      hint: 'e.g. Al-Nafi Traders',
+                      validator: (val) => val == null || val.isEmpty ? 'Name is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      controller: _phoneController,
+                      label: 'Phone number',
+                      hint: 'e.g. 03001234567',
+                      validator: (val) {
+                        if (val == null || val.isEmpty) return 'Phone number is required';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      controller: _addressController,
+                      label: 'Address',
+                      hint: 'e.g. Suite 4, Bilal Plaza, Lahore',
+                      maxLines: 3,
+                    ),
+                  ],
+                ),
               ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _phoneController,
-                label: 'Phone Number',
-                hint: 'e.g. 0300-1234567',
-                icon: Icons.phone_outlined,
-                validator: (val) {
-                  if (val == null || val.isEmpty) return 'Phone number is required';
-                  if (val.length < 10) return 'Enter a valid phone number';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _emailController,
-                label: 'Email Address (Optional)',
-                hint: 'e.g. ali@example.com',
-                icon: Icons.email_outlined,
-                validator: (val) {
-                  if (val != null && val.isNotEmpty && !val.contains('@')) return 'Enter a valid email';
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                controller: _addressController,
-                label: 'Address (Optional)',
-                hint: 'Enter full address',
-                icon: Icons.location_on_outlined,
-                maxLines: 3,
-              ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 24),
+              // Actions
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      foregroundColor: Colors.grey.shade700,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  Expanded(
+                    flex: 1,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        foregroundColor: Colors.black87,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
                     ),
-                    child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600)),
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _submit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F4C81),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: _submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF5D5FEF),
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(isEditing ? 'Save Changes' : 'Add Customer', style: const TextStyle(fontWeight: FontWeight.w600)),
                     ),
-                    child: Text(isEditing ? 'Save Changes' : 'Save Customer', style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
@@ -838,14 +853,13 @@ class _CustomerDialogState extends State<_CustomerDialog> {
     required TextEditingController controller,
     required String label,
     required String hint,
-    required IconData icon,
     int maxLines = 1,
     String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF4A5568))),
         const SizedBox(height: 8),
         TextFormField(
           controller: controller,
@@ -854,10 +868,6 @@ class _CustomerDialogState extends State<_CustomerDialog> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-            prefixIcon: maxLines == 1 ? Icon(icon, color: Colors.grey.shade400, size: 20) : Padding(
-              padding: const EdgeInsets.only(bottom: 48.0),
-              child: Icon(icon, color: Colors.grey.shade400, size: 20),
-            ),
             filled: true,
             fillColor: Colors.white,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
@@ -867,7 +877,7 @@ class _CustomerDialogState extends State<_CustomerDialog> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5),
+              borderSide: const BorderSide(color: Color(0xFF5D5FEF), width: 1.5),
             ),
             errorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
@@ -876,6 +886,593 @@ class _CustomerDialogState extends State<_CustomerDialog> {
             focusedErrorBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// VIEW CUSTOMER LEDGER DIALOG
+// ---------------------------------------------------------------------------
+class _LedgerEntry {
+  final DateTime date;
+  final String reference;
+  final String description;
+  final double? debit;
+  final double? credit;
+  final double balance;
+
+  _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance);
+}
+
+class _CustomerLedgerDialog extends StatelessWidget {
+  final Customer customer;
+
+  const _CustomerLedgerDialog({required this.customer});
+
+  @override
+  Widget build(BuildContext context) {
+    // Mock ledger entries mimicking the image
+    final entries = [
+      _LedgerEntry(DateTime(2026, 6, 27), 'INV-1', 'Invoice INV-1', null, 2800, 2800),
+      _LedgerEntry(DateTime(2026, 6, 27), 'REC-INV-1', 'Payment received for Invoice INV-1', 2800, null, 0),
+      _LedgerEntry(DateTime(2026, 6, 27), 'ADV-INV-1', 'Advance received from customer after Invoice INV-1', 200, null, -200),
+      _LedgerEntry(DateTime(2026, 6, 27), 'SR-1', 'Sales Return SR-1 against INV-1', 224, null, -424),
+    ];
+
+    bool isAdvance = customer.advanceAmount > 0;
+    double closingBalance = isAdvance ? customer.advanceAmount : customer.pendingAmount;
+    
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      child: Container(
+        width: 850,
+        padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF3E5F5), // Light purple
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.receipt_long, color: Color(0xFF7E57C2), size: 24),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Customer Ledger', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                      const SizedBox(height: 4),
+                      Text('Financial statement for ${customer.name}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  color: Colors.grey.shade500,
+                  onPressed: () => Navigator.of(context).pop(),
+                  splashRadius: 24,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            // Main Card
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.grey.shade200),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Customer Info Row
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE8F5E9), // Light green
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.account_balance_wallet, color: Color(0xFF4CAF50)),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(customer.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                            const SizedBox(height: 2),
+                            Text('Customer statement and running receivable balance.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                            const SizedBox(height: 2),
+                            Text(customer.phone, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(isAdvance ? 'Advance credit' : 'Pending balance', style: TextStyle(fontSize: 12, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                            const SizedBox(height: 4),
+                            Text('Rs. ${NumberFormat('#,##0').format(closingBalance)}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  // Summary Boxes
+                  Row(
+                    children: [
+                      Expanded(child: _buildSummaryBox(title: 'Opening balance', value: 'Rs. 0', subtitle: '', bgColor: Colors.blue.shade50, valueColor: Colors.blue.shade700)),
+                      const SizedBox(width: 16),
+                      Expanded(child: _buildSummaryBox(title: 'Closing balance', value: 'Rs. ${NumberFormat('#,##0').format(closingBalance)}', subtitle: isAdvance ? 'Advance credit' : (customer.pendingAmount > 0 ? 'Pending balance' : 'Cleared'), bgColor: const Color(0xFFE8F5E9), valueColor: Colors.green.shade700)),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(12)),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Ledger notes', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+                              const SizedBox(height: 4),
+                              Text('Debits reflect incoming payments. Credits reflect outstanding invoice obligations.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            // Table Header
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              decoration: BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: _headerText('DATE')),
+                  Expanded(flex: 2, child: _headerText('REFERENCE')),
+                  Expanded(flex: 4, child: _headerText('DESCRIPTION')),
+                  Expanded(flex: 2, child: _headerText('DEBIT (PAID)')),
+                  Expanded(flex: 2, child: _headerText('CREDIT (OWED)')),
+                  Expanded(flex: 2, child: _headerText('BALANCE')),
+                ],
+              ),
+            ),
+            // Table Rows
+            SizedBox(
+              height: 250,
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: entries.length,
+                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF5F5F5)),
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 2, child: Text(DateFormat('dd MMM yyyy').format(entry.date), style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
+                        Expanded(flex: 2, child: Text(entry.reference, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
+                        Expanded(flex: 4, child: Text(entry.description, style: TextStyle(fontSize: 13, color: Colors.grey.shade800))),
+                        Expanded(flex: 2, child: Text(entry.debit != null ? 'Rs. ${NumberFormat('#,##0').format(entry.debit)}' : '-', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.green.shade600))),
+                        Expanded(flex: 2, child: Text(entry.credit != null ? 'Rs. ${NumberFormat('#,##0').format(entry.credit)}' : '-', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.red.shade500))),
+                        Expanded(flex: 2, child: Text('Rs. ${NumberFormat('#,##0').format(entry.balance)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSummaryBox({required String title, required String value, required String subtitle, required Color bgColor, required Color valueColor}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: valueColor)),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+          ]
+        ],
+      ),
+    );
+  }
+
+  Widget _headerText(String text) {
+    return Text(
+      text,
+      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 0.5),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// RECORD CUSTOMER PAYMENT DIALOG
+// ---------------------------------------------------------------------------
+class _RecordPaymentDialog extends StatefulWidget {
+  final Customer customer;
+
+  const _RecordPaymentDialog({required this.customer});
+
+  @override
+  State<_RecordPaymentDialog> createState() => _RecordPaymentDialogState();
+}
+
+class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
+  final _amountController = TextEditingController(text: '0');
+  final _receiptController = TextEditingController();
+  final _notesController = TextEditingController();
+  String _paymentMethod = 'Cash';
+  bool _isGeneralReceipt = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _receiptController.text = 'PAY-CUST-${DateTime.now().millisecondsSinceEpoch}';
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _receiptController.dispose();
+    _notesController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    bool isAdvance = widget.customer.advanceAmount > 0;
+    bool hasPending = widget.customer.pendingAmount > 0;
+
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      child: Container(
+        width: 650,
+        padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF3E5F5), // Light purple
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.payment, color: Color(0xFF7E57C2), size: 24),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Receive Customer Payment', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                        const SizedBox(height: 4),
+                        Text('Record payment from ${widget.customer.name}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    color: Colors.grey.shade500,
+                    onPressed: () => Navigator.of(context).pop(),
+                    splashRadius: 24,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+
+              // Status Box (Advance/Pending)
+              if (isAdvance || hasPending)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 24),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: isAdvance ? Colors.green.shade200 : Colors.red.shade200),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(isAdvance ? Icons.check_circle_outline : Icons.info_outline, color: isAdvance ? Colors.green.shade600 : Colors.red.shade600, size: 28),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(isAdvance ? 'Advance credit' : 'Pending balance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                            const SizedBox(height: 4),
+                            Text('Rs. ${NumberFormat('#,##0').format(isAdvance ? widget.customer.advanceAmount : widget.customer.pendingAmount)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                            const SizedBox(height: 4),
+                            Text(isAdvance ? 'This customer already has advance credit available in the ledger.' : 'This customer has an outstanding balance.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Invoice Selection Section
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Invoice Selection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                    const SizedBox(height: 4),
+                    Text('Apply the receipt to a single invoice or keep it unassigned.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: () {
+                        setState(() {
+                          _isGeneralReceipt = true;
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade200, width: _isGeneralReceipt ? 2 : 1),
+                          borderRadius: BorderRadius.circular(12),
+                          color: _isGeneralReceipt ? const Color(0xFFF3F3FF) : Colors.white,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: _isGeneralReceipt ? const Color(0xFFE0E0FF) : Colors.grey.shade100,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(Icons.account_balance_wallet_outlined, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade600),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('General receipt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade800)),
+                                  const SizedBox(height: 4),
+                                  Text('Receive payment without linking it to a specific invoice.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                ],
+                              ),
+                            ),
+                            if (_isGeneralReceipt)
+                              const Icon(Icons.check_circle, color: Color(0xFF5D5FEF)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // Payment Details Section
+              Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade200),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Payment Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                    const SizedBox(height: 4),
+                    Text('Capture the receipt amount, method, and reference number.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    const SizedBox(height: 24),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildField(
+                            label: 'Amount received',
+                            controller: _amountController,
+                            keyboardType: TextInputType.number,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Payment method', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                              const SizedBox(height: 8),
+                              Container(
+                                height: 52, // Match TextField height approximately
+                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<String>(
+                                    isExpanded: true,
+                                    value: _paymentMethod,
+                                    icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                                    items: ['Cash', 'Bank Transfer', 'Credit Card'].map((String value) {
+                                      return DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value, style: const TextStyle(fontSize: 14)),
+                                      );
+                                    }).toList(),
+                                    onChanged: (newValue) {
+                                      setState(() {
+                                        _paymentMethod = newValue!;
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      label: 'Receipt / reference no.',
+                      controller: _receiptController,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
+                      label: 'Notes',
+                      controller: _notesController,
+                      maxLines: 3,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+              
+              // Actions
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                    ),
+                    child: Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                  ),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      
+                      final screenWidth = MediaQuery.of(context).size.width;
+                      const snackBarWidth = 400.0;
+                      final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
+                      
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Row(
+                            children: [
+                              Icon(Icons.check_circle, color: Colors.white, size: 20),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Payment recorded successfully',
+                                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
+                                ),
+                              ),
+                            ],
+                          ),
+                          backgroundColor: Colors.green.shade600,
+                          behavior: SnackBarBehavior.floating,
+                          margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5D5FEF),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text('Record payment', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildField({
+    required String label,
+    required TextEditingController controller,
+    TextInputType keyboardType = TextInputType.text,
+    int maxLines = 1,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          keyboardType: keyboardType,
+          maxLines: maxLines,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Color(0xFF5D5FEF), width: 1.5),
             ),
           ),
         ),

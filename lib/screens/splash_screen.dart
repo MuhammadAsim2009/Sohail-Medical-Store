@@ -319,7 +319,7 @@ class _SplashScreenState extends State<SplashScreen>
                     child: FadeTransition(
                       opacity: _titleFade,
                       child: const Text(
-                        'Sohail Medical Store',
+                        'New Sohail Medical Store',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 36,

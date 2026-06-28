@@ -10,7 +10,6 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   static const Color _primaryColor = Color(0xFF0F4C81);
-  static const Color _accentColor = Color(0xFF1976D2);
 
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
@@ -55,10 +54,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth > 800;
+    return Theme(
+      data: Theme.of(context).copyWith(
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+          primary: _primaryColor,
+        ),
+      ),
+      child: Scaffold(
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth > 800;
           return Row(
             children: [
               if (isWide)
@@ -71,14 +76,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Center(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.all(32),
-                    child: Theme(
-                      data: Theme.of(context).copyWith(
-                        colorScheme: Theme.of(context).colorScheme.copyWith(
-                          primary: _primaryColor,
-                        ),
-                      ),
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 380),
+                    child: Container(
+                      constraints: const BoxConstraints(maxWidth: 380),
                       child: Form(
                         key: _formKey,
                         child: Column(
@@ -106,6 +105,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 8),
                             TextFormField(
                               controller: _emailController,
+                              style: const TextStyle(color: Colors.black87),
                               decoration: const InputDecoration(
                                 prefixIcon: Icon(Icons.mail_outline),
                                 hintText: 'Enter your email',
@@ -129,6 +129,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 8),
                             TextFormField(
                               controller: _passwordController,
+                              style: const TextStyle(color: Colors.black87),
                               obscureText: _obscurePassword,
                               decoration: InputDecoration(
                                 prefixIcon: const Icon(Icons.lock_outline),
@@ -220,7 +221,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ),
-                    ),
                   ),
                 ),
               ),
@@ -228,6 +228,7 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         },
       ),
+    ),
     );
   }
 }
@@ -242,7 +243,7 @@ class _BrandingPanel extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: const [
+          colors: [
             Color(0xFF0F4C81), // Primary
             Color(0xFF1976D2), // Accent
           ],
@@ -296,7 +297,7 @@ class _BrandingPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 32),
                 const Text(
-                  'Sohail Medical Store',
+                  'New Sohail Medical Store',
                   style: TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.w700,

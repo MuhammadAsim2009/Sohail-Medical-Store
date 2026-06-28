@@ -8,6 +8,6 @@ void main() {
     await tester.pumpWidget(const PharmacyApp());
 
     // Verify that the app loads and shows the splash screen text.
-    expect(find.text('Sohail Medical Store'), findsOneWidget);
+    expect(find.text('New Sohail Medical Store'), findsOneWidget);
   });
 }

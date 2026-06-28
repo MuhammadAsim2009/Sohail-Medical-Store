@@ -1,28 +1,71 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import '../widgets/executive_header.dart';
 
 // ---------------------------------------------------------------------------
-// MODELS
+// THEME
 // ---------------------------------------------------------------------------
-class Medicine {
-  String id;
+const _kPrimary = Color(0xFF0F4C81);
+const _kBg = Color(0xFFF5F7FA);
+
+// ---------------------------------------------------------------------------
+// MODEL
+// ---------------------------------------------------------------------------
+class Product {
+  String sku;
   String name;
+  String unit;        // e.g. 'Kgs', 'Ltr', 'Pcs'
+  double costPrice;
+  double sellPrice;
+  double stock;
+  double threshold;   // low-stock threshold
   String category;
-  String batchNo;
-  int quantity;
-  double unitPrice;
-  DateTime expiryDate;
 
-  Medicine({
-    required this.id,
+  Product({
+    required this.sku,
     required this.name,
+    required this.unit,
+    required this.costPrice,
+    required this.sellPrice,
+    required this.stock,
+    required this.threshold,
     required this.category,
-    required this.batchNo,
-    required this.quantity,
-    required this.unitPrice,
-    required this.expiryDate,
   });
+
+  String get status {
+    if (stock <= 0) return 'Out of Stock';
+    if (stock <= threshold) return 'Low Stock';
+    return 'Healthy';
+  }
+
+  double get inventoryValue => costPrice * stock;
 }
+
+// ---------------------------------------------------------------------------
+// DUMMY DATA
+// ---------------------------------------------------------------------------
+// TODO: Replace with real-time Firestore stream from 'products' collection
+List<Product> _products = [
+  Product(sku: 'P001', name: 'Panadol 500mg',       unit: 'Strips', costPrice: 18,  sellPrice: 22,  stock: 340,  threshold: 30, category: 'Tablets'),
+  Product(sku: 'P002', name: 'Augmentin 625mg',      unit: 'Strips', costPrice: 320, sellPrice: 380, stock: 85,   threshold: 20, category: 'Tablets'),
+  Product(sku: 'P003', name: 'Brufen 400mg',         unit: 'Strips', costPrice: 55,  sellPrice: 70,  stock: 12,   threshold: 20, category: 'Tablets'),
+  Product(sku: 'P004', name: 'Omeprazole 20mg',      unit: 'Strips', costPrice: 95,  sellPrice: 120, stock: 200,  threshold: 25, category: 'Capsules'),
+  Product(sku: 'P005', name: 'Metformin 500mg',      unit: 'Strips', costPrice: 75,  sellPrice: 95,  stock: 150,  threshold: 20, category: 'Tablets'),
+  Product(sku: 'P006', name: 'Amlodipine 5mg',       unit: 'Strips', costPrice: 130, sellPrice: 160, stock: 0,    threshold: 15, category: 'Tablets'),
+  Product(sku: 'P007', name: 'Ventolin Inhaler',     unit: 'Pcs',    costPrice: 280, sellPrice: 340, stock: 22,   threshold: 10, category: 'Inhalers'),
+  Product(sku: 'P008', name: 'Cofcol Syrup 90ml',    unit: 'Bottles',costPrice: 85,  sellPrice: 110, stock: 60,   threshold: 15, category: 'Syrups'),
+  Product(sku: 'P009', name: 'ORS Sachet',           unit: 'Sachets',costPrice: 12,  sellPrice: 18,  stock: 500,  threshold: 50, category: 'Supplements'),
+  Product(sku: 'P010', name: 'Disprin 300mg',        unit: 'Strips', costPrice: 20,  sellPrice: 28,  stock: 3,    threshold: 20, category: 'Tablets'),
+  Product(sku: 'P011', name: 'Insulin (Humulin N)',  unit: 'Vials',  costPrice: 750, sellPrice: 900, stock: 18,   threshold: 10, category: 'Injections'),
+  Product(sku: 'P012', name: 'Flagyl 400mg',         unit: 'Strips', costPrice: 45,  sellPrice: 60,  stock: 0,    threshold: 20, category: 'Tablets'),
+  Product(sku: 'P013', name: 'Polyfax Ointment',     unit: 'Tubes',  costPrice: 120, sellPrice: 155, stock: 35,   threshold: 10, category: 'Ointments'),
+  Product(sku: 'P014', name: 'Surbex Z',             unit: 'Strips', costPrice: 200, sellPrice: 250, stock: 110,  threshold: 20, category: 'Supplements'),
+  Product(sku: 'P015', name: 'Ciplox 500mg',         unit: 'Strips', costPrice: 210, sellPrice: 265, stock: 45,   threshold: 15, category: 'Tablets'),
+  Product(sku: 'P016', name: 'Arinac Forte',         unit: 'Strips', costPrice: 65,  sellPrice: 85,  stock: 9,    threshold: 20, category: 'Tablets'),
+  Product(sku: 'P017', name: 'Risek 20mg',           unit: 'Strips', costPrice: 180, sellPrice: 220, stock: 90,   threshold: 15, category: 'Capsules'),
+  Product(sku: 'P018', name: 'Glucometer Strips',    unit: 'Boxes',  costPrice: 850, sellPrice: 1050,stock: 14,   threshold: 5,  category: 'Diagnostics'),
+  Product(sku: 'P019', name: 'Surgical Gloves (M)',  unit: 'Boxes',  costPrice: 380, sellPrice: 480, stock: 28,   threshold: 10, category: 'Surgical'),
+  Product(sku: 'P020', name: 'Paediatric Syrup ORS', unit: 'Bottles',costPrice: 65,  sellPrice: 85,  stock: 42,   threshold: 10, category: 'Syrups'),
+];
 
 // ---------------------------------------------------------------------------
 // INVENTORY SCREEN
@@ -35,86 +78,289 @@ class InventoryScreen extends StatefulWidget {
 }
 
 class _InventoryScreenState extends State<InventoryScreen> {
-  // TODO: Replace local list with real-time Firestore stream from 'medicines' collection
-  List<Medicine> _medicines = [];
-
+  final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
-  String _selectedCategory = 'All Categories';
-  String _selectedStatus = 'All';
 
-  final List<String> _categories = [
-    'All Categories',
-    'Tablets',
-    'Syrups',
-    'Injections',
-    'Capsules',
-    'Ointments'
-  ];
-  
-  final List<String> _statuses = [
-    'All',
-    'In Stock',
-    'Low Stock',
-    'Out of Stock'
-  ];
+  // ── Computed stats ──────────────────────────────────────────────────────────
+  double get _totalInventoryValue  => _products.fold(0.0, (s, p) => s + p.inventoryValue);
+  int    get _catalogCount         => _products.length;
+  double get _totalStockUnits      => _products.fold(0.0, (s, p) => s + p.stock);
+  int    get _riskItemCount        => _products.where((p) => p.status != 'Healthy').length;
+  int    get _lowStockCount        => _products.where((p) => p.status == 'Low Stock').length;
+
+  List<Product> get _filtered {
+    final q = _searchQuery.trim().toLowerCase();
+    if (q.isEmpty) return _products;
+    return _products.where((p) =>
+      p.name.toLowerCase().contains(q) || p.sku.toLowerCase().contains(q)).toList();
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _loadDummyData();
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
-  void _loadDummyData() {
-    _medicines = [
-      Medicine(id: '1', name: 'Panadol 500mg', category: 'Tablets', batchNo: 'B-101', quantity: 150, unitPrice: 2.5, expiryDate: DateTime(2027, 5, 12)),
-      Medicine(id: '2', name: 'Augmentin 625mg', category: 'Tablets', batchNo: 'B-102', quantity: 45, unitPrice: 18.0, expiryDate: DateTime(2026, 12, 1)),
-      Medicine(id: '3', name: 'Brufen 400mg', category: 'Tablets', batchNo: 'B-103', quantity: 12, unitPrice: 4.0, expiryDate: DateTime(2025, 8, 20)),
-      Medicine(id: '4', name: 'Surbex Z', category: 'Tablets', batchNo: 'B-104', quantity: 80, unitPrice: 12.0, expiryDate: DateTime(2028, 1, 15)),
-      Medicine(id: '5', name: 'Cofcol', category: 'Syrups', batchNo: 'B-105', quantity: 0, unitPrice: 65.0, expiryDate: DateTime(2026, 6, 30)), // Out of stock
-      Medicine(id: '6', name: 'Arinac', category: 'Tablets', batchNo: 'B-106', quantity: 25, unitPrice: 3.5, expiryDate: DateTime(2026, 7, 10)), // Expiring soon
-      Medicine(id: '7', name: 'Insulin', category: 'Injections', batchNo: 'B-107', quantity: 8, unitPrice: 850.0, expiryDate: DateTime(2027, 2, 28)),
-      Medicine(id: '8', name: 'Polyfax', category: 'Ointments', batchNo: 'B-108', quantity: 30, unitPrice: 45.0, expiryDate: DateTime(2028, 11, 5)),
-      Medicine(id: '9', name: 'Omeprazole 20mg', category: 'Capsules', batchNo: 'B-109', quantity: 200, unitPrice: 5.5, expiryDate: DateTime(2027, 9, 14)),
-      Medicine(id: '10', name: 'Flagyl 400mg', category: 'Tablets', batchNo: 'B-110', quantity: 0, unitPrice: 2.0, expiryDate: DateTime(2026, 10, 5)), // Out of stock
-    ];
+  // ── Format helpers ──────────────────────────────────────────────────────────
+  String _fmt(double v) {
+    if (v >= 1000) {
+      return 'Rs. ${v.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')}';
+    }
+    return 'Rs. ${v.toStringAsFixed(0)}';
   }
 
-  String _getStatus(int quantity) {
-    if (quantity == 0) return 'Out of Stock';
-    if (quantity <= 20) return 'Low Stock';
-    return 'In Stock';
+  @override
+  Widget build(BuildContext context) {
+    final rows = _filtered;
+
+    return Container(
+      color: _kBg,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Executive Header ───────────────────────────────────────────
+            const ExecutiveHeader(
+              title: 'Inventory',
+              subtitle: 'Monitor stock health, catalog quality, and inventory value from one workspace.',
+            ),
+            const SizedBox(height: 28),
+
+            // ── 4 Stat Cards ───────────────────────────────────────────────
+            _buildStatCards(),
+            const SizedBox(height: 20),
+
+            // ── Search + Add Product ────────────────────────────────────────
+            _buildSearchBar(),
+            const SizedBox(height: 12),
+
+            // ── Filter chips ────────────────────────────────────────────────
+            _buildFilterChips(rows.length),
+            const SizedBox(height: 0),
+
+            // ── Product Table ───────────────────────────────────────────────
+            _buildTable(rows),
+          ],
+        ),
+      ),
+    );
   }
 
-  List<Medicine> get _filteredMedicines {
-    return _medicines.where((med) {
-      final matchesSearch = med.name.toLowerCase().contains(_searchQuery.toLowerCase()) || 
-                            med.batchNo.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesCategory = _selectedCategory == 'All Categories' || med.category == _selectedCategory;
-      final matchesStatus = _selectedStatus == 'All' || _getStatus(med.quantity) == _selectedStatus;
-      return matchesSearch && matchesCategory && matchesStatus;
-    }).toList();
+  // ── Stat Cards ─────────────────────────────────────────────────────────────
+  Widget _buildStatCards() {
+    return Row(
+      children: [
+        Expanded(child: _StatCard(
+          icon: Icons.inventory_2_outlined,
+          iconBg: const Color(0xFFEEF2FF),
+          iconColor: const Color(0xFF4F46E5),
+          title: 'Inventory value',
+          value: _fmt(_totalInventoryValue),
+          subtitle: 'Purchase cost basis',
+        )),
+        const SizedBox(width: 16),
+        Expanded(child: _StatCard(
+          icon: Icons.category_outlined,
+          iconBg: const Color(0xFFE0F2FE),
+          iconColor: const Color(0xFF0284C7),
+          title: 'Catalog items',
+          value: '$_catalogCount',
+          subtitle: 'Products currently tracked',
+        )),
+        const SizedBox(width: 16),
+        Expanded(child: _StatCard(
+          icon: Icons.bar_chart_rounded,
+          iconBg: const Color(0xFFECFDF5),
+          iconColor: const Color(0xFF059669),
+          title: 'Stock units',
+          value: _totalStockUnits.toStringAsFixed(1),
+          subtitle: 'Healthy stock posture',
+        )),
+        const SizedBox(width: 16),
+        Expanded(child: _StatCard(
+          icon: Icons.warning_amber_rounded,
+          iconBg: const Color(0xFFFFFBEB),
+          iconColor: const Color(0xFFD97706),
+          title: 'Risk items',
+          value: '$_riskItemCount',
+          subtitle: _riskItemCount == 0 ? 'No stockouts right now' : '$_riskItemCount item(s) need attention',
+        )),
+      ],
+    );
   }
 
-  void _openAddEditDialog([Medicine? medicine]) {
+  // ── Search + Add Product ────────────────────────────────────────────────────
+  Widget _buildSearchBar() {
+    return Row(
+      children: [
+        // Search
+        Expanded(
+          child: Container(
+            height: 44,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.grey.shade200),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              children: [
+                Icon(Icons.search, size: 18, color: Colors.grey.shade400),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (v) => setState(() => _searchQuery = v),
+                    style: const TextStyle(fontSize: 14),
+                    decoration: InputDecoration(
+                      hintText: 'Search by product name or sku',
+                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+
+        // Add Product
+        ElevatedButton.icon(
+          onPressed: () => _showProductDialog(),
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Add Product', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _kPrimary,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            elevation: 0,
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Filter chips ────────────────────────────────────────────────────────────
+  Widget _buildFilterChips(int visibleCount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          top: BorderSide(color: Colors.grey.shade200),
+          left: BorderSide(color: Colors.grey.shade200),
+          right: BorderSide(color: Colors.grey.shade200),
+        ),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(12),
+          topRight: Radius.circular(12),
+        ),
+      ),
+      child: Row(
+        children: [
+          _Chip(icon: Icons.view_module_outlined, label: '$visibleCount visible'),
+          const SizedBox(width: 8),
+          _Chip(
+            icon: Icons.warning_amber_rounded,
+            label: '$_lowStockCount low stock',
+            color: _lowStockCount > 0 ? Colors.orange : null,
+          ),
+          const Spacer(),
+          Text('Products workspace', style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  // ── Product Table ──────────────────────────────────────────────────────────
+  Widget _buildTable(List<Product> rows) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(
+          left: BorderSide(color: Colors.grey.shade200),
+          right: BorderSide(color: Colors.grey.shade200),
+          bottom: BorderSide(color: Colors.grey.shade200),
+        ),
+        borderRadius: const BorderRadius.only(
+          bottomLeft: Radius.circular(12),
+          bottomRight: Radius.circular(12),
+        ),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: const Row(
+              children: [
+                _TH('SKU',      flex: 2),
+                _TH('PRODUCT',  flex: 5),
+                _TH('COST',     flex: 2),
+                _TH('SELL',     flex: 2),
+                _TH('STOCK',    flex: 2),
+                _TH('STATUS',   flex: 2),
+                _TH('ACTIONS',  flex: 2),
+              ],
+            ),
+          ),
+
+          // Empty state
+          if (rows.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 60),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade300),
+                    const SizedBox(height: 12),
+                    Text('No products found', style: TextStyle(color: Colors.grey.shade400, fontSize: 15, fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
+                    Text('Click "+ Add Product" to add your first product', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                  ],
+                ),
+              ),
+            ),
+
+          // Rows
+          ...rows.asMap().entries.map((entry) {
+            final i = entry.key;
+            final p = entry.value;
+            return _ProductRow(
+              product: p,
+              isEven: i.isEven,
+              onEdit: () => _showProductDialog(product: p),
+              onDelete: () => _confirmDelete(p),
+              onView: () => _viewProduct(p),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
+  // ── Dialogs ──────────────────────────────────────────────────────────────────
+  void _showProductDialog({Product? product}) {
     showDialog(
       context: context,
-      barrierDismissible: false,
-      builder: (context) => _MedicineFormDialog(
-        medicine: medicine,
-        categories: _categories.where((c) => c != 'All Categories').toList(),
-        onSave: (savedMed) {
+      builder: (_) => _ProductFormDialog(
+        product: product,
+        onSave: (p) {
           setState(() {
-            if (medicine == null) {
-              // Add
-              // TODO: On save, write to Firestore instead of updating local list
-              _medicines.add(savedMed);
+            if (product == null) {
+              _products.add(p);
             } else {
-              // Edit
-              // TODO: On save, update Firestore instead of local list
-              final index = _medicines.indexWhere((m) => m.id == savedMed.id);
-              if (index != -1) {
-                _medicines[index] = savedMed;
-              }
+              final idx = _products.indexWhere((x) => x.sku == product.sku);
+              if (idx != -1) _products[idx] = p;
             }
           });
         },
@@ -122,263 +368,175 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  void _confirmDelete(Medicine medicine) {
+  void _viewProduct(Product p) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete Medicine', style: TextStyle(fontWeight: FontWeight.bold)),
-        content: Text('Are you sure you want to delete ${medicine.name}?'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _InfoRow('SKU',        p.sku),
+            _InfoRow('Category',   p.category),
+            _InfoRow('Unit',       p.unit),
+            _InfoRow('Cost Price', 'Rs. ${p.costPrice.toStringAsFixed(0)}'),
+            _InfoRow('Sell Price', 'Rs. ${p.sellPrice.toStringAsFixed(0)}'),
+            _InfoRow('Stock',      '${p.stock} ${p.unit}'),
+            _InfoRow('Status',     p.status),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
+      ),
+    );
+  }
+
+  void _confirmDelete(Product p) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Product', style: TextStyle(fontWeight: FontWeight.w700)),
+        content: Text('Are you sure you want to delete "${p.name}"?'),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () {
-              // TODO: On delete, remove document from Firestore 'medicines' collection
-              setState(() {
-                _medicines.removeWhere((m) => m.id == medicine.id);
-              });
+              setState(() => _products.removeWhere((x) => x.sku == p.sku));
               Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${medicine.name} deleted')),
-              );
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// PRODUCT ROW
+// ---------------------------------------------------------------------------
+class _ProductRow extends StatelessWidget {
+  final Product product;
+  final bool isEven;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onView;
+
+  const _ProductRow({
+    required this.product,
+    required this.isEven,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onView,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final filteredList = _filteredMedicines;
-
-    return Padding(
-      padding: const EdgeInsets.all(28.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    final p = product;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: isEven ? Colors.white : const Color(0xFFFAFAFA),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+      ),
+      child: Row(
         children: [
-          // ── Header Row ──────────────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Inventory',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                      color: Color(0xFF1A2E2B),
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Manage your medicine stock',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-              ElevatedButton.icon(
-                onPressed: () => _openAddEditDialog(),
-                icon: const Icon(Icons.add, size: 20),
-                label: const Text('Add Medicine'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F4C81),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // ── Filter Bar ──────────────────────────────────────────────
-          Row(
-            children: [
-              // Search
-              Expanded(
-                flex: 2,
-                child: SizedBox(
-                  height: 44,
-                  child: TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val),
-                    decoration: InputDecoration(
-                      hintText: 'Search medicine or batch...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                      prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
-                      contentPadding: EdgeInsets.zero,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: BorderSide(color: Colors.grey.shade200),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              
-              // Category Filter
-              Expanded(
-                flex: 1,
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedCategory,
-                      isExpanded: true,
-                      icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
-                      style: const TextStyle(color: Color(0xFF1A2E2B), fontSize: 14, fontWeight: FontWeight.w500),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedCategory = val);
-                      },
-                      items: _categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              
-              // Status Filter
-              Expanded(
-                flex: 1,
-                child: Container(
-                  height: 44,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedStatus,
-                      isExpanded: true,
-                      icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade600),
-                      style: const TextStyle(color: Color(0xFF1A2E2B), fontSize: 14, fontWeight: FontWeight.w500),
-                      onChanged: (val) {
-                        if (val != null) setState(() => _selectedStatus = val);
-                      },
-                      items: _statuses.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-
-          // ── Data Table ──────────────────────────────────────────────
+          // SKU badge
           Expanded(
+            flex: 2,
             child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.03),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
+                color: const Color(0xFFEEF2FF),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                p.sku,
+                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF4F46E5)),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+
+          // Product name + threshold
+          Expanded(
+            flex: 5,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(p.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+                Text('Threshold ${p.threshold.toStringAsFixed(0)} ${p.unit}', style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+              ],
+            ),
+          ),
+
+          // Cost
+          Expanded(
+            flex: 2,
+            child: Text('Rs. ${p.costPrice.toStringAsFixed(0)}', style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+          ),
+
+          // Sell (highlighted)
+          Expanded(
+            flex: 2,
+            child: Text('Rs. ${p.sellPrice.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, color: Color(0xFF4F46E5), fontWeight: FontWeight.w600)),
+          ),
+
+          // Stock
+          Expanded(
+            flex: 2,
+            child: Row(
+              children: [
+                Container(
+                  width: 7, height: 7,
+                  decoration: BoxDecoration(
+                    color: p.status == 'Healthy' ? Colors.green : p.status == 'Low Stock' ? Colors.orange : Colors.red,
+                    shape: BoxShape.circle,
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: filteredList.isEmpty
-                  ? Center(
-                      child: Text(
-                        'No medicines found.',
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
-                      ),
-                    )
-                  : LayoutBuilder(
-                      builder: (context, constraints) {
-                        return SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: ConstrainedBox(
-                              constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                              child: DataTable(
-                          headingRowColor: WidgetStateProperty.all(const Color(0xFFF9FAFA)),
-                          dataRowMinHeight: 56,
-                          dataRowMaxHeight: 56,
-                          horizontalMargin: 24,
-                          columnSpacing: 32,
-                          columns: const [
-                            DataColumn(label: Text('Medicine Name', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Category', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Batch No.', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Quantity', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Unit Price', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Expiry Date', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.w600))),
-                            DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.w600))),
-                          ],
-                          rows: filteredList.map((med) {
-                            final status = _getStatus(med.quantity);
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(med.name, style: const TextStyle(fontWeight: FontWeight.w500))),
-                                DataCell(Text(med.category, style: TextStyle(color: Colors.grey.shade700))),
-                                DataCell(Text(med.batchNo, style: TextStyle(color: Colors.grey.shade700))),
-                                DataCell(Text('${med.quantity}', style: const TextStyle(fontWeight: FontWeight.w500))),
-                                DataCell(Text('Rs. ${med.unitPrice.toStringAsFixed(2)}')),
-                                DataCell(Text(DateFormat('dd MMM yyyy').format(med.expiryDate))),
-                                DataCell(_StatusBadge(status: status)),
-                                DataCell(
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: const Icon(Icons.edit_outlined, size: 20),
-                                        color: const Color(0xFF0F4C81),
-                                        tooltip: 'Edit',
-                                        onPressed: () => _openAddEditDialog(med),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete_outline, size: 20),
-                                        color: Colors.red.shade300,
-                                        tooltip: 'Delete',
-                                        onPressed: () => _confirmDelete(med),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
-                      ),
-                    ),
-                    );
-                  }),
-              ),
+                ),
+                const SizedBox(width: 6),
+                Text('${p.stock} ${p.unit}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1A2E2B))),
+              ],
+            ),
+          ),
+
+          // Status badge
+          Expanded(
+            flex: 2,
+            child: _StatusBadge(status: p.status),
+          ),
+
+          // Actions
+          Expanded(
+            flex: 2,
+            child: Row(
+              children: [
+                IconButton(
+                  icon: Icon(Icons.open_in_new_rounded, size: 18, color: Colors.grey.shade500),
+                  onPressed: onView,
+                  tooltip: 'View',
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(Icons.edit_outlined, size: 18, color: Colors.grey.shade500),
+                  onPressed: onEdit,
+                  tooltip: 'Edit',
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
+                  onPressed: onDelete,
+                  tooltip: 'Delete',
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                ),
+              ],
             ),
           ),
         ],
@@ -396,248 +554,319 @@ class _StatusBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bgColor;
-    Color textColor;
-
+    Color bg, fg;
     switch (status) {
-      case 'In Stock':
-        bgColor = Colors.green.shade50;
-        textColor = Colors.green.shade700;
+      case 'Healthy':
+        bg = const Color(0xFFECFDF5); fg = const Color(0xFF059669);
         break;
       case 'Low Stock':
-        bgColor = Colors.orange.shade50;
-        textColor = Colors.orange.shade800;
+        bg = const Color(0xFFFFFBEB); fg = const Color(0xFFD97706);
         break;
-      case 'Out of Stock':
       default:
-        bgColor = Colors.red.shade50;
-        textColor = Colors.red.shade700;
-        break;
+        bg = const Color(0xFFFEF2F2); fg = const Color(0xFFDC2626);
     }
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Text(status, style: TextStyle(fontSize: 12, color: fg, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// STAT CARD
+// ---------------------------------------------------------------------------
+class _StatCard extends StatelessWidget {
+  final IconData icon;
+  final Color iconBg;
+  final Color iconColor;
+  final String title;
+  final String value;
+  final String subtitle;
+
+  const _StatCard({
+    required this.icon,
+    required this.iconBg,
+    required this.iconColor,
+    required this.title,
+    required this.value,
+    required this.subtitle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: textColor.withValues(alpha: 0.3)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
       ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: textColor,
-          fontWeight: FontWeight.w600,
-          fontSize: 12,
-        ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38, height: 38,
+            decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(9)),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 5),
+                Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A2E2B), letterSpacing: -0.5)),
+                const SizedBox(height: 3),
+                Text(subtitle, style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
 // ---------------------------------------------------------------------------
-// ADD / EDIT DIALOG
+// FILTER CHIP
 // ---------------------------------------------------------------------------
-class _MedicineFormDialog extends StatefulWidget {
-  final Medicine? medicine;
-  final List<String> categories;
-  final ValueChanged<Medicine> onSave;
-
-  const _MedicineFormDialog({this.medicine, required this.categories, required this.onSave});
+class _Chip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  const _Chip({required this.icon, required this.label, this.color});
 
   @override
-  State<_MedicineFormDialog> createState() => _MedicineFormDialogState();
+  Widget build(BuildContext context) {
+    final c = color ?? Colors.grey.shade600;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: color != null ? color!.withValues(alpha: 0.08) : Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color != null ? color!.withValues(alpha: 0.25) : Colors.grey.shade200),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: c),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(fontSize: 12, color: c, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
 }
 
-class _MedicineFormDialogState extends State<_MedicineFormDialog> {
+// ---------------------------------------------------------------------------
+// TABLE HEADER CELL
+// ---------------------------------------------------------------------------
+class _TH extends StatelessWidget {
+  final String label;
+  final int flex;
+  const _TH(this.label, {required this.flex});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      flex: flex,
+      child: Text(label, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5)),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// INFO ROW (view dialog)
+// ---------------------------------------------------------------------------
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _InfoRow(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(
+        children: [
+          SizedBox(width: 90, child: Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500))),
+          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PRODUCT FORM DIALOG (Add / Edit)
+// ---------------------------------------------------------------------------
+class _ProductFormDialog extends StatefulWidget {
+  final Product? product;
+  final ValueChanged<Product> onSave;
+
+  const _ProductFormDialog({this.product, required this.onSave});
+
+  @override
+  State<_ProductFormDialog> createState() => _ProductFormDialogState();
+}
+
+class _ProductFormDialogState extends State<_ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
-  
-  late TextEditingController _nameCtrl;
-  late TextEditingController _batchCtrl;
-  late TextEditingController _qtyCtrl;
-  late TextEditingController _priceCtrl;
-  
-  String? _selectedCategory;
-  DateTime? _selectedExpiry;
+  late final TextEditingController _skuCtrl;
+  late final TextEditingController _nameCtrl;
+  late final TextEditingController _packagingCtrl;
 
   @override
   void initState() {
     super.initState();
-    final med = widget.medicine;
-    _nameCtrl = TextEditingController(text: med?.name ?? '');
-    _batchCtrl = TextEditingController(text: med?.batchNo ?? '');
-    _qtyCtrl = TextEditingController(text: med?.quantity.toString() ?? '');
-    _priceCtrl = TextEditingController(text: med?.unitPrice.toString() ?? '');
-    
-    _selectedCategory = med?.category ?? (widget.categories.isNotEmpty ? widget.categories.first : null);
-    _selectedExpiry = med?.expiryDate;
+    final p = widget.product;
+    _skuCtrl        = TextEditingController(text: p?.sku ?? '');
+    _nameCtrl       = TextEditingController(text: p?.name ?? '');
+    _packagingCtrl  = TextEditingController(text: p?.unit ?? '');
   }
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
-    _batchCtrl.dispose();
-    _qtyCtrl.dispose();
-    _priceCtrl.dispose();
+    for (final c in [_skuCtrl, _nameCtrl, _packagingCtrl]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  void _pickExpiryDate() async {
-    final date = await showDatePicker(
-      context: context,
-      initialDate: _selectedExpiry ?? DateTime.now().add(const Duration(days: 1)),
-      firstDate: DateTime.now(),
-      lastDate: DateTime(2050),
-    );
-    if (date != null) {
-      setState(() => _selectedExpiry = date);
-    }
-  }
-
   void _save() {
-    if (_formKey.currentState!.validate() && _selectedExpiry != null && _selectedCategory != null) {
-      final newMed = Medicine(
-        id: widget.medicine?.id ?? DateTime.now().millisecondsSinceEpoch.toString(),
-        name: _nameCtrl.text.trim(),
-        category: _selectedCategory!,
-        batchNo: _batchCtrl.text.trim(),
-        quantity: int.parse(_qtyCtrl.text.trim()),
-        unitPrice: double.parse(_priceCtrl.text.trim()),
-        expiryDate: _selectedExpiry!,
-      );
-      widget.onSave(newMed);
-      Navigator.pop(context);
-    } else if (_selectedExpiry == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select an expiry date.')));
-    }
+    if (!_formKey.currentState!.validate()) return;
+    widget.onSave(Product(
+      sku:        _skuCtrl.text.trim().toUpperCase(),
+      name:       _nameCtrl.text.trim(),
+      category:   widget.product?.category ?? 'General',
+      unit:       _packagingCtrl.text.trim(),
+      costPrice:  widget.product?.costPrice ?? 0,
+      sellPrice:  widget.product?.sellPrice ?? 0,
+      stock:      widget.product?.stock ?? 0,
+      threshold:  widget.product?.threshold ?? 5,
+    ));
+    Navigator.pop(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    final isEdit = widget.medicine != null;
+    final isEdit = widget.product != null;
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Container(
-        width: 500,
-        padding: const EdgeInsets.all(24),
+        width: 520,
+        padding: const EdgeInsets.all(28),
         child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                isEdit ? 'Edit Medicine' : 'Add Medicine',
-                style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B)),
+              // Header
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF4F46E5), size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(isEdit ? 'Edit Product' : 'Add Product',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A2E2B))),
+                  const Spacer(),
+                  IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close, color: Colors.grey.shade400)),
+                ],
               ),
               const SizedBox(height: 24),
-              
-              // Name
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(labelText: 'Medicine Name', hintText: 'e.g. Panadol 500mg'),
-                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              
-              // Category & Batch
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      initialValue: _selectedCategory,
-                      decoration: const InputDecoration(labelText: 'Category'),
-                      items: widget.categories.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                      onChanged: (val) => setState(() => _selectedCategory = val),
-                      validator: (val) => val == null ? 'Required' : null,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _batchCtrl,
-                      decoration: const InputDecoration(labelText: 'Batch Number', hintText: 'e.g. B-123'),
-                      validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              // Quantity & Price
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _qtyCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Quantity'),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) return 'Required';
-                        final num = int.tryParse(val);
-                        if (num == null || num < 0) return 'Invalid';
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Unit Price (Rs.)'),
-                      validator: (val) {
-                        if (val == null || val.isEmpty) return 'Required';
-                        final num = double.tryParse(val);
-                        if (num == null || num <= 0) return 'Invalid';
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              
-              // Expiry Date
-              InkWell(
-                onTap: _pickExpiryDate,
-                borderRadius: BorderRadius.circular(12),
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: 'Expiry Date',
-                    errorText: _selectedExpiry == null ? 'Required' : null,
-                    suffixIcon: const Icon(Icons.calendar_today, size: 20),
-                  ),
-                  child: Text(
-                    _selectedExpiry == null ? 'Select Date' : DateFormat('dd MMM yyyy').format(_selectedExpiry!),
-                    style: TextStyle(color: _selectedExpiry == null ? Colors.grey.shade600 : Colors.black87),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 32),
-              
+
+              // SKU + Name
+              Row(children: [
+                Expanded(child: _Field(label: 'Medicine code', ctrl: _skuCtrl, hint: 'e.g. P001', validator: _req)),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: _Field(label: 'Medicine Name', ctrl: _nameCtrl, hint: 'e.g. Panadol 500mg', validator: _req)),
+              ]),
+              const SizedBox(height: 14),
+
+              // Packaging (Full Width)
+              _Field(label: 'Packaging', ctrl: _packagingCtrl, hint: 'e.g. 10x10 strips', validator: _req),
+              const SizedBox(height: 28),
+
               // Actions
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  TextButton(
+                  OutlinedButton(
                     onPressed: () => Navigator.pop(context),
-                    child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade300),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700)),
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
                     onPressed: _save,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF0F4C81),
+                      backgroundColor: _kPrimary,
                       foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
                     ),
-                    child: const Text('Save'),
+                    child: Text(isEdit ? 'Save Changes' : 'Add Product',
+                        style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ],
-              )
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  String? _req(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
+}
+
+// ---------------------------------------------------------------------------
+// FORM FIELD HELPER
+// ---------------------------------------------------------------------------
+class _Field extends StatelessWidget {
+  final String label;
+  final TextEditingController ctrl;
+  final String hint;
+  final String? Function(String?)? validator;
+
+  const _Field({
+    required this.label,
+    required this.ctrl,
+    required this.hint,
+    this.validator,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+        const SizedBox(height: 6),
+        TextFormField(
+          controller: ctrl,
+          validator: validator,
+          style: const TextStyle(fontSize: 13),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          ),
+        ),
+      ],
     );
   }
 }
