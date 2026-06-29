@@ -1,7 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'screens/splash_screen.dart';
 
 void main() {
+  if (Platform.isWindows || Platform.isLinux) {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  }
   runApp(const PharmacyApp());
 }
 
@@ -29,9 +35,7 @@ class PharmacyApp extends StatelessWidget {
           labelLarge: TextStyle(fontWeight: FontWeight.w600),
         ),
         inputDecorationTheme: InputDecorationTheme(
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           filled: true,
           fillColor: Colors.white,
         ),

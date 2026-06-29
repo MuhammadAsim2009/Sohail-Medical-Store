@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/product.dart';
+import '../services/database_helper.dart';
 import '../widgets/executive_header.dart';
 
 // ---------------------------------------------------------------------------
@@ -6,66 +8,6 @@ import '../widgets/executive_header.dart';
 // ---------------------------------------------------------------------------
 const _kPrimary = Color(0xFF0F4C81);
 const _kBg = Color(0xFFF5F7FA);
-
-// ---------------------------------------------------------------------------
-// MODEL
-// ---------------------------------------------------------------------------
-class Product {
-  String sku;
-  String name;
-  String unit;        // e.g. 'Kgs', 'Ltr', 'Pcs'
-  double costPrice;
-  double sellPrice;
-  double stock;
-  double threshold;   // low-stock threshold
-  String category;
-
-  Product({
-    required this.sku,
-    required this.name,
-    required this.unit,
-    required this.costPrice,
-    required this.sellPrice,
-    required this.stock,
-    required this.threshold,
-    required this.category,
-  });
-
-  String get status {
-    if (stock <= 0) return 'Out of Stock';
-    if (stock <= threshold) return 'Low Stock';
-    return 'Healthy';
-  }
-
-  double get inventoryValue => costPrice * stock;
-}
-
-// ---------------------------------------------------------------------------
-// DUMMY DATA
-// ---------------------------------------------------------------------------
-// TODO: Replace with real-time Firestore stream from 'products' collection
-List<Product> _products = [
-  Product(sku: 'P001', name: 'Panadol 500mg',       unit: 'Strips', costPrice: 18,  sellPrice: 22,  stock: 340,  threshold: 30, category: 'Tablets'),
-  Product(sku: 'P002', name: 'Augmentin 625mg',      unit: 'Strips', costPrice: 320, sellPrice: 380, stock: 85,   threshold: 20, category: 'Tablets'),
-  Product(sku: 'P003', name: 'Brufen 400mg',         unit: 'Strips', costPrice: 55,  sellPrice: 70,  stock: 12,   threshold: 20, category: 'Tablets'),
-  Product(sku: 'P004', name: 'Omeprazole 20mg',      unit: 'Strips', costPrice: 95,  sellPrice: 120, stock: 200,  threshold: 25, category: 'Capsules'),
-  Product(sku: 'P005', name: 'Metformin 500mg',      unit: 'Strips', costPrice: 75,  sellPrice: 95,  stock: 150,  threshold: 20, category: 'Tablets'),
-  Product(sku: 'P006', name: 'Amlodipine 5mg',       unit: 'Strips', costPrice: 130, sellPrice: 160, stock: 0,    threshold: 15, category: 'Tablets'),
-  Product(sku: 'P007', name: 'Ventolin Inhaler',     unit: 'Pcs',    costPrice: 280, sellPrice: 340, stock: 22,   threshold: 10, category: 'Inhalers'),
-  Product(sku: 'P008', name: 'Cofcol Syrup 90ml',    unit: 'Bottles',costPrice: 85,  sellPrice: 110, stock: 60,   threshold: 15, category: 'Syrups'),
-  Product(sku: 'P009', name: 'ORS Sachet',           unit: 'Sachets',costPrice: 12,  sellPrice: 18,  stock: 500,  threshold: 50, category: 'Supplements'),
-  Product(sku: 'P010', name: 'Disprin 300mg',        unit: 'Strips', costPrice: 20,  sellPrice: 28,  stock: 3,    threshold: 20, category: 'Tablets'),
-  Product(sku: 'P011', name: 'Insulin (Humulin N)',  unit: 'Vials',  costPrice: 750, sellPrice: 900, stock: 18,   threshold: 10, category: 'Injections'),
-  Product(sku: 'P012', name: 'Flagyl 400mg',         unit: 'Strips', costPrice: 45,  sellPrice: 60,  stock: 0,    threshold: 20, category: 'Tablets'),
-  Product(sku: 'P013', name: 'Polyfax Ointment',     unit: 'Tubes',  costPrice: 120, sellPrice: 155, stock: 35,   threshold: 10, category: 'Ointments'),
-  Product(sku: 'P014', name: 'Surbex Z',             unit: 'Strips', costPrice: 200, sellPrice: 250, stock: 110,  threshold: 20, category: 'Supplements'),
-  Product(sku: 'P015', name: 'Ciplox 500mg',         unit: 'Strips', costPrice: 210, sellPrice: 265, stock: 45,   threshold: 15, category: 'Tablets'),
-  Product(sku: 'P016', name: 'Arinac Forte',         unit: 'Strips', costPrice: 65,  sellPrice: 85,  stock: 9,    threshold: 20, category: 'Tablets'),
-  Product(sku: 'P017', name: 'Risek 20mg',           unit: 'Strips', costPrice: 180, sellPrice: 220, stock: 90,   threshold: 15, category: 'Capsules'),
-  Product(sku: 'P018', name: 'Glucometer Strips',    unit: 'Boxes',  costPrice: 850, sellPrice: 1050,stock: 14,   threshold: 5,  category: 'Diagnostics'),
-  Product(sku: 'P019', name: 'Surgical Gloves (M)',  unit: 'Boxes',  costPrice: 380, sellPrice: 480, stock: 28,   threshold: 10, category: 'Surgical'),
-  Product(sku: 'P020', name: 'Paediatric Syrup ORS', unit: 'Bottles',costPrice: 65,  sellPrice: 85,  stock: 42,   threshold: 10, category: 'Syrups'),
-];
 
 // ---------------------------------------------------------------------------
 // INVENTORY SCREEN
@@ -80,6 +22,25 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  List<Product> _products = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProducts();
+  }
+
+  Future<void> _loadProducts() async {
+    setState(() => _isLoading = true);
+    final products = await DatabaseHelper.instance.getAllProducts();
+    if (mounted) {
+      setState(() {
+        _products = products;
+        _isLoading = false;
+      });
+    }
+  }
 
   // ── Computed stats ──────────────────────────────────────────────────────────
   double get _totalInventoryValue  => _products.fold(0.0, (s, p) => s + p.inventoryValue);
@@ -111,6 +72,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    
     final rows = _filtered;
 
     return Container(
@@ -341,6 +306,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
               onEdit: () => _showProductDialog(product: p),
               onDelete: () => _confirmDelete(p),
               onView: () => _viewProduct(p),
+              onPurchase: () => _purchaseStock(p),
             );
           }),
         ],
@@ -350,65 +316,273 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
   // ── Dialogs ──────────────────────────────────────────────────────────────────
   void _showProductDialog({Product? product}) {
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (_) => _ProductFormDialog(
-        product: product,
-        onSave: (p) {
-          setState(() {
-            if (product == null) {
-              _products.add(p);
-            } else {
-              final idx = _products.indexWhere((x) => x.sku == product.sku);
-              if (idx != -1) _products[idx] = p;
-            }
-          });
-        },
-      ),
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) => const SizedBox(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        final curvedValue = Curves.easeOutBack.transform(anim1.value);
+        return Transform.scale(
+          scale: 0.8 + (0.2 * curvedValue),
+          child: Opacity(
+            opacity: anim1.value,
+            child: _ProductFormDialog(
+              product: product,
+              onSave: (p) async {
+                if (product == null) {
+                  await DatabaseHelper.instance.insertProduct(p);
+                } else {
+                  p.id = product.id;
+                  await DatabaseHelper.instance.updateProduct(p);
+                }
+                _loadProducts();
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
   void _viewProduct(Product p) {
-    showDialog(
+    showGeneralDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _InfoRow('SKU',        p.sku),
-            _InfoRow('Category',   p.category),
-            _InfoRow('Unit',       p.unit),
-            _InfoRow('Cost Price', 'Rs. ${p.costPrice.toStringAsFixed(0)}'),
-            _InfoRow('Sell Price', 'Rs. ${p.sellPrice.toStringAsFixed(0)}'),
-            _InfoRow('Stock',      '${p.stock} ${p.unit}'),
-            _InfoRow('Status',     p.status),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Close'))],
-      ),
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) => const SizedBox(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        final curvedValue = Curves.easeOutBack.transform(anim1.value);
+        return Transform.scale(
+          scale: 0.8 + (0.2 * curvedValue),
+          child: Opacity(
+            opacity: anim1.value,
+            child: Dialog(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              insetPadding: const EdgeInsets.all(24),
+              child: Container(
+                width: 440,
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
+                    BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFEEF2FF), Color(0xFFE0E7FF)],
+                              begin: Alignment.topLeft, end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [BoxShadow(color: const Color(0xFF4F46E5).withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
+                          ),
+                          child: const Icon(Icons.inventory_2_rounded, color: Color(0xFF4F46E5), size: 28),
+                        ),
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(p.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 22, color: Color(0xFF0F172A), letterSpacing: -0.5)),
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+                                child: Text('SKU: ${p.sku}', style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(context), 
+                          icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                          splashRadius: 24,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        children: [
+                          _InfoRow('Category',   p.category),
+                          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                          _InfoRow('Packaging',  p.formattedPackaging),
+                          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                          _InfoRow('Cost Price', 'Rs. ${p.costPrice.toStringAsFixed(0)}'),
+                          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                          _InfoRow('Sell Price', 'Rs. ${p.sellPrice.toStringAsFixed(0)}'),
+                          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                          _InfoRow('Stock',      p.formattedStock),
+                          const Divider(height: 24, color: Color(0xFFE2E8F0)),
+                          _InfoRow('Status',     p.status),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F4C81),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                        child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _purchaseStock(Product p) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, anim1, anim2) => const SizedBox(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        final curvedValue = Curves.easeOutBack.transform(anim1.value);
+        return Transform.scale(
+          scale: 0.85 + (0.15 * curvedValue),
+          child: Opacity(
+            opacity: anim1.value.clamp(0.0, 1.0),
+            child: _PurchaseStockDialog(
+              product: p,
+              onPurchase: (unitName, qty, costPerUnit) async {
+                await DatabaseHelper.instance.purchaseStock(p, unitName, qty, costPerUnit);
+                _loadProducts();
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 
   void _confirmDelete(Product p) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Product', style: TextStyle(fontWeight: FontWeight.w700)),
-        content: Text('Are you sure you want to delete "${p.name}"?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              setState(() => _products.removeWhere((x) => x.sku == p.sku));
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Delete'),
+      builder: (_) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          width: 400,
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(color: Color(0xFFFEF2F2), shape: BoxShape.circle),
+                child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 36),
+              ),
+              const SizedBox(height: 24),
+              const Text('Delete Product', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 22, color: Color(0xFF1A2E2B))),
+              const SizedBox(height: 12),
+              Text(
+                'Are you sure you want to delete "${p.name}"?\nThis action cannot be undone.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600, height: 1.5),
+              ),
+              const SizedBox(height: 32),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        if (p.id != null) {
+                          await DatabaseHelper.instance.deleteProduct(p.id!);
+                          _loadProducts();
+                        }
+                        if (mounted) {
+                          Navigator.pop(context);
+                          final screenWidth = MediaQuery.of(context).size.width;
+                          const snackBarWidth = 420.0;
+                          final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.check_circle, color: Colors.white, size: 20),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      '"${p.name}" deleted successfully',
+                                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              backgroundColor: const Color(0xFFDC2626), // Red for deletion
+                              behavior: SnackBarBehavior.floating,
+                              margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              elevation: 8,
+                              duration: const Duration(seconds: 3),
+                            ),
+                          );
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFDC2626),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -423,6 +597,7 @@ class _ProductRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onView;
+  final VoidCallback onPurchase;
 
   const _ProductRow({
     required this.product,
@@ -430,6 +605,7 @@ class _ProductRow extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onView,
+    required this.onPurchase,
   });
 
   @override
@@ -467,7 +643,7 @@ class _ProductRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(p.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
-                Text('Threshold ${p.threshold.toStringAsFixed(0)} ${p.unit}', style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+                Text('Threshold ${p.threshold.toStringAsFixed(0)} base units', style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
               ],
             ),
           ),
@@ -497,7 +673,7 @@ class _ProductRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text('${p.stock} ${p.unit}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1A2E2B))),
+                Text(p.formattedStock, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1A2E2B))),
               ],
             ),
           ),
@@ -510,9 +686,17 @@ class _ProductRow extends StatelessWidget {
 
           // Actions
           Expanded(
-            flex: 2,
+            flex: 3,
             child: Row(
               children: [
+                IconButton(
+                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 18, color: Color(0xFF0F4C81)),
+                  onPressed: onPurchase,
+                  tooltip: 'Purchase Stock',
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                ),
+                const SizedBox(width: 4),
                 IconButton(
                   icon: Icon(Icons.open_in_new_rounded, size: 18, color: Colors.grey.shade500),
                   onPressed: onView,
@@ -688,11 +872,12 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SizedBox(width: 90, child: Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500))),
-          Text(value, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+          Text(label, style: const TextStyle(fontSize: 14, color: Color(0xFF64748B), fontWeight: FontWeight.w500)),
+          Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
         ],
       ),
     );
@@ -704,7 +889,7 @@ class _InfoRow extends StatelessWidget {
 // ---------------------------------------------------------------------------
 class _ProductFormDialog extends StatefulWidget {
   final Product? product;
-  final ValueChanged<Product> onSave;
+  final Future<void> Function(Product) onSave;
 
   const _ProductFormDialog({this.product, required this.onSave});
 
@@ -712,122 +897,385 @@ class _ProductFormDialog extends StatefulWidget {
   State<_ProductFormDialog> createState() => _ProductFormDialogState();
 }
 
+class _PackagingRow {
+  final TextEditingController nameCtrl;
+  final TextEditingController containsCtrl;
+  
+  _PackagingRow(String name, String contains) 
+    : nameCtrl = TextEditingController(text: name),
+      containsCtrl = TextEditingController(text: contains);
+      
+  void dispose() {
+    nameCtrl.dispose();
+    containsCtrl.dispose();
+  }
+}
+
 class _ProductFormDialogState extends State<_ProductFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _skuCtrl;
   late final TextEditingController _nameCtrl;
-  late final TextEditingController _packagingCtrl;
+
+  // Category and Packaging
+  String _selectedCategory = 'Tablet';
+  List<_PackagingRow> _pkgRows = [];
 
   @override
   void initState() {
     super.initState();
     final p = widget.product;
-    _skuCtrl        = TextEditingController(text: p?.sku ?? '');
-    _nameCtrl       = TextEditingController(text: p?.name ?? '');
-    _packagingCtrl  = TextEditingController(text: p?.unit ?? '');
+    _skuCtrl  = TextEditingController(text: p?.sku ?? '');
+    _nameCtrl = TextEditingController(text: p?.name ?? '');
+
+    _selectedCategory = p?.category ?? 'Tablet';
+    if (!['Tablet', 'Syrup', 'Sachet', 'Other'].contains(_selectedCategory)) {
+      _selectedCategory = 'Other';
+    }
+
+    if (p != null && p.packaging.isNotEmpty) {
+      _pkgRows = p.packaging.map((u) => _PackagingRow(u.name, u.contains.toString())).toList();
+    } else {
+      _pkgRows = [_PackagingRow('Tablet', '1')]; // default
+    }
   }
 
   @override
   void dispose() {
-    for (final c in [_skuCtrl, _nameCtrl, _packagingCtrl]) {
-      c.dispose();
+    _skuCtrl.dispose();
+    _nameCtrl.dispose();
+    for (var r in _pkgRows) {
+      r.dispose();
     }
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    widget.onSave(Product(
-      sku:        _skuCtrl.text.trim().toUpperCase(),
-      name:       _nameCtrl.text.trim(),
-      category:   widget.product?.category ?? 'General',
-      unit:       _packagingCtrl.text.trim(),
-      costPrice:  widget.product?.costPrice ?? 0,
-      sellPrice:  widget.product?.sellPrice ?? 0,
-      stock:      widget.product?.stock ?? 0,
-      threshold:  widget.product?.threshold ?? 5,
-    ));
-    Navigator.pop(context);
+    
+    // Validate packaging
+    for (var r in _pkgRows) {
+      if (r.nameCtrl.text.trim().isEmpty) return; // simple validation
+    }
+    
+    List<ProductUnit> packaging = _pkgRows.map((r) => ProductUnit(
+      name: r.nameCtrl.text.trim(),
+      contains: int.tryParse(r.containsCtrl.text.trim()) ?? 1,
+    )).toList();
+
+    try {
+      await widget.onSave(Product(
+        sku:        _skuCtrl.text.trim().toUpperCase(),
+        name:       _nameCtrl.text.trim(),
+        category:   _selectedCategory,
+        packaging:  packaging,
+        costPrice:  widget.product?.costPrice ?? 0.0,
+        sellPrice:  widget.product?.sellPrice ?? 0.0,
+        stock:      widget.product?.stock ?? 0.0,
+        threshold:  widget.product?.threshold ?? 10.0,
+      ));
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().contains('UNIQUE constraint failed')
+            ? 'Medicine Code "${_skuCtrl.text.trim().toUpperCase()}" already exists.'
+            : 'An error occurred while saving the product.';
+        final screenWidth = MediaQuery.of(context).size.width;
+        final leftMargin = screenWidth > 420.0 + 48 ? screenWidth - 420.0 - 24 : 24.0;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(msg, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: Colors.white)),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFDC2626), // Red for error
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 8,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildCategorySelector() {
+    final categories = ['Tablet', 'Syrup', 'Sachet', 'Other'];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Category', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: categories.map((cat) {
+            final isSelected = _selectedCategory == cat;
+            return InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedCategory = cat;
+                  // Auto-setup packaging templates based on category
+                  if (cat == 'Tablet') {
+                    _pkgRows = [
+                      _PackagingRow('Box', '10'),
+                      _PackagingRow('Strip', '10'),
+                      _PackagingRow('Tablet', '1'),
+                    ];
+                  } else if (cat == 'Syrup') {
+                    _pkgRows = [_PackagingRow('Bottle', '1')];
+                  } else if (cat == 'Sachet') {
+                    _pkgRows = [
+                      _PackagingRow('Box', '30'),
+                      _PackagingRow('Sachet', '1'),
+                    ];
+                  } else {
+                    _pkgRows = [_PackagingRow('Unit', '1')];
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: isSelected ? const Color(0xFF0F4C81) : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: isSelected ? const Color(0xFF0F4C81) : Colors.grey.shade300),
+                ),
+                child: Text(cat, style: TextStyle(
+                  color: isSelected ? Colors.white : Colors.grey.shade700,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                  fontSize: 13,
+                )),
+              ),
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPackagingFields() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Packaging Hierarchy', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade300),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < _pkgRows.length; i++)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    children: [
+                      if (i < _pkgRows.length - 1) ...[
+                        const Text('1 ', style: TextStyle(fontWeight: FontWeight.w600)),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _pkgRows[i].nameCtrl,
+                            onChanged: (v) => setState((){}),
+                            style: const TextStyle(fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'Unit', isDense: true, filled: true, fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            ),
+                          ),
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 12),
+                          child: Text('contains', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                        ),
+                        SizedBox(
+                          width: 60,
+                          child: TextFormField(
+                            controller: _pkgRows[i].containsCtrl,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'Qty', isDense: true, filled: true, fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(_pkgRows[i + 1].nameCtrl.text.isEmpty ? 'Sub-unit' : _pkgRows[i + 1].nameCtrl.text, 
+                              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        ),
+                      ] else ...[
+                        const Text('Base Unit: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _pkgRows[i].nameCtrl,
+                            onChanged: (v) => setState((){}),
+                            style: const TextStyle(fontSize: 13),
+                            decoration: InputDecoration(
+                              hintText: 'e.g. Tablet, Bottle', isDense: true, filled: true, fillColor: Colors.white,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: Colors.grey.shade300)),
+                            ),
+                          ),
+                        ),
+                      ],
+                      if (i < _pkgRows.length - 1)
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline, color: Colors.red, size: 20),
+                          onPressed: () => setState(() => _pkgRows.removeAt(i)),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.only(left: 12),
+                        )
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _pkgRows.insert(0, _PackagingRow('', '10'));
+                      });
+                    },
+                    icon: const Icon(Icons.add_circle_outline, size: 18, color: Color(0xFF0F4C81)),
+                    label: const Text('Add Parent Unit', style: TextStyle(color: Color(0xFF0F4C81), fontWeight: FontWeight.w600)),
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero),
+                  ),
+                ],
+              )
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.product != null;
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.all(24),
       child: Container(
-        width: 520,
-        padding: const EdgeInsets.all(28),
+        width: 540,
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 40, offset: const Offset(0, 20)),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
         child: Form(
           key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.inventory_2_outlined, color: Color(0xFF4F46E5), size: 20),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(isEdit ? 'Edit Product' : 'Add Product',
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF1A2E2B))),
-                  const Spacer(),
-                  IconButton(onPressed: () => Navigator.pop(context), icon: Icon(Icons.close, color: Colors.grey.shade400)),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // SKU + Name
-              Row(children: [
-                Expanded(child: _Field(label: 'Medicine code', ctrl: _skuCtrl, hint: 'e.g. P001', validator: _req)),
-                const SizedBox(width: 16),
-                Expanded(flex: 2, child: _Field(label: 'Medicine Name', ctrl: _nameCtrl, hint: 'e.g. Panadol 500mg', validator: _req)),
-              ]),
-              const SizedBox(height: 14),
-
-              // Packaging (Full Width)
-              _Field(label: 'Packaging', ctrl: _packagingCtrl, hint: 'e.g. 10x10 strips', validator: _req),
-              const SizedBox(height: 28),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFEEF2FF), Color(0xFFE0E7FF)],
+                          begin: Alignment.topLeft, end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [BoxShadow(color: const Color(0xFF4F46E5).withOpacity(0.2), blurRadius: 8, offset: const Offset(0, 4))],
+                      ),
+                      child: const Icon(Icons.inventory_2_rounded, color: Color(0xFF4F46E5), size: 28),
+                    ),
+                    const SizedBox(width: 20),
+                    Text(isEdit ? 'Edit Product' : 'Add New Product',
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF0F172A), letterSpacing: -0.5)),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context), 
+                      icon: const Icon(Icons.close_rounded, color: Color(0xFF94A3B8)),
+                      splashRadius: 24,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 36),
+  
+                // SKU + Name
+                Row(children: [
+                  Expanded(child: _Field(label: 'Medicine Code', ctrl: _skuCtrl, hint: 'e.g. P001', validator: _req)),
+                  const SizedBox(width: 20),
+                  Expanded(flex: 2, child: _Field(label: 'Medicine Name', ctrl: _nameCtrl, hint: 'e.g. Panadol', validator: _req)),
+                ]),
+                const SizedBox(height: 24),
+                
+                // Category
+                _buildCategorySelector(),
+                const SizedBox(height: 24),
+  
+                // Dynamic Packaging
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.easeInOut,
+                  child: _buildPackagingFields(),
+                ),
+                const SizedBox(height: 40),
 
               // Actions
               Row(
-                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: Colors.grey.shade300),
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: Colors.grey.shade300),
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                      child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600, fontSize: 15)),
                     ),
-                    child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700)),
                   ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _save,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _kPrimary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      elevation: 0,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F4C81),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: Text(isEdit ? 'Save Changes' : 'Add Product',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                     ),
-                    child: Text(isEdit ? 'Save Changes' : 'Add Product',
-                        style: const TextStyle(fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
             ],
-          ),
-        ),
-      ),
-    );
+          ), // closes Column
+        ), // closes SingleChildScrollView
+      ), // closes Form
+      ), // closes Container
+    ); // closes Dialog
   }
-
   String? _req(String? v) => (v == null || v.trim().isEmpty) ? 'Required' : null;
 }
 
@@ -852,21 +1300,348 @@ class _Field extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
-        const SizedBox(height: 6),
+        Text(label, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+        const SizedBox(height: 8),
         TextFormField(
           controller: ctrl,
           validator: validator,
-          style: const TextStyle(fontSize: 13),
+          style: const TextStyle(fontSize: 14),
           decoration: InputDecoration(
             hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+            filled: true,
+            fillColor: Colors.grey.shade50,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// PURCHASE STOCK DIALOG
+// ---------------------------------------------------------------------------
+class _PurchaseStockDialog extends StatefulWidget {
+  final Product product;
+  final Future<void> Function(String unitName, double qty, double costPerUnit) onPurchase;
+
+  const _PurchaseStockDialog({required this.product, required this.onPurchase});
+
+  @override
+  State<_PurchaseStockDialog> createState() => _PurchaseStockDialogState();
+}
+
+class _PurchaseStockDialogState extends State<_PurchaseStockDialog> {
+  late String _selectedUnit;
+  final _qtyCtrl = TextEditingController();
+  final _costCtrl = TextEditingController();
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to the largest (top-level) unit
+    _selectedUnit = widget.product.packaging.isNotEmpty
+        ? widget.product.packaging.first.name
+        : 'Unit';
+    _costCtrl.text = widget.product.costPrice.toStringAsFixed(0);
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _costCtrl.dispose();
+    super.dispose();
+  }
+
+  double get _baseUnitQty {
+    final qty = double.tryParse(_qtyCtrl.text.trim()) ?? 0;
+    final multiplier = widget.product.getMultiplier(_selectedUnit);
+    return qty * multiplier;
+  }
+
+  double get _totalCost {
+    final qty = double.tryParse(_qtyCtrl.text.trim()) ?? 0;
+    final cost = double.tryParse(_costCtrl.text.trim()) ?? 0;
+    return qty * cost;
+  }
+
+  Future<void> _save() async {
+    final qty = double.tryParse(_qtyCtrl.text.trim());
+    if (qty == null || qty <= 0) return;
+    final cost = double.tryParse(_costCtrl.text.trim()) ?? 0;
+    setState(() => _saving = true);
+    try {
+      await widget.onPurchase(_selectedUnit, qty, cost);
+      if (mounted) Navigator.pop(context);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.product;
+    final units = p.packaging.map((u) => u.name).toList();
+    final baseUnit = p.packaging.isNotEmpty ? p.packaging.last.name : 'Unit';
+    final currentStock = p.formattedStock;
+    final previewBase = _baseUnitQty;
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.all(24),
+      child: Container(
+        width: 480,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 40, offset: const Offset(0, 20)),
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // ─── Header band ────────────────────────────────────────────────
+            Container(
+              padding: const EdgeInsets.fromLTRB(28, 24, 20, 24),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF0F4C81), Color(0xFF1976D2)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 22),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Purchase Stock', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.4)),
+                        const SizedBox(height: 2),
+                        Text(p.name, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.75), fontWeight: FontWeight.w500)),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                    splashRadius: 22,
+                  ),
+                ],
+              ),
+            ),
+
+            // ─── Body ───────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+
+                  // Current stock pill
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFFBAE6FD)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.inventory_2_outlined, size: 16, color: Color(0xFF0369A1)),
+                        const SizedBox(width: 8),
+                        Text('Current stock: ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                        Text(currentStock, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0369A1))),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Unit dropdown
+                  const Text('Purchasing Unit', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+                  const SizedBox(height: 8),
+                  if (units.isEmpty)
+                    Text('No packaging defined. Please edit the product first.', style: TextStyle(color: Colors.red.shade400, fontSize: 13))
+                  else
+                    DropdownButtonFormField<String>(
+                      value: _selectedUnit,
+                      decoration: InputDecoration(
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      ),
+                      items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                      onChanged: (v) => setState(() => _selectedUnit = v!),
+                    ),
+                  const SizedBox(height: 20),
+
+                  // Qty + Cost row
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Quantity', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _qtyCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              onChanged: (_) => setState((){}),
+                              style: const TextStyle(fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'e.g. 5',
+                                hintStyle: TextStyle(color: Colors.grey.shade400),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Cost per Unit (Rs.)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: _costCtrl,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              onChanged: (_) => setState((){}),
+                              style: const TextStyle(fontSize: 14),
+                              decoration: InputDecoration(
+                                hintText: 'e.g. 120',
+                                hintStyle: TextStyle(color: Colors.grey.shade400),
+                                filled: true,
+                                fillColor: Colors.grey.shade50,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Live preview card
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: previewBase > 0 ? const Color(0xFFF0FDF4) : Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: previewBase > 0 ? const Color(0xFFBBF7D0) : Colors.grey.shade200,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Will add to stock:', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                            Text(
+                              previewBase > 0 ? '+${previewBase.toInt()} $baseUnit' : '—',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: previewBase > 0 ? const Color(0xFF16A34A) : Colors.grey.shade400,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Total Cost:', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                            Text(
+                              _totalCost > 0 ? 'Rs. ${_totalCost.toStringAsFixed(0)}' : '—',
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: _totalCost > 0 ? const Color(0xFF0F4C81) : Colors.grey.shade400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Action buttons
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: Colors.grey.shade300),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed: _saving || (_qtyCtrl.text.trim().isEmpty) ? null : _save,
+                          icon: _saving
+                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.check_circle_outline_rounded, size: 20),
+                          label: Text(_saving ? 'Saving...' : 'Confirm Purchase',
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0F4C81),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            elevation: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

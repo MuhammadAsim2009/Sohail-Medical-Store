@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../widgets/executive_header.dart';
-
-// TODO: Replace local list with real-time Firestore stream from 'suppliers' collection
+import '../models/supplier.dart';
+import '../services/database_helper.dart';
 
 class _ActionButton extends StatefulWidget {
   final IconData icon;
@@ -44,54 +44,6 @@ class _ActionButtonState extends State<_ActionButton> {
   }
 }
 
-class Supplier {
-  final String id;
-  final String companyName;
-  final String contactPerson;
-  final String phone;
-  final String email;
-  final String address;
-  final List<String> categoriesSupplied;
-  final DateTime lastOrderDate;
-  final double pendingAmount;
-  final double advanceAmount;
-
-  Supplier({
-    required this.id,
-    required this.companyName,
-    required this.contactPerson,
-    required this.phone,
-    required this.email,
-    required this.address,
-    required this.categoriesSupplied,
-    required this.lastOrderDate,
-    this.pendingAmount = 0.0,
-    this.advanceAmount = 0.0,
-  });
-
-  Supplier copyWith({
-    String? id,
-    String? companyName,
-    String? contactPerson,
-    String? phone,
-    String? email,
-    String? address,
-    List<String>? categoriesSupplied,
-    DateTime? lastOrderDate,
-  }) {
-    return Supplier(
-      id: id ?? this.id,
-      companyName: companyName ?? this.companyName,
-      contactPerson: contactPerson ?? this.contactPerson,
-      phone: phone ?? this.phone,
-      email: email ?? this.email,
-      address: address ?? this.address,
-      categoriesSupplied: categoriesSupplied ?? this.categoriesSupplied,
-      lastOrderDate: lastOrderDate ?? this.lastOrderDate,
-    );
-  }
-}
-
 class SuppliersScreen extends StatefulWidget {
   const SuppliersScreen({super.key});
 
@@ -105,90 +57,23 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     static const Color _backgroundColor = Color(0xFFF4F7F6);
 
   String _searchQuery = '';
+  List<Supplier> _suppliers = [];
+  bool _isLoading = true;
 
-  // Dummy Data
-  final List<Supplier> _suppliers = [
-    Supplier(
-      id: '1',
-      companyName: 'PharmaCorp Inc.',
-      contactPerson: 'Ali Khan',
-      phone: '0300-1234567',
-      email: 'ali@pharmacorp.com',
-      address: '123 Business Road, Karachi',
-      categoriesSupplied: ['Tablets', 'Syrups'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 2)),
-    ),
-    Supplier(
-      id: '2',
-      companyName: 'MedLife Distributors',
-      contactPerson: 'Sarah Ahmed',
-      phone: '0321-7654321',
-      email: 'sarah@medlife.com',
-      address: '45 Health Ave, Lahore',
-      categoriesSupplied: ['Injections', 'Capsules'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 5)),
-    ),
-    Supplier(
-      id: '3',
-      companyName: 'Global Biotech',
-      contactPerson: 'Usman Tariq',
-      phone: '0333-9876543',
-      email: 'usman@globalbio.com',
-      address: '78 Bio Park, Islamabad',
-      categoriesSupplied: ['Ointments', 'Drops'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 12)),
-    ),
-    Supplier(
-      id: '4',
-      companyName: 'CureAll Pharmaceuticals',
-      contactPerson: 'Ayesha Raza',
-      phone: '0345-1122334',
-      email: 'ayesha@cureall.pk',
-      address: 'Plot 12, Industrial Estate, Faisalabad',
-      categoriesSupplied: ['Tablets', 'Injections', 'Syrups'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 1)),
-    ),
-    Supplier(
-      id: '5',
-      companyName: 'HealWell Supplies',
-      contactPerson: 'Bilal Hassan',
-      phone: '0311-5566778',
-      email: 'bhassan@healwell.com',
-      address: 'Shop 4, Medicine Market, Multan',
-      categoriesSupplied: ['First Aid', 'Bandages'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 20)),
-    ),
-    Supplier(
-      id: '6',
-      companyName: 'Prime Meds Pvt Ltd',
-      contactPerson: 'Zainab Qureshi',
-      phone: '0301-9988776',
-      email: 'zainab@primemeds.com',
-      address: 'Suite 302, Prime Tower, Rawalpindi',
-      categoriesSupplied: ['Vitamins', 'Supplements'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 8)),
-    ),
-    Supplier(
-      id: '7',
-      companyName: 'Apex Healthcare',
-      contactPerson: 'Fahad Mustafa',
-      phone: '0322-4455667',
-      email: 'fahad@apexhealth.com',
-      address: 'Apex Building, Shahrah-e-Faisal, Karachi',
-      categoriesSupplied: ['Capsules', 'Ointments'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 15)),
-    ),
-    Supplier(
-      id: '8',
-      companyName: 'Nova Life Sciences',
-      contactPerson: 'Sana Malik',
-      phone: '0334-2233445',
-      email: 'sana.malik@novalife.pk',
-      address: 'Nova Park, Quetta',
-      categoriesSupplied: ['Syrups', 'Drops', 'Injections'],
-      lastOrderDate: DateTime.now().subtract(const Duration(days: 3)),
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadSuppliers();
+  }
+
+  Future<void> _loadSuppliers() async {
+    setState(() => _isLoading = true);
+    final suppliers = await DatabaseHelper.instance.getSuppliers();
+    setState(() {
+      _suppliers = suppliers;
+      _isLoading = false;
+    });
+  }
 
   List<Supplier> get _filteredSuppliers {
     if (_searchQuery.isEmpty) return _suppliers;
@@ -199,11 +84,9 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
     }).toList();
   }
 
-  void _deleteSupplier(String id) {
-    setState(() {
-      _suppliers.removeWhere((s) => s.id == id);
-    });
-    // TODO: On delete, remove document from Firestore 'suppliers' collection
+  void _deleteSupplier(String id) async {
+    await DatabaseHelper.instance.deleteSupplier(id);
+    _loadSuppliers();
   }
 
   void _openAddEditDialog([Supplier? supplier]) {
@@ -211,19 +94,13 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
       context: context,
       builder: (context) => _AddEditSupplierDialog(
         supplier: supplier,
-        onSave: (savedSupplier) {
-          setState(() {
-            if (supplier == null) {
-              _suppliers.insert(0, savedSupplier);
-              // TODO: On save, write to Firestore (add doc)
-            } else {
-              final index = _suppliers.indexWhere((s) => s.id == savedSupplier.id);
-              if (index != -1) {
-                _suppliers[index] = savedSupplier;
-                // TODO: On save, write to Firestore (update doc)
-              }
-            }
-          });
+        onSave: (savedSupplier) async {
+          if (supplier == null) {
+            await DatabaseHelper.instance.insertSupplier(savedSupplier);
+          } else {
+            await DatabaseHelper.instance.updateSupplier(savedSupplier);
+          }
+          _loadSuppliers();
         },
       ),
     );
@@ -412,9 +289,11 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
                     ),
                   ],
                 ),
-                child: filtered.isEmpty
-                    ? _buildEmptyState()
-                    : _buildTable(filtered),
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : filtered.isEmpty
+                        ? _buildEmptyState()
+                        : _buildTable(filtered),
               ),
             ),
           ],
@@ -466,7 +345,7 @@ class _SuppliersScreenState extends State<SuppliersScreen> {
               _headerCell('Company Name', flex: 2),
               _headerCell('Contact Person', flex: 2),
               _headerCell('Contact Info', flex: 2),
-              _headerCell('Last Order', flex: 1, textAlign: TextAlign.center),
+              _headerCell('Balance', flex: 1, textAlign: TextAlign.center),
               const SizedBox(width: 140), // Actions space
             ],
           ),
@@ -572,10 +451,29 @@ class _SupplierRowState extends State<_SupplierRow> {
             ),
             Expanded(
               flex: 1,
-              child: Text(
-                'N/A',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              child: Builder(
+                builder: (context) {
+                  final double balance = s.advanceAmount - s.pendingAmount;
+                  final bool isPositive = balance >= 0;
+                  return Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isPositive ? Colors.green.shade50 : Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: isPositive ? Colors.green.shade200 : Colors.red.shade200),
+                      ),
+                      child: Text(
+                        '${isPositive ? '+' : '-'}Rs ${balance.abs().toStringAsFixed(2)}',
+                        style: TextStyle(
+                          color: isPositive ? Colors.green.shade700 : Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  );
+                }
               ),
             ),
             SizedBox(
@@ -694,16 +592,17 @@ class _AddEditSupplierDialogState extends State<_AddEditSupplierDialog> {
       child: Container(
         width: 550,
         padding: const EdgeInsets.all(32),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -763,6 +662,13 @@ class _AddEditSupplierDialogState extends State<_AddEditSupplierDialog> {
                     ),
                     const SizedBox(height: 16),
                     _buildField(
+                      controller: _contactPersonController,
+                      label: 'Contact person',
+                      hint: 'e.g. Ali Khan',
+                      validator: (val) => val == null || val.isEmpty ? 'Contact Person is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    _buildField(
                       controller: _phoneController,
                       label: 'Phone number',
                       hint: 'e.g. 03001234567',
@@ -817,6 +723,7 @@ class _AddEditSupplierDialogState extends State<_AddEditSupplierDialog> {
             ],
           ),
         ),
+      ),
       ),
     );
   }
