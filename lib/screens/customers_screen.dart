@@ -2,56 +2,8 @@ import 'package:flutter/material.dart';
 import '../widgets/executive_header.dart';
 import 'package:intl/intl.dart';
 
-// ---------------------------------------------------------------------------
-// DATA MODEL
-// ---------------------------------------------------------------------------
-class Customer {
-  final String id;
-  final String name;
-  final String phone;
-  final String? email;
-  final String? address;
-  final double totalPurchases;
-  final double pendingAmount;
-  final double advanceAmount;
-  final DateTime lastVisit;
-
-  Customer({
-    required this.id,
-    required this.name,
-    required this.phone,
-    this.email,
-    this.address,
-    required this.totalPurchases,
-    this.pendingAmount = 0.0,
-    this.advanceAmount = 0.0,
-    required this.lastVisit,
-  });
-
-  Customer copyWith({
-    String? name,
-    String? phone,
-    String? email,
-    String? address,
-    double? totalPurchases,
-    double? pendingAmount,
-    double? advanceAmount,
-    DateTime? lastVisit,
-  }) {
-    return Customer(
-      id: id,
-      name: name ?? this.name,
-      phone: phone ?? this.phone,
-      email: email ?? this.email,
-      address: address ?? this.address,
-      totalPurchases: totalPurchases ?? this.totalPurchases,
-      pendingAmount: pendingAmount ?? this.pendingAmount,
-      advanceAmount: advanceAmount ?? this.advanceAmount,
-      lastVisit: lastVisit ?? this.lastVisit,
-    );
-  }
-}
-
+import '../services/database_helper.dart';
+import '../models/customer.dart';
 // ---------------------------------------------------------------------------
 // SCREEN
 // ---------------------------------------------------------------------------
@@ -67,17 +19,24 @@ class _CustomersScreenState extends State<CustomersScreen> {
   static const primary = Color(0xFF0F4C81);
   static const Color textDark = Color(0xFF1A2E2B);
 
-  // TODO: Replace with real-time stream from Firestore 'customers' collection
-  final List<Customer> _customers = [
-    Customer(id: '1', name: 'Ahmed Raza', phone: '0300-1234567', email: 'ahmed@example.com', address: 'Lahore', totalPurchases: 4500, pendingAmount: 500, lastVisit: DateTime.now().subtract(const Duration(days: 2))),
-    Customer(id: '2', name: 'Sara Khan', phone: '0321-7654321', totalPurchases: 1200, advanceAmount: 200, lastVisit: DateTime.now().subtract(const Duration(days: 5))),
-    Customer(id: '3', name: 'Hamid Butt', phone: '0333-9988776', email: 'hamid.b@example.com', totalPurchases: 8900, pendingAmount: 1500, lastVisit: DateTime.now().subtract(const Duration(days: 1))),
-    Customer(id: '4', name: 'Nadia Malik', phone: '0301-1122334', totalPurchases: 340, lastVisit: DateTime.now().subtract(const Duration(days: 12))),
-    Customer(id: '5', name: 'Usman Tariq', phone: '0345-5566778', email: 'usman.t@example.com', address: 'Karachi', totalPurchases: 12500, advanceAmount: 5000, lastVisit: DateTime.now().subtract(const Duration(days: 0))),
-    Customer(id: '6', name: 'Ayesha Ali', phone: '0312-4455667', totalPurchases: 750, lastVisit: DateTime.now().subtract(const Duration(days: 8))),
-    Customer(id: '7', name: 'Zainab Shah', phone: '0302-9988112', email: 'zainab@example.com', totalPurchases: 2100, pendingAmount: 300, lastVisit: DateTime.now().subtract(const Duration(days: 4))),
-    Customer(id: '8', name: 'Bilal Qureshi', phone: '0331-2233445', address: 'Islamabad', totalPurchases: 5600, advanceAmount: 1000, lastVisit: DateTime.now().subtract(const Duration(days: 15))),
-  ];
+  List<Customer> _customers = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCustomers();
+  }
+
+  Future<void> _loadCustomers() async {
+    final customers = await DatabaseHelper.instance.getCustomers();
+    if (mounted) {
+      setState(() {
+        _customers = customers;
+        _isLoading = false;
+      });
+    }
+  }
 
   String _searchQuery = '';
   final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
@@ -90,43 +49,21 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }).toList();
   }
 
-  void _addCustomer(Customer c) {
-    // TODO: On save, write to Firestore (add doc) instead of updating local list
-    setState(() {
-      _customers.insert(0, c);
-    });
-    // If not searching, animate it in
-    if (_searchQuery.isEmpty && _listKey.currentState != null) {
-      _listKey.currentState!.insertItem(0, duration: const Duration(milliseconds: 300));
-    }
+  Future<void> _addCustomer(Customer c) async {
+    await DatabaseHelper.instance.insertCustomer(c);
+    await _loadCustomers();
   }
 
-  void _updateCustomer(Customer c) {
-    // TODO: On save, write to Firestore (update doc) instead of updating local list
-    setState(() {
-      final index = _customers.indexWhere((x) => x.id == c.id);
-      if (index != -1) {
-        _customers[index] = c;
-      }
-    });
+  Future<void> _updateCustomer(Customer c) async {
+    await DatabaseHelper.instance.updateCustomer(c);
+    await _loadCustomers();
   }
 
-  void _deleteCustomer(Customer c) {
-    // TODO: On delete, remove document from Firestore 'customers' collection
-    final index = _filteredCustomers.indexWhere((x) => x.id == c.id);
-    final realIndex = _customers.indexWhere((x) => x.id == c.id);
-    
-    if (index != -1 && _listKey.currentState != null && _searchQuery.isEmpty) {
-      _listKey.currentState!.removeItem(
-        index,
-        (context, animation) => _buildAnimatedRow(c, animation, index),
-        duration: const Duration(milliseconds: 250),
-      );
+  Future<void> _deleteCustomer(Customer c) async {
+    if (c.id != null) {
+      await DatabaseHelper.instance.deleteCustomer(c.id!);
+      await _loadCustomers();
     }
-    
-    setState(() {
-      if (realIndex != -1) _customers.removeAt(realIndex);
-    });
     
     // Calculate margin for bottom right positioning
     final screenWidth = MediaQuery.of(context).size.width;
@@ -330,9 +267,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   children: [
                     const Icon(Icons.people, size: 16, color: primary),
                     const SizedBox(width: 8),
-                    Text(
-                      'Total Customers: ${_customers.length}',
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: primary, fontSize: 14),
+                    _isLoading 
+                      ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                      : Text(
+                          'Total Customers: ${displayList.length}',
+                          style: const TextStyle(fontWeight: FontWeight.w600, color: primary, fontSize: 14),
                     ),
                   ],
                 ),
@@ -372,10 +311,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       children: [
                         Expanded(flex: 2, child: _headerText('Customer Name')),
                         Expanded(flex: 2, child: _headerText('Phone Number')),
-                        Expanded(flex: 2, child: _headerText('Email')),
                         Expanded(flex: 2, child: _headerText('Total Purchases', textAlign: TextAlign.center)),
-                        Expanded(flex: 2, child: _headerText('Pending (Rs)')),
-                        Expanded(flex: 2, child: _headerText('Advance (Rs)')),
+                        Expanded(flex: 4, child: _headerText('Balance', textAlign: TextAlign.center)),
                         Expanded(flex: 2, child: _headerText('Last Visit')),
                         const SizedBox(width: 140), // Actions space
                       ],
@@ -384,29 +321,31 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
                   // Table Body
                   Expanded(
-                    child: displayList.isEmpty
-                        ? _buildEmptyState()
-                        : _searchQuery.isEmpty 
-                            ? AnimatedList(
-                                key: _listKey,
-                                initialItemCount: displayList.length,
-                                itemBuilder: (context, index, animation) {
-                                  return _buildAnimatedRow(displayList[index], animation, index);
-                                },
-                              )
-                            : ListView.builder(
-                                itemCount: displayList.length,
-                                itemBuilder: (context, index) {
-                                  return _CustomerRow(
-                                    customer: displayList[index],
-                                    onPayment: () => _recordPayment(displayList[index]),
-                                    onView: () => _showViewCustomerDialog(displayList[index]),
-                                    onEdit: () => _showCustomerDialog(existingCustomer: displayList[index]),
-                                    onDelete: () => _confirmDelete(displayList[index]),
-                                    isEven: index % 2 == 0,
-                                  );
-                                },
-                              ),
+                    child: _isLoading 
+                        ? const Center(child: CircularProgressIndicator())
+                        : displayList.isEmpty
+                            ? _buildEmptyState()
+                            : _searchQuery.isEmpty 
+                                ? AnimatedList(
+                                    key: _listKey,
+                                    initialItemCount: displayList.length,
+                                    itemBuilder: (context, index, animation) {
+                                      return _buildAnimatedRow(displayList[index], animation, index);
+                                    },
+                                  )
+                                : ListView.builder(
+                                    itemCount: displayList.length,
+                                    itemBuilder: (context, index) {
+                                      return _CustomerRow(
+                                        customer: displayList[index],
+                                        onPayment: () => _recordPayment(displayList[index]),
+                                        onView: () => _showViewCustomerDialog(displayList[index]),
+                                        onEdit: () => _showCustomerDialog(existingCustomer: displayList[index]),
+                                        onDelete: () => _confirmDelete(displayList[index]),
+                                        isEven: index % 2 == 0,
+                                      );
+                                    },
+                                  ),
                   ),
                 ],
               ),
@@ -527,14 +466,7 @@ class _CustomerRowState extends State<_CustomerRow> {
                 flex: 2,
                 child: Text(
                   widget.customer.phone,
-                  style: TextStyle(color: Colors.grey.shade700),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  widget.customer.email?.isNotEmpty == true ? widget.customer.email! : '--',
-                  style: TextStyle(color: widget.customer.email?.isNotEmpty == true ? Colors.grey.shade700 : Colors.grey.shade400),
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
                 ),
               ),
               Expanded(
@@ -546,17 +478,22 @@ class _CustomerRowState extends State<_CustomerRow> {
                 ),
               ),
               Expanded(
-                flex: 2,
-                child: Text(
-                  widget.customer.pendingAmount > 0 ? 'Rs. ${NumberFormat('#,##0').format(widget.customer.pendingAmount)}' : '--',
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red),
-                ),
-              ),
-              Expanded(
-                flex: 2,
-                child: Text(
-                  widget.customer.advanceAmount > 0 ? 'Rs. ${NumberFormat('#,##0').format(widget.customer.advanceAmount)}' : '--',
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF1976D2)),
+                flex: 4,
+                child: Builder(
+                  builder: (context) {
+                    final double balance = widget.customer.advanceAmount - widget.customer.pendingAmount;
+                    final bool isPositive = balance >= 0;
+                    return Text(
+                      balance == 0 
+                          ? '--' 
+                          : '${isPositive ? '+' : '-'}Rs. ${NumberFormat('#,##0').format(balance.abs())}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600, 
+                        color: balance == 0 ? Colors.grey : (isPositive ? const Color(0xFF1976D2) : Colors.red),
+                      ),
+                    );
+                  }
                 ),
               ),
               Expanded(

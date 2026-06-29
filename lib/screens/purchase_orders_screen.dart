@@ -1182,13 +1182,11 @@ class _ItemCardState extends State<_ItemCard> {
                           setState(() {
                             r.product = p;
                             r.unitPurchased = p.packaging.isNotEmpty ? p.packaging.first.name : 'Unit';
-                            final multiplier = p.getMultiplier(r.unitPurchased);
                             
                             // Auto-fill prices only if product already has them set (previously purchased)
                             // If prices are 0 (new product), leave fields at 0 so user can enter them
-                            // Product stores base unit price; multiply by packaging multiplier for the dialog 
-                            final autoPurchasePrice = p.costPrice * multiplier;
-                            final autoSellPrice = p.sellPrice * multiplier;
+                            final autoPurchasePrice = p.costPrice;
+                            final autoSellPrice = p.sellPrice;
 
                             r.purchasePrice = autoPurchasePrice;
                             r.sellingPrice  = autoSellPrice;

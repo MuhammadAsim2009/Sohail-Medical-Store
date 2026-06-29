@@ -3,6 +3,7 @@ import 'package:path/path.dart';
 import '../models/product.dart';
 import '../models/purchase_order.dart';
 import '../models/supplier.dart';
+import '../models/customer.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -21,7 +22,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -73,6 +74,20 @@ CREATE TABLE IF NOT EXISTS suppliers (
   lastOrderDate      TEXT NOT NULL,
   pendingAmount      REAL NOT NULL DEFAULT 0.0,
   advanceAmount      REAL NOT NULL DEFAULT 0.0
+)""");
+    }
+    if (oldVersion < 5) {
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS customers (
+  id                 TEXT PRIMARY KEY,
+  name               TEXT NOT NULL,
+  phone              TEXT NOT NULL,
+  email              TEXT,
+  address            TEXT,
+  totalPurchases     REAL NOT NULL DEFAULT 0.0,
+  pendingAmount      REAL NOT NULL DEFAULT 0.0,
+  advanceAmount      REAL NOT NULL DEFAULT 0.0,
+  lastVisit          TEXT NOT NULL
 )""");
     }
   }
@@ -142,6 +157,19 @@ CREATE TABLE IF NOT EXISTS suppliers (
   lastOrderDate      TEXT NOT NULL,
   pendingAmount      REAL NOT NULL DEFAULT 0.0,
   advanceAmount      REAL NOT NULL DEFAULT 0.0
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS customers (
+  id                 TEXT PRIMARY KEY,
+  name               TEXT NOT NULL,
+  phone              TEXT NOT NULL,
+  email              TEXT,
+  address            TEXT,
+  totalPurchases     REAL NOT NULL DEFAULT 0.0,
+  pendingAmount      REAL NOT NULL DEFAULT 0.0,
+  advanceAmount      REAL NOT NULL DEFAULT 0.0,
+  lastVisit          TEXT NOT NULL
 )""");
   }
 
@@ -308,10 +336,9 @@ CREATE TABLE IF NOT EXISTS suppliers (
         // Always update stock; update prices only if non-zero values were entered
         // This way new products get their prices set on first purchase,
         // and re-purchased items update to latest prices.
-        // Prices from purchase order are per unitPurchased, so divide by multiplier for base unit.
         final Map<String, dynamic> updateMap = {'stock': newStock};
-        if (item.purchasePrice > 0) updateMap['cost_price'] = item.purchasePrice / multiplier;
-        if (item.sellingPrice > 0)  updateMap['sell_price'] = item.sellingPrice / multiplier;
+        if (item.purchasePrice > 0) updateMap['cost_price'] = item.purchasePrice;
+        if (item.sellingPrice > 0)  updateMap['sell_price'] = item.sellingPrice;
 
         await txn.update('products', updateMap,
             where: 'id = ?', whereArgs: [item.productId]);
@@ -357,6 +384,42 @@ CREATE TABLE IF NOT EXISTS suppliers (
   Future<int> deleteSupplier(String id) async {
     final db = await instance.database;
     return db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ── CUSTOMERS ────────────────────────────────────────────────────────────────
+
+  Future<void> insertCustomer(Customer customer) async {
+    final db = await instance.database;
+    final map = customer.toMap();
+    if (map['id'] == null) {
+      map['id'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+    await db.insert(
+      'customers',
+      map,
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Customer>> getCustomers() async {
+    final db = await instance.database;
+    final result = await db.query('customers');
+    return result.map((map) => Customer.fromMap(map)).toList();
+  }
+
+  Future<void> updateCustomer(Customer customer) async {
+    final db = await instance.database;
+    await db.update(
+      'customers',
+      customer.toMap(),
+      where: 'id = ?',
+      whereArgs: [customer.id],
+    );
+  }
+
+  Future<int> deleteCustomer(String id) async {
+    final db = await instance.database;
+    return db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 
   Future close() async {
