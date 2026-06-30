@@ -673,7 +673,14 @@ class _ProductRow extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                Text(p.formattedStock, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1A2E2B))),
+                Expanded(
+                  child: Text(
+                    p.formattedStock,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF1A2E2B)),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
               ],
             ),
           ),

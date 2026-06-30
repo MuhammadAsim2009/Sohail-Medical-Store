@@ -1,33 +1,14 @@
 import 'package:flutter/material.dart';
 import '../widgets/executive_header.dart';
 
-// ─────────────────────────────────────────────
-// DATA MODELS
-// ─────────────────────────────────────────────
-
-class SaleInvoice {
-  final String invoiceId;
-  final DateTime date;
-  final String customer;
-  final String warehouse;
-  final double total;
-  final double received;
-  final double balance;
-  final String method;
-  final String status;
-
-  SaleInvoice({
-    required this.invoiceId,
-    required this.date,
-    required this.customer,
-    required this.warehouse,
-    required this.total,
-    required this.received,
-    required this.balance,
-    required this.method,
-    required this.status,
-  });
-}
+import '../models/daily_sales_sheet.dart';
+import '../models/sale.dart';
+import '../models/product.dart';
+import '../models/customer.dart';
+import '../services/database_helper.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
 // ─────────────────────────────────────────────
 // MAIN SCREEN
@@ -45,17 +26,42 @@ class _BillingScreenState extends State<BillingScreen> {
   static const Color _pageBg = Color(0xFFF5F7FA);
 
   final TextEditingController _searchController = TextEditingController();
-  final List<SaleInvoice> _invoices = [];
-  bool _isSyncing = false;
-  DateTime _reportingDate = DateTime.now();
+  List<Sale> _sales = [];
+  DailySalesSheet? _currentDSS;
+  bool _isLoading = true;
 
   // ── Summary Stats ─────────────────────────
-  double get _netSalesBooked => _invoices.fold(0, (s, i) => s + i.total);
-  int get _invoiceCount => _invoices.length;
-  double get _cashCollected => _invoices.fold(0, (s, i) => s + i.received);
-  int get _fullySettled => _invoices.where((i) => i.balance == 0).length;
-  double get _outstandingBalance => _invoices.fold(0, (s, i) => s + i.balance);
-  int get _partialCount => _invoices.where((i) => i.balance > 0).length;
+  double get _netSalesBooked => _sales.fold(0, (s, i) => s + i.total);
+  int get _invoiceCount => _sales.length;
+  double get _cashCollected => _sales.fold(0, (s, i) => s + i.received);
+  int get _fullySettled => _sales.where((i) => i.balance == 0).length;
+  double get _outstandingBalance => _sales.fold(0, (s, i) => s + i.balance);
+  int get _partialCount => _sales.where((i) => i.balance > 0).length;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    final dss = await DatabaseHelper.instance.getCurrentOpenDSS();
+    if (dss != null) {
+      final sales = await DatabaseHelper.instance.getSalesForDSS(dss.id!);
+      setState(() {
+        _currentDSS = dss;
+        _sales = sales;
+        _isLoading = false;
+      });
+    } else {
+      setState(() {
+        _currentDSS = null;
+        _sales = [];
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -63,17 +69,12 @@ class _BillingScreenState extends State<BillingScreen> {
     super.dispose();
   }
 
-  void _syncNow() {
-    setState(() => _isSyncing = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _isSyncing = false);
-    });
-  }
-
   void _showNewSaleDialog() {
+    if (_currentDSS == null) return;
     showDialog(
       context: context,
-      builder: (_) => const _NewSaleDialog(),
+      builder: (_) =>
+          _NewSaleDialog(dssId: _currentDSS!.id!, onSaleAdded: _loadData),
     );
   }
 
@@ -114,9 +115,31 @@ class _BillingScreenState extends State<BillingScreen> {
   // ── Top Bar ──────────────────────────────────────────────
   Widget _buildTopBar() {
     final now = DateTime.now();
-    final days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final dayLabel = '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} — Desktop workspace';
+    final days = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final dayLabel =
+        '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} — Desktop workspace';
 
     return Container(
       height: 64,
@@ -124,7 +147,10 @@ class _BillingScreenState extends State<BillingScreen> {
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.97),
         border: Border(
-          bottom: BorderSide(color: Colors.black.withValues(alpha: 0.05), width: 1),
+          bottom: BorderSide(
+            color: Colors.black.withValues(alpha: 0.05),
+            width: 1,
+          ),
         ),
       ),
       child: Row(
@@ -136,15 +162,32 @@ class _BillingScreenState extends State<BillingScreen> {
             children: [
               Row(
                 children: [
-                  Text('Operations', style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                  Text(
+                    'Operations',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
+                  ),
                   const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, size: 14, color: Colors.grey.shade400),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 14,
+                    color: Colors.grey.shade400,
+                  ),
                   const SizedBox(width: 4),
-                  const Text('Sales (POS)', style: TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13)),
+                  const Text(
+                    'Sales (POS)',
+                    style: TextStyle(
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 2),
-              Text(dayLabel, style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
+              Text(
+                dayLabel,
+                style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
+              ),
             ],
           ),
           const Spacer(),
@@ -167,7 +210,10 @@ class _BillingScreenState extends State<BillingScreen> {
                   child: TextField(
                     decoration: InputDecoration(
                       hintText: 'Search products, invoices, ledgers...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
+                      hintStyle: TextStyle(
+                        color: Colors.grey.shade400,
+                        fontSize: 12,
+                      ),
                       border: InputBorder.none,
                       isDense: true,
                       contentPadding: EdgeInsets.zero,
@@ -175,12 +221,18 @@ class _BillingScreenState extends State<BillingScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: Text('Open', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
+                  child: Text(
+                    'Open',
+                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                  ),
                 ),
               ],
             ),
@@ -189,7 +241,8 @@ class _BillingScreenState extends State<BillingScreen> {
 
           // Notification bell
           Container(
-            height: 38, width: 38,
+            height: 38,
+            width: 38,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               border: Border.all(color: Colors.grey.shade200),
@@ -197,7 +250,11 @@ class _BillingScreenState extends State<BillingScreen> {
             ),
             child: IconButton(
               padding: EdgeInsets.zero,
-              icon: Icon(Icons.notifications_none, size: 20, color: Colors.grey.shade600),
+              icon: Icon(
+                Icons.notifications_none,
+                size: 20,
+                color: Colors.grey.shade600,
+              ),
               onPressed: () {},
             ),
           ),
@@ -215,11 +272,22 @@ class _BillingScreenState extends State<BillingScreen> {
             child: Row(
               children: [
                 Container(
-                  width: 6, height: 6,
-                  decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                  ),
                 ),
                 const SizedBox(width: 6),
-                const Text('Data synced', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
+                const Text(
+                  'Data synced',
+                  style: TextStyle(
+                    color: Colors.green,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),
@@ -237,22 +305,51 @@ class _BillingScreenState extends State<BillingScreen> {
             child: Row(
               children: [
                 Container(
-                  width: 32, height: 32,
-                  decoration: const BoxDecoration(color: Color(0xFFE8EAF6), shape: BoxShape.circle),
+                  width: 32,
+                  height: 32,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFE8EAF6),
+                    shape: BoxShape.circle,
+                  ),
                   alignment: Alignment.center,
-                  child: const Text('A', style: TextStyle(color: Color(0xFF5C6BC0), fontWeight: FontWeight.bold, fontSize: 13)),
+                  child: const Text(
+                    'A',
+                    style: TextStyle(
+                      color: Color(0xFF5C6BC0),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Alee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.1)),
-                    Text('Admin', style: TextStyle(fontSize: 10, color: Colors.grey.shade500, height: 1.1)),
+                    const Text(
+                      'Alee',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        height: 1.1,
+                      ),
+                    ),
+                    Text(
+                      'Admin',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Colors.grey.shade500,
+                        height: 1.1,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(width: 8),
-                Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade400),
+                Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 16,
+                  color: Colors.grey.shade400,
+                ),
               ],
             ),
           ),
@@ -260,7 +357,6 @@ class _BillingScreenState extends State<BillingScreen> {
       ),
     );
   }
-
 
   // ── Summary Cards ─────────────────────────
   Widget _buildSummaryCards() {
@@ -272,8 +368,10 @@ class _BillingScreenState extends State<BillingScreen> {
             iconColor: _primary,
             iconBg: const Color(0xFFEBF3FB),
             label: 'Net sales booked',
-            value: 'Rs. ${_netSalesBooked == 0 ? '0' : _netSalesBooked.toStringAsFixed(0)}',
-            subLabel: '$_invoiceCount invoice${_invoiceCount == 1 ? '' : 's'} recorded',
+            value:
+                'Rs. ${_netSalesBooked == 0 ? '0' : _netSalesBooked.toStringAsFixed(0)}',
+            subLabel:
+                '$_invoiceCount invoice${_invoiceCount == 1 ? '' : 's'} recorded',
           ),
         ),
         const SizedBox(width: 16),
@@ -283,7 +381,8 @@ class _BillingScreenState extends State<BillingScreen> {
             iconColor: const Color(0xFF16A34A),
             iconBg: const Color(0xFFE6F9F0),
             label: 'Cash collected',
-            value: 'Rs. ${_cashCollected == 0 ? '0' : _cashCollected.toStringAsFixed(0)}',
+            value:
+                'Rs. ${_cashCollected == 0 ? '0' : _cashCollected.toStringAsFixed(0)}',
             subLabel: '$_fullySettled fully settled',
           ),
         ),
@@ -294,8 +393,11 @@ class _BillingScreenState extends State<BillingScreen> {
             iconColor: const Color(0xFFD97706),
             iconBg: const Color(0xFFFEF3C7),
             label: 'Outstanding balance',
-            value: 'Rs. ${_outstandingBalance == 0 ? '0' : _outstandingBalance.toStringAsFixed(0)}',
-            subLabel: _partialCount == 0 ? 'No partial invoices' : '$_partialCount partial invoice${_partialCount == 1 ? '' : 's'}',
+            value:
+                'Rs. ${_outstandingBalance == 0 ? '0' : _outstandingBalance.toStringAsFixed(0)}',
+            subLabel: _partialCount == 0
+                ? 'No partial invoices'
+                : '$_partialCount partial invoice${_partialCount == 1 ? '' : 's'}',
           ),
         ),
       ],
@@ -307,35 +409,91 @@ class _BillingScreenState extends State<BillingScreen> {
     return Row(
       children: [
         // Filter badges
-        _FilterBadge(label: '${_invoiceCount} invoice${_invoiceCount == 1 ? '' : 's'}', icon: Icons.receipt_outlined, color: Colors.grey.shade700, bg: Colors.grey.shade100),
+        _FilterBadge(
+          label: '$_invoiceCount invoice${_invoiceCount == 1 ? '' : 's'}',
+          icon: Icons.receipt_outlined,
+          color: Colors.grey.shade700,
+          bg: Colors.grey.shade100,
+        ),
         const SizedBox(width: 8),
-        _FilterBadge(label: '1 active DSS', icon: Icons.description_outlined, color: const Color(0xFF0F4C81), bg: const Color(0xFFEBF3FB)),
-        const SizedBox(width: 8),
-        _FilterBadge(label: 'No posted returns', icon: Icons.undo_outlined, color: const Color(0xFF16A34A), bg: const Color(0xFFE6F9F0)),
-        const SizedBox(width: 8),
-        _FilterBadge(label: '0% settled', icon: Icons.trending_up, color: const Color(0xFFD97706), bg: const Color(0xFFFEF3C7)),
+        _FilterBadge(
+          label: _currentDSS == null ? 'DSS Closed' : 'DSS Open',
+          icon: Icons.description_outlined,
+          color: _currentDSS == null ? Colors.red : const Color(0xFF0F4C81),
+          bg: _currentDSS == null
+              ? Colors.red.shade50
+              : const Color(0xFFEBF3FB),
+        ),
         const Spacer(),
         // Action buttons
-        _ActionButton(label: 'Export PDF', icon: Icons.picture_as_pdf_outlined, onTap: () {}),
-        const SizedBox(width: 8),
-        _ActionButton(label: 'Create DSS', icon: Icons.add_chart_outlined, onTap: () {}),
-        const SizedBox(width: 8),
-        _ActionButton(label: 'Close DSS', icon: Icons.lock_outline, onTap: () {}),
-        const SizedBox(width: 10),
-        // New Sale CTA
-        ElevatedButton.icon(
-          onPressed: _showNewSaleDialog,
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('New Sale', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: _primary,
-            foregroundColor: Colors.white,
-            elevation: 0,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
+        _ActionButton(
+          label: 'Export PDF',
+          icon: Icons.picture_as_pdf_outlined,
+          onTap: () {},
         ),
+        const SizedBox(width: 10),
+        if (_currentDSS == null) ...[
+          // Open DSS CTA
+          ElevatedButton.icon(
+            onPressed: _showOpenDSSDialog,
+            icon: const Icon(Icons.lock_open, size: 18),
+            label: const Text(
+              'Open Daily Sales Sheet',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ] else ...[
+          // Close DSS
+          _ActionButton(
+            label: 'Close Day',
+            icon: Icons.lock_outline,
+            onTap: _showCloseDSSDialog,
+          ),
+          const SizedBox(width: 10),
+          // New Sale CTA
+          ElevatedButton.icon(
+            onPressed: _showNewSaleDialog,
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text(
+              'New Sale',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ],
       ],
+    );
+  }
+
+  void _showOpenDSSDialog() {
+    showDialog(
+      context: context,
+      builder: (_) => _OpenDSSDialog(onOpened: _loadData),
+    );
+  }
+
+  void _showCloseDSSDialog() {
+    if (_currentDSS == null) return;
+    showDialog(
+      context: context,
+      builder: (_) => _CloseDSSDialog(dss: _currentDSS!, onClosed: _loadData),
     );
   }
 
@@ -413,14 +571,20 @@ class _BillingScreenState extends State<BillingScreen> {
             ),
           ),
           // Table body
-          _invoices.isEmpty
+          _isLoading
+              ? const SizedBox(
+                  height: 200,
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              : (_sales.isEmpty || _currentDSS == null)
               ? _buildEmptyState()
               : ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: _invoices.length,
-                  separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
-                  itemBuilder: (_, i) => _InvoiceRow(invoice: _invoices[i]),
+                  itemCount: _sales.length,
+                  separatorBuilder: (_, index) =>
+                      Divider(height: 1, color: Colors.grey.shade100),
+                  itemBuilder: (_, i) => _SaleRow(sale: _sales[i]),
                 ),
         ],
       ),
@@ -457,7 +621,11 @@ class _BillingScreenState extends State<BillingScreen> {
               shape: BoxShape.circle,
               border: Border.all(color: Colors.grey.shade200),
             ),
-            child: Icon(Icons.receipt_long_outlined, size: 36, color: Colors.grey.shade300),
+            child: Icon(
+              Icons.receipt_long_outlined,
+              size: 36,
+              color: Colors.grey.shade300,
+            ),
           ),
         ],
       ),
@@ -495,25 +663,49 @@ class _SummaryCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade100),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: iconBg, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Icon(icon, color: iconColor, size: 22),
           ),
           const SizedBox(width: 16),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(label, style: TextStyle(fontSize: 13, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade500,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1A2E2B))),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF1A2E2B),
+                ),
+              ),
               const SizedBox(height: 2),
-              Text(subLabel, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
+              Text(
+                subLabel,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
+              ),
             ],
           ),
         ],
@@ -528,7 +720,12 @@ class _FilterBadge extends StatelessWidget {
   final Color color;
   final Color bg;
 
-  const _FilterBadge({required this.label, required this.icon, required this.color, required this.bg});
+  const _FilterBadge({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.bg,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +740,14 @@ class _FilterBadge extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
         ],
       ),
     );
@@ -555,7 +759,11 @@ class _ActionButton extends StatefulWidget {
   final IconData icon;
   final VoidCallback onTap;
 
-  const _ActionButton({required this.label, required this.icon, required this.onTap});
+  const _ActionButton({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
 
   @override
   State<_ActionButton> createState() => _ActionButtonState();
@@ -577,14 +785,23 @@ class _ActionButtonState extends State<_ActionButton> {
           decoration: BoxDecoration(
             color: _hovering ? Colors.grey.shade50 : Colors.white,
             borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: _hovering ? Colors.grey.shade300 : Colors.grey.shade200),
+            border: Border.all(
+              color: _hovering ? Colors.grey.shade300 : Colors.grey.shade200,
+            ),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(widget.icon, size: 16, color: Colors.grey.shade600),
               const SizedBox(width: 7),
-              Text(widget.label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey.shade700,
+                ),
+              ),
             ],
           ),
         ),
@@ -593,27 +810,40 @@ class _ActionButtonState extends State<_ActionButton> {
   }
 }
 
-class _InvoiceRow extends StatefulWidget {
-  final SaleInvoice invoice;
+class _SaleRow extends StatefulWidget {
+  final Sale sale;
 
-  const _InvoiceRow({required this.invoice});
+  const _SaleRow({required this.sale});
 
   @override
-  State<_InvoiceRow> createState() => _InvoiceRowState();
+  State<_SaleRow> createState() => _SaleRowState();
 }
 
-class _InvoiceRowState extends State<_InvoiceRow> {
+class _SaleRowState extends State<_SaleRow> {
   bool _hovering = false;
 
   @override
   Widget build(BuildContext context) {
-    final months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-    final d = widget.invoice.date;
+    final months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final d = DateTime.parse(widget.sale.date);
     final dateStr = '${d.day} ${months[d.month - 1]} ${d.year}';
 
     Color statusColor;
     Color statusBg;
-    switch (widget.invoice.status.toLowerCase()) {
+    switch (widget.sale.status.toLowerCase()) {
       case 'paid':
         statusColor = const Color(0xFF16A34A);
         statusBg = const Color(0xFFE6F9F0);
@@ -636,20 +866,97 @@ class _InvoiceRowState extends State<_InvoiceRow> {
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
         child: Row(
           children: [
-            Expanded(flex: 3, child: Text(widget.invoice.invoiceId, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0F4C81)))),
-            Expanded(flex: 3, child: Text(dateStr, style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
-            Expanded(flex: 4, child: Text(widget.invoice.customer, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B)))),
-            Expanded(flex: 3, child: Text(widget.invoice.warehouse, style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
-            Expanded(flex: 2, child: Text('Rs. ${widget.invoice.total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600))),
-            Expanded(flex: 2, child: Text('Rs. ${widget.invoice.received.toStringAsFixed(0)}', style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
-            Expanded(flex: 2, child: Text('Rs. ${widget.invoice.balance.toStringAsFixed(0)}', style: TextStyle(fontSize: 13, color: widget.invoice.balance > 0 ? const Color(0xFFD97706) : Colors.grey.shade600))),
-            Expanded(flex: 2, child: Text(widget.invoice.method, style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
+            Expanded(
+              flex: 3,
+              child: Text(
+                widget.sale.invoiceNumber,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFF0F4C81),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                dateStr,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
+            Expanded(
+              flex: 4,
+              child: Text(
+                widget.sale.customerName ?? 'Walk-in',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1A2E2B),
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 3,
+              child: Text(
+                'Main',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                'Rs. ${widget.sale.total.toStringAsFixed(0)}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                'Rs. ${widget.sale.received.toStringAsFixed(0)}',
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                'Rs. ${widget.sale.balance.toStringAsFixed(0)}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: widget.sale.balance > 0
+                      ? const Color(0xFFD97706)
+                      : Colors.grey.shade600,
+                ),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Text(
+                widget.sale.paymentMethod,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              ),
+            ),
             Expanded(
               flex: 2,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(20)),
-                child: Text(widget.invoice.status, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: statusColor)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: statusBg,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  widget.sale.status,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                ),
               ),
             ),
             Expanded(
@@ -662,9 +969,17 @@ class _InvoiceRowState extends State<_InvoiceRow> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      _RowIconBtn(icon: Icons.visibility_outlined, tooltip: 'View', onTap: () {}),
+                      _RowIconBtn(
+                        icon: Icons.visibility_outlined,
+                        tooltip: 'View',
+                        onTap: () => _showSaleViewDialog(context),
+                      ),
                       const SizedBox(width: 4),
-                      _RowIconBtn(icon: Icons.print_outlined, tooltip: 'Print', onTap: () {}),
+                      _RowIconBtn(
+                        icon: Icons.print_outlined,
+                        tooltip: 'Print',
+                        onTap: () => _printReceipt(context),
+                      ),
                     ],
                   ),
                 ),
@@ -675,6 +990,434 @@ class _InvoiceRowState extends State<_InvoiceRow> {
       ),
     );
   }
+
+  Future<void> _showSaleViewDialog(BuildContext context) async {
+    final items = await DatabaseHelper.instance.getSaleItems(widget.sale.id!);
+    if (!context.mounted) return;
+
+    final d = DateTime.parse(widget.sale.date);
+    final dateStr = '${d.day}/${d.month}/${d.year} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+    
+    Color statusColor;
+    Color statusBg;
+    switch (widget.sale.status.toLowerCase()) {
+      case 'paid':
+        statusColor = const Color(0xFF16A34A);
+        statusBg = const Color(0xFFE6F9F0);
+        break;
+      case 'partial':
+        statusColor = const Color(0xFFD97706);
+        statusBg = const Color(0xFFFEF3C7);
+        break;
+      default:
+        statusColor = Colors.grey.shade600;
+        statusBg = Colors.grey.shade100;
+    }
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            width: 550,
+            constraints: const BoxConstraints(maxHeight: 700),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Invoice Details',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF111827),
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            widget.sale.invoiceNumber,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade500,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(Icons.close, color: Colors.grey.shade600, size: 20),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+                
+                // Content
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Metadata Grid
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF9FAFB),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.grey.shade200),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildMetaItem('Date', dateStr),
+                              ),
+                              Expanded(
+                                child: _buildMetaItem('Customer', widget.sale.customerName ?? 'Walk-in'),
+                              ),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Status',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.grey.shade500,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: statusBg,
+                                        borderRadius: BorderRadius.circular(20),
+                                      ),
+                                      child: Text(
+                                        widget.sale.status,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: statusColor,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        
+                        // Items Header
+                        const Text(
+                          'Purchased Items',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF111827),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Table Header
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF3F4F6),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(flex: 3, child: Text('ITEM', style: _tableHeaderStyle())),
+                              Expanded(flex: 1, child: Text('QTY', style: _tableHeaderStyle(), textAlign: TextAlign.center)),
+                              Expanded(flex: 2, child: Text('PRICE', style: _tableHeaderStyle(), textAlign: TextAlign.right)),
+                              Expanded(flex: 2, child: Text('TOTAL', style: _tableHeaderStyle(), textAlign: TextAlign.right)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        
+                        // Items List
+                        ...items.map((item) {
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: BoxDecoration(
+                              border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Text(
+                                    item.productName,
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF374151)),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Text(
+                                    '${item.quantity}',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey.shade600),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'Rs. ${item.price.toStringAsFixed(0)}',
+                                    textAlign: TextAlign.right,
+                                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey.shade600),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(
+                                    'Rs. ${(item.price * item.quantity).toStringAsFixed(0)}',
+                                    textAlign: TextAlign.right,
+                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF111827)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                        
+                        const SizedBox(height: 24),
+                        
+                        // Summary Section
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: Container(
+                            width: 250,
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF9FAFB),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
+                            child: Column(
+                              children: [
+                                _buildSummaryRow('Total Amount', widget.sale.total, isBold: true),
+                                const SizedBox(height: 12),
+                                _buildSummaryRow('Received', widget.sale.received, color: const Color(0xFF16A34A)),
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(vertical: 12),
+                                  child: Divider(height: 1),
+                                ),
+                                _buildSummaryRow(
+                                  'Balance Due', 
+                                  widget.sale.balance, 
+                                  isBold: true,
+                                  color: widget.sale.balance > 0 ? const Color(0xFFDC2626) : const Color(0xFF111827),
+                                  size: 16,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                // Footer
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          foregroundColor: Colors.grey.shade700,
+                        ),
+                        child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w600)),
+                      ),
+                      const SizedBox(width: 12),
+                      ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _printReceipt(context);
+                        },
+                        icon: const Icon(Icons.print_outlined, size: 18),
+                        label: const Text('Print Receipt'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0F4C81),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMetaItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            color: Colors.grey.shade500,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Color(0xFF111827),
+          ),
+        ),
+      ],
+    );
+  }
+
+  TextStyle _tableHeaderStyle() {
+    return TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      color: Colors.grey.shade500,
+      letterSpacing: 0.5,
+    );
+  }
+
+  Widget _buildSummaryRow(String label, double value, {bool isBold = false, Color? color, double size = 14}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: size - 1,
+            fontWeight: isBold ? FontWeight.w600 : FontWeight.w500,
+            color: isBold ? const Color(0xFF111827) : Colors.grey.shade600,
+          ),
+        ),
+        Text(
+          'Rs. ${value.toStringAsFixed(0)}',
+          style: TextStyle(
+            fontSize: size,
+            fontWeight: isBold ? FontWeight.w700 : FontWeight.w600,
+            color: color ?? (isBold ? const Color(0xFF111827) : Colors.grey.shade700),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _printReceipt(BuildContext context) async {
+    final items = await DatabaseHelper.instance.getSaleItems(widget.sale.id!);
+    
+    final pdf = pw.Document();
+    
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.roll80,
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Center(
+                child: pw.Text('PHARMACY RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+              ),
+              pw.SizedBox(height: 10),
+              pw.Text('Invoice: ${widget.sale.invoiceNumber}'),
+              pw.Text('Date: ${widget.sale.date}'),
+              pw.Text('Customer: ${widget.sale.customerName ?? 'Walk-in'}'),
+              pw.Divider(),
+              ...items.map((item) {
+                return pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Expanded(child: pw.Text('${item.productName} (${item.quantity})')),
+                    pw.Text('Rs. ${(item.price * item.quantity).toStringAsFixed(2)}'),
+                  ],
+                );
+              }),
+              pw.Divider(),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Total:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Rs. ${widget.sale.total.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                ],
+              ),
+              pw.SizedBox(height: 5),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Received:'),
+                  pw.Text('Rs. ${widget.sale.received.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Balance:'),
+                  pw.Text('Rs. ${widget.sale.balance.toStringAsFixed(2)}'),
+                ],
+              ),
+              pw.SizedBox(height: 10),
+              pw.Center(
+                child: pw.Text('Thank you for your purchase!', style: const pw.TextStyle(fontSize: 10)),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
+  }
 }
 
 class _RowIconBtn extends StatelessWidget {
@@ -682,7 +1425,11 @@ class _RowIconBtn extends StatelessWidget {
   final String tooltip;
   final VoidCallback onTap;
 
-  const _RowIconBtn({required this.icon, required this.tooltip, required this.onTap});
+  const _RowIconBtn({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -709,7 +1456,10 @@ class _RowIconBtn extends StatelessWidget {
 // ─────────────────────────────────────────────
 
 class _NewSaleDialog extends StatefulWidget {
-  const _NewSaleDialog();
+  final int dssId;
+  final VoidCallback onSaleAdded;
+
+  const _NewSaleDialog({required this.dssId, required this.onSaleAdded});
 
   @override
   State<_NewSaleDialog> createState() => _NewSaleDialogState();
@@ -719,28 +1469,202 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   static const Color _primary = Color(0xFF0F4C81);
 
   final List<_CartItem> _cart = [];
-  String _selectedCustomer = '';
+  Customer? _selectedCustomer;
   String _paymentMethod = 'Cash';
-  double _discountPercent = 0;
 
-  double get _subtotal => _cart.fold(0, (s, i) => s + i.total);
-  double get _discount => _subtotal * _discountPercent / 100;
-  double get _total => _subtotal - _discount;
+  List<Customer> _customers = [];
+  List<Product> _products = [];
+  bool _isLoading = true;
+  bool _isSaving = false;
 
-  void _addItem() {
+  // Staging: product selected from autocomplete, awaiting unit+qty confirmation
+  Product? _stagedProduct;
+  String? _stagedUnit;
+  int _stagedQty = 1;
+
+  final TextEditingController _receivedController = TextEditingController();
+  final TextEditingController _qtyController = TextEditingController(text: '1');
+
+  double get _total => _cart.fold(0, (s, i) => s + i.total);
+  double get _stagedPricePerUnit {
+    if (_stagedProduct == null || _stagedUnit == null) return 0;
+    final p = _stagedProduct!;
+    if (p.packaging.isEmpty) return p.sellPrice;
+    // sellPrice is entered per the FIRST (largest) unit (e.g. Box)
+    // scale proportionally: pricePerSelectedUnit = sellPrice * multiplier(selectedUnit) / multiplier(firstUnit)
+    final firstMultiplier = p.getMultiplier(p.packaging.first.name);
+    return p.sellPrice * p.getMultiplier(_stagedUnit!) / firstMultiplier;
+  }
+
+  double get _stagedLineTotal => _stagedPricePerUnit * _stagedQty;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  @override
+  void dispose() {
+    _receivedController.dispose();
+    _qtyController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadData() async {
+    final customers = await DatabaseHelper.instance.getCustomers();
+    final products = await DatabaseHelper.instance.getAllProducts();
+    if (mounted) {
+      setState(() {
+        _customers = customers;
+        _products = products;
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _stageProduct(Product p) {
     setState(() {
-      _cart.add(_CartItem(name: 'Sample Medicine', price: 100, qty: 1));
+      _stagedProduct = p;
+      _stagedUnit = p.packaging.isNotEmpty ? p.packaging.first.name : null;
+      _stagedQty = 1;
+      _qtyController.text = '1';
     });
+  }
+
+  void _addStagedToCart() {
+    if (_stagedProduct == null) return;
+    final p = _stagedProduct!;
+    final unit =
+        _stagedUnit ??
+        (p.packaging.isNotEmpty ? p.packaging.first.name : 'Unit');
+    // Price per the selected unit, proportional to the first (largest) unit price
+    final firstMultiplier = p.packaging.isNotEmpty
+        ? p.getMultiplier(p.packaging.first.name)
+        : 1;
+    final pricePerUnit = p.packaging.isEmpty
+        ? p.sellPrice
+        : p.sellPrice * p.getMultiplier(unit) / firstMultiplier;
+
+    final requestedBaseUnits = _stagedQty * p.getMultiplier(unit);
+    final currentCartBaseUnits = _cart
+        .where((c) => c.product.id == p.id)
+        .fold(0, (sum, c) => sum + c.baseUnits);
+
+    if (currentCartBaseUnits + requestedBaseUnits > p.stock) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Not enough stock! Available: ${p.formattedStock}'),
+          backgroundColor: Colors.red.shade600,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      final index = _cart.indexWhere(
+        (c) => c.product.id == p.id && c.unit == unit,
+      );
+      if (index >= 0) {
+        _cart[index].unitQty += _stagedQty;
+      } else {
+        _cart.add(
+          _CartItem(
+            product: p,
+            unit: unit,
+            unitQty: _stagedQty,
+            pricePerUnit: pricePerUnit,
+          ),
+        );
+      }
+      _stagedProduct = null;
+      _stagedUnit = null;
+      _stagedQty = 1;
+      _qtyController.text = '1';
+    });
+  }
+
+  void _saveSale() async {
+    if (_cart.isEmpty) return;
+
+    double received = double.tryParse(_receivedController.text) ?? 0.0;
+    if (_paymentMethod == 'Cash' &&
+        received < _total &&
+        _selectedCustomer == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot have pending balance for walk-in customer'),
+        ),
+      );
+      return;
+    }
+
+    if (_paymentMethod != 'Cash') {
+      received = _total;
+    }
+
+    final balance = _total - received;
+    setState(() => _isSaving = true);
+
+    try {
+      final sale = Sale(
+        invoiceNumber: 'INV-${DateTime.now().millisecondsSinceEpoch}',
+        dssId: widget.dssId,
+        customerId: _selectedCustomer?.id,
+        customerName: _selectedCustomer?.name,
+        date: DateTime.now().toIso8601String(),
+        total: _total,
+        received: received,
+        balance: balance,
+        paymentMethod: _paymentMethod,
+        status: balance > 0 ? 'Partial' : 'Paid',
+      );
+
+      final items = _cart
+          .map(
+            (c) => SaleItem(
+              productId: c.product.id!,
+              productName: '${c.product.name} (${c.unit})',
+              quantity: c.baseUnits,
+              price: c.product.sellPrice,
+              total: c.total,
+            ),
+          )
+          .toList();
+
+      await DatabaseHelper.instance.insertSale(sale, items);
+
+      if (mounted) {
+        widget.onSaleAdded();
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        setState(() => _isSaving = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Dialog(
+        child: SizedBox(
+          width: 700,
+          height: 580,
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
     return Dialog(
       backgroundColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
-        width: 700,
-        height: 580,
+        width: 800,
+        height: 650,
         child: Column(
           children: [
             // Dialog header
@@ -751,7 +1675,14 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
               ),
               child: Row(
                 children: [
-                  const Text('New Sale', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Color(0xFF1A2E2B))),
+                  const Text(
+                    'New Sale',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFF1A2E2B),
+                    ),
+                  ),
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
@@ -770,17 +1701,304 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                     // Customer + Payment Row
                     Row(
                       children: [
-                        Expanded(child: _inputField('Customer', 'Search customer...', Icons.person_outline)),
+                        Expanded(
+                          child: DropdownButtonFormField<Customer?>(
+                            decoration: InputDecoration(
+                              labelText: 'Customer',
+                              prefixIcon: Icon(
+                                Icons.person_outline,
+                                size: 17,
+                                color: Colors.grey.shade400,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF9FAFB),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(9),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            value: _selectedCustomer,
+                            items: [
+                              const DropdownMenuItem(
+                                value: null,
+                                child: Text('Walk-in Customer'),
+                              ),
+                              ..._customers.map(
+                                (c) => DropdownMenuItem(
+                                  value: c,
+                                  child: Text(c.name),
+                                ),
+                              ),
+                            ],
+                            onChanged: (val) =>
+                                setState(() => _selectedCustomer = val),
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                        Expanded(child: _inputField('Warehouse', 'Select warehouse...', Icons.warehouse_outlined)),
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            decoration: InputDecoration(
+                              labelText: 'Payment Method',
+                              prefixIcon: Icon(
+                                Icons.payment_outlined,
+                                size: 17,
+                                color: Colors.grey.shade400,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF9FAFB),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(9),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                            value: _paymentMethod,
+                            items: ['Cash', 'Card', 'Bank Transfer', 'Other']
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(m),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) =>
+                                setState(() => _paymentMethod = val!),
+                          ),
+                        ),
                         const SizedBox(width: 16),
-                        Expanded(child: _inputField('Payment Method', 'Cash', Icons.payment_outlined)),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _receivedController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: InputDecoration(
+                              labelText: 'Amount Received (Rs)',
+                              prefixIcon: Icon(
+                                Icons.money,
+                                size: 17,
+                                color: Colors.grey.shade400,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF9FAFB),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(9),
+                                borderSide: BorderSide.none,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
-                    // Medicine search
-                    _inputField('Add Medicine', 'Search by name or batch...', Icons.medication_outlined),
-                    const SizedBox(height: 16),
+                    // Medicine search (Autocomplete)
+                    Autocomplete<Product>(
+                      displayStringForOption: (option) => option.name,
+                      optionsBuilder: (textEditingValue) {
+                        if (textEditingValue.text.isEmpty)
+                          return const Iterable<Product>.empty();
+                        return _products.where(
+                          (p) => p.name.toLowerCase().contains(
+                            textEditingValue.text.toLowerCase(),
+                          ),
+                        );
+                      },
+                      onSelected: (Product selection) =>
+                          _stageProduct(selection),
+                      fieldViewBuilder:
+                          (context, controller, focusNode, onFieldSubmitted) {
+                            return TextFormField(
+                              controller: controller,
+                              focusNode: focusNode,
+                              decoration: InputDecoration(
+                                labelText: 'Add Medicine',
+                                hintText: 'Search by name...',
+                                prefixIcon: Icon(
+                                  Icons.medication_outlined,
+                                  size: 17,
+                                  color: Colors.grey.shade400,
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFFF9FAFB),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(9),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            );
+                          },
+                    ),
+                    // Staging area: unit + qty picker
+                    if (_stagedProduct != null) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _stagedProduct!.name,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: Color(0xFF0F4C81),
+                                    ),
+                                  ),
+                                  Text(
+                                    'Stock: ${_stagedProduct!.formattedStock}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Unit dropdown
+                            if (_stagedProduct!.packaging.isNotEmpty)
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  value: _stagedUnit,
+                                  isDense: true,
+                                  decoration: InputDecoration(
+                                    labelText: 'Unit',
+                                    filled: true,
+                                    fillColor: Colors.white,
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 10,
+                                    ),
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                  ),
+                                  items: _stagedProduct!.packaging
+                                      .map(
+                                        (u) => DropdownMenuItem(
+                                          value: u.name,
+                                          child: Text(u.name),
+                                        ),
+                                      )
+                                      .toList(),
+                                  onChanged: (val) =>
+                                      setState(() => _stagedUnit = val),
+                                ),
+                              ),
+                            const SizedBox(width: 10),
+                            // Qty field
+                            SizedBox(
+                              width: 75,
+                              child: TextFormField(
+                                controller: _qtyController,
+                                keyboardType: TextInputType.number,
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  labelText: 'Qty',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 10,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                onChanged: (val) => setState(
+                                  () => _stagedQty = int.tryParse(val) ?? 1,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // Price preview
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  'Rs. ${_stagedPricePerUnit.toStringAsFixed(0)}/unit',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                Text(
+                                  '= Rs. ${_stagedLineTotal.toStringAsFixed(0)}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: _primary,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 10),
+                            ElevatedButton.icon(
+                              onPressed: _addStagedToCart,
+                              icon: const Icon(
+                                Icons.add_shopping_cart,
+                                size: 15,
+                              ),
+                              label: const Text('Add'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 11,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            IconButton(
+                              icon: Icon(
+                                Icons.close,
+                                size: 18,
+                                color: Colors.grey.shade500,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _stagedProduct = null),
+                              tooltip: 'Cancel',
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
                     // Cart
                     Expanded(
                       child: Container(
@@ -793,20 +2011,273 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.shopping_cart_outlined, size: 40, color: Colors.grey.shade300),
+                                    Icon(
+                                      Icons.shopping_cart_outlined,
+                                      size: 40,
+                                      color: Colors.grey.shade300,
+                                    ),
                                     const SizedBox(height: 10),
-                                    Text('No items added yet', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
+                                    Text(
+                                      'No items added yet',
+                                      style: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 14,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               )
-                            : ListView.builder(
-                                padding: const EdgeInsets.all(8),
-                                itemCount: _cart.length,
-                                itemBuilder: (_, i) => ListTile(
-                                  title: Text(_cart[i].name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                  subtitle: Text('Rs. ${_cart[i].price.toStringAsFixed(0)} × ${_cart[i].qty}'),
-                                  trailing: Text('Rs. ${_cart[i].total.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700, color: _primary)),
-                                ),
+                            : Column(
+                                children: [
+                                  // Cart header
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF9FAFB),
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: Colors.grey.shade200,
+                                        ),
+                                      ),
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(10),
+                                        topRight: Radius.circular(10),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        const Expanded(
+                                          flex: 4,
+                                          child: Text(
+                                            'PRODUCT',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.grey,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        const Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            'UNIT',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.grey,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        const Expanded(
+                                          flex: 1,
+                                          child: Text(
+                                            'QTY',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.grey,
+                                              letterSpacing: 0.5,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        const Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            'PRICE/UNIT',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.grey,
+                                              letterSpacing: 0.5,
+                                            ),
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                        const Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            'TOTAL',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.grey,
+                                              letterSpacing: 0.5,
+                                            ),
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 40),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: ListView.separated(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 4,
+                                      ),
+                                      itemCount: _cart.length,
+                                      separatorBuilder: (_, index) => Divider(
+                                        height: 1,
+                                        color: Colors.grey.shade100,
+                                      ),
+                                      itemBuilder: (_, i) => Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 8,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 4,
+                                              child: Text(
+                                                _cart[i].product.name,
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(
+                                                    0xFFEFF6FF,
+                                                  ),
+                                                  borderRadius:
+                                                      BorderRadius.circular(20),
+                                                ),
+                                                child: Text(
+                                                  _cart[i].unit,
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Color(0xFF0F4C81),
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                  textAlign: TextAlign.center,
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 1,
+                                              child: Row(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  GestureDetector(
+                                                    onTap: () => setState(() {
+                                                      if (_cart[i].unitQty >
+                                                          1) {
+                                                        _cart[i].unitQty--;
+                                                      } else {
+                                                        _cart.removeAt(i);
+                                                      }
+                                                    }),
+                                                    child: Icon(
+                                                      Icons
+                                                          .remove_circle_outline,
+                                                      size: 16,
+                                                      color:
+                                                          Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    '${_cart[i].unitQty}',
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                      fontWeight:
+                                                          FontWeight.w700,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  GestureDetector(
+                                                    onTap: () {
+                                                      final item = _cart[i];
+                                                      final p = item.product;
+                                                      final currentBaseUnits = _cart
+                                                          .where((c) => c.product.id == p.id)
+                                                          .fold(0, (sum, c) => sum + c.baseUnits);
+                                                      final extraBaseUnits = p.getMultiplier(item.unit);
+                                                      
+                                                      if (currentBaseUnits + extraBaseUnits > p.stock) {
+                                                        ScaffoldMessenger.of(context).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text('Not enough stock! Available: ${p.formattedStock}'),
+                                                            backgroundColor: Colors.red.shade600,
+                                                          ),
+                                                        );
+                                                        return;
+                                                      }
+                                                      
+                                                      setState(
+                                                        () => _cart[i].unitQty++,
+                                                      );
+                                                    },
+                                                    child: Icon(
+                                                      Icons.add_circle_outline,
+                                                      size: 16,
+                                                      color:
+                                                          Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                'Rs. ${_cart[i].pricePerUnit.toStringAsFixed(0)}',
+                                                style: TextStyle(
+                                                  fontSize: 13,
+                                                  color: Colors.grey.shade600,
+                                                ),
+                                                textAlign: TextAlign.right,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                'Rs. ${_cart[i].total.toStringAsFixed(0)}',
+                                                style: const TextStyle(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: _primary,
+                                                ),
+                                                textAlign: TextAlign.right,
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 40,
+                                              child: IconButton(
+                                                icon: const Icon(
+                                                  Icons.delete_outline,
+                                                  size: 16,
+                                                  color: Colors.red,
+                                                ),
+                                                onPressed: () => setState(
+                                                  () => _cart.removeAt(i),
+                                                ),
+                                                tooltip: 'Remove',
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                       ),
                     ),
@@ -822,36 +2293,68 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
               ),
               child: Row(
                 children: [
-                  TextButton.icon(
-                    onPressed: _addItem,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Item (Demo)'),
-                    style: TextButton.styleFrom(foregroundColor: _primary),
-                  ),
                   const Spacer(),
-                  Text('Total: ', style: TextStyle(fontSize: 15, color: Colors.grey.shade600)),
-                  Text('Rs. ${_total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: _primary)),
+                  Text(
+                    'Total: ',
+                    style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
+                  ),
+                  Text(
+                    'Rs. ${_total.toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: _primary,
+                    ),
+                  ),
                   const SizedBox(width: 20),
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
                       side: BorderSide(color: Colors.grey.shade300),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                      ),
                     ),
-                    child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton(
-                    onPressed: _cart.isEmpty ? null : () => Navigator.pop(context),
+                    onPressed: _cart.isEmpty || _isSaving ? null : _saveSale,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _primary,
                       foregroundColor: Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(9)),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(9),
+                      ),
                     ),
-                    child: const Text('Save & Print', style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: _isSaving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : const Text(
+                            'Save & Print',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
                   ),
                 ],
               ),
@@ -861,36 +2364,270 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       ),
     );
   }
+}
 
-  Widget _inputField(String label, String hint, IconData icon) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF374151))),
-        const SizedBox(height: 6),
-        TextFormField(
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-            prefixIcon: Icon(icon, size: 17, color: Colors.grey.shade400),
-            filled: true,
-            fillColor: const Color(0xFFF9FAFB),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: BorderSide(color: Colors.grey.shade200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
-          ),
+class _CartItem {
+  final Product product;
+  final String unit; // selected unit name (e.g. 'Box', 'Strip', 'Tablet')
+  int unitQty; // quantity in the selected unit
+  final double pricePerUnit; // price per selected unit
+
+  _CartItem({
+    required this.product,
+    required this.unit,
+    required this.unitQty,
+    required this.pricePerUnit,
+  });
+
+  double get total => pricePerUnit * unitQty;
+
+  /// Base units to deduct from stock
+  int get baseUnits => unitQty * product.getMultiplier(unit);
+}
+
+class _OpenDSSDialog extends StatefulWidget {
+  final VoidCallback onOpened;
+
+  const _OpenDSSDialog({required this.onOpened});
+
+  @override
+  State<_OpenDSSDialog> createState() => _OpenDSSDialogState();
+}
+
+class _OpenDSSDialogState extends State<_OpenDSSDialog> {
+  final TextEditingController _balanceController = TextEditingController();
+  bool _isSaving = false;
+
+  void _save() async {
+    final balance = double.tryParse(_balanceController.text) ?? 0.0;
+    setState(() => _isSaving = true);
+    try {
+      await DatabaseHelper.instance.openDSS(balance);
+      if (mounted) {
+        widget.onOpened();
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 400,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Open Daily Sales Sheet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F4C81),
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Enter the opening cash balance in the till to start the day.',
+              style: TextStyle(color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _balanceController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Opening Cash Balance (Rs)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F4C81),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Open Shift'),
+                ),
+              ],
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
 
-class _CartItem {
-  final String name;
-  final double price;
-  int qty;
+class _CloseDSSDialog extends StatefulWidget {
+  final DailySalesSheet dss;
+  final VoidCallback onClosed;
 
-  _CartItem({required this.name, required this.price, required this.qty});
+  const _CloseDSSDialog({required this.dss, required this.onClosed});
 
-  double get total => price * qty;
+  @override
+  State<_CloseDSSDialog> createState() => _CloseDSSDialogState();
+}
+
+class _CloseDSSDialogState extends State<_CloseDSSDialog> {
+  final TextEditingController _actualCashController = TextEditingController();
+  bool _isSaving = false;
+  double _expectedCash = 0.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchExpectedCash();
+  }
+
+  void _fetchExpectedCash() async {
+    // Expected cash = opening balance + cash sales
+    final sales = await DatabaseHelper.instance.getSalesForDSS(widget.dss.id!);
+    double cashSales = sales
+        .where((s) => s.paymentMethod == 'Cash')
+        .fold(0, (s, i) => s + i.received);
+    setState(() {
+      _expectedCash = widget.dss.openingBalance + cashSales;
+      _actualCashController.text = _expectedCash.toStringAsFixed(2);
+    });
+  }
+
+  void _save() async {
+    final actual = double.tryParse(_actualCashController.text) ?? 0.0;
+    setState(() => _isSaving = true);
+    try {
+      await DatabaseHelper.instance.closeDSS(widget.dss.id!, actual);
+      if (mounted) {
+        widget.onClosed();
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        setState(() => _isSaving = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        width: 400,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Close Daily Sales Sheet',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF0F4C81),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blueGrey.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Expected Cash in Till:',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  Text(
+                    'Rs. ${_expectedCash.toStringAsFixed(2)}',
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _actualCashController,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              decoration: InputDecoration(
+                labelText: 'Actual Cash Count (Rs)',
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: _isSaving ? null : _save,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F4C81),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: _isSaving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text('Close Shift'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

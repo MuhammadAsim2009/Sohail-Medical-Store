@@ -4,6 +4,8 @@ import '../models/product.dart';
 import '../models/purchase_order.dart';
 import '../models/supplier.dart';
 import '../models/customer.dart';
+import '../models/daily_sales_sheet.dart';
+import '../models/sale.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -22,7 +24,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -88,6 +90,43 @@ CREATE TABLE IF NOT EXISTS customers (
   pendingAmount      REAL NOT NULL DEFAULT 0.0,
   advanceAmount      REAL NOT NULL DEFAULT 0.0,
   lastVisit          TEXT NOT NULL
+)""");
+    }
+    if (oldVersion < 6) {
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS daily_sales_sheets (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  date            TEXT NOT NULL,
+  opening_balance REAL NOT NULL,
+  expected_cash   REAL NOT NULL,
+  actual_cash     REAL NOT NULL,
+  status          TEXT NOT NULL
+)""");
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS sales (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  dss_id          INTEGER NOT NULL,
+  invoice_number  TEXT NOT NULL,
+  date            TEXT NOT NULL,
+  customer_id     TEXT,
+  customer_name   TEXT,
+  total           REAL NOT NULL,
+  received        REAL NOT NULL,
+  balance         REAL NOT NULL,
+  payment_method  TEXT NOT NULL,
+  status          TEXT NOT NULL,
+  FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
+)""");
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS sale_items (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id         INTEGER NOT NULL,
+  product_id      INTEGER NOT NULL,
+  product_name    TEXT NOT NULL,
+  quantity        INTEGER NOT NULL,
+  price           REAL NOT NULL,
+  total           REAL NOT NULL,
+  FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
     }
   }
@@ -170,6 +209,44 @@ CREATE TABLE IF NOT EXISTS customers (
   pendingAmount      REAL NOT NULL DEFAULT 0.0,
   advanceAmount      REAL NOT NULL DEFAULT 0.0,
   lastVisit          TEXT NOT NULL
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS daily_sales_sheets (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  date            TEXT NOT NULL,
+  opening_balance REAL NOT NULL,
+  expected_cash   REAL NOT NULL,
+  actual_cash     REAL NOT NULL,
+  status          TEXT NOT NULL
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS sales (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  dss_id          INTEGER NOT NULL,
+  invoice_number  TEXT NOT NULL,
+  date            TEXT NOT NULL,
+  customer_id     TEXT,
+  customer_name   TEXT,
+  total           REAL NOT NULL,
+  received        REAL NOT NULL,
+  balance         REAL NOT NULL,
+  payment_method  TEXT NOT NULL,
+  status          TEXT NOT NULL,
+  FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS sale_items (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sale_id         INTEGER NOT NULL,
+  product_id      INTEGER NOT NULL,
+  product_name    TEXT NOT NULL,
+  quantity        INTEGER NOT NULL,
+  price           REAL NOT NULL,
+  total           REAL NOT NULL,
+  FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
   }
 
@@ -386,40 +463,167 @@ CREATE TABLE IF NOT EXISTS customers (
     return db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ── CUSTOMERS ────────────────────────────────────────────────────────────────
-
-  Future<void> insertCustomer(Customer customer) async {
+  // ---------------------------------------------------------------------------
+  // Customers
+  // ---------------------------------------------------------------------------
+  Future<int> insertCustomer(Customer customer) async {
     final db = await instance.database;
-    final map = customer.toMap();
-    if (map['id'] == null) {
-      map['id'] = DateTime.now().millisecondsSinceEpoch.toString();
-    }
-    await db.insert(
-      'customers',
-      map,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    return await db.insert('customers', customer.toMap());
   }
 
   Future<List<Customer>> getCustomers() async {
     final db = await instance.database;
-    final result = await db.query('customers');
-    return result.map((map) => Customer.fromMap(map)).toList();
+    final List<Map<String, dynamic>> maps = await db.query('customers', orderBy: 'name ASC');
+    return maps.map((map) => Customer.fromMap(map)).toList();
   }
 
-  Future<void> updateCustomer(Customer customer) async {
+  Future<int> updateCustomer(Customer customer) async {
     final db = await instance.database;
-    await db.update(
-      'customers',
-      customer.toMap(),
-      where: 'id = ?',
-      whereArgs: [customer.id],
-    );
+    return await db.update('customers', customer.toMap(),
+        where: 'id = ?', whereArgs: [customer.id]);
   }
 
   Future<int> deleteCustomer(String id) async {
     final db = await instance.database;
-    return db.delete('customers', where: 'id = ?', whereArgs: [id]);
+    return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Daily Sales Sheets (DSS)
+  // ---------------------------------------------------------------------------
+  Future<DailySalesSheet?> getCurrentOpenDSS() async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'daily_sales_sheets',
+      where: 'status = ?',
+      whereArgs: ['OPEN'],
+      limit: 1,
+    );
+    if (maps.isNotEmpty) {
+      return DailySalesSheet.fromMap(maps.first);
+    }
+    return null;
+  }
+
+  Future<int> openDSS(double openingBalance) async {
+    final db = await instance.database;
+    // Check if one is already open
+    final current = await getCurrentOpenDSS();
+    if (current != null) {
+      throw Exception('A Daily Sales Sheet is already open. Close it first.');
+    }
+    
+    final dss = DailySalesSheet(
+      date: DateTime.now().toIso8601String(),
+      openingBalance: openingBalance,
+      expectedCash: openingBalance,
+      actualCash: 0.0,
+      status: 'OPEN',
+    );
+    return await db.insert('daily_sales_sheets', dss.toMap());
+  }
+
+  Future<int> closeDSS(int dssId, double actualCash) async {
+    final db = await instance.database;
+    // Recalculate expected cash based on sales
+    final List<Map<String, dynamic>> result = await db.rawQuery(
+      'SELECT SUM(received) as total_cash FROM sales WHERE dss_id = ? AND payment_method = ?',
+      [dssId, 'Cash']
+    );
+    double totalCashSales = 0.0;
+    if (result.isNotEmpty && result.first['total_cash'] != null) {
+      totalCashSales = result.first['total_cash'] as double;
+    }
+
+    final dssMaps = await db.query('daily_sales_sheets', where: 'id = ?', whereArgs: [dssId]);
+    if (dssMaps.isEmpty) throw Exception('DSS not found');
+    
+    final dss = DailySalesSheet.fromMap(dssMaps.first);
+    final expectedCash = dss.openingBalance + totalCashSales;
+
+    return await db.update(
+      'daily_sales_sheets',
+      {
+        'status': 'CLOSED',
+        'expected_cash': expectedCash,
+        'actual_cash': actualCash,
+      },
+      where: 'id = ?',
+      whereArgs: [dssId],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sales
+  // ---------------------------------------------------------------------------
+  Future<int> insertSale(Sale sale, List<SaleItem> items) async {
+    final db = await instance.database;
+    int saleId = 0;
+    await db.transaction((txn) async {
+      // 1. Insert Sale
+      final saleMap = sale.toMap();
+      saleMap.remove('id'); // let autoincrement handle it
+      saleId = await txn.insert('sales', saleMap);
+
+      // 2. Insert Sale Items and update inventory
+      for (var item in items) {
+        final itemMap = item.toMap();
+        itemMap.remove('id');
+        itemMap['sale_id'] = saleId;
+        await txn.insert('sale_items', itemMap);
+
+        // Deduct inventory
+        await txn.rawUpdate(
+          'UPDATE products SET stock = stock - ? WHERE id = ?',
+          [item.quantity, item.productId]
+        );
+      }
+
+      // 3. Update Customer Balance and Total Purchases if customer is linked
+      if (sale.customerId != null && sale.customerId!.isNotEmpty) {
+        if (sale.balance > 0) {
+          await txn.rawUpdate(
+            'UPDATE customers SET pendingAmount = pendingAmount + ?, totalPurchases = totalPurchases + ?, lastVisit = ? WHERE id = ?',
+            [sale.balance, sale.total, sale.date, sale.customerId]
+          );
+        } else {
+          await txn.rawUpdate(
+            'UPDATE customers SET totalPurchases = totalPurchases + ?, lastVisit = ? WHERE id = ?',
+            [sale.total, sale.date, sale.customerId]
+          );
+        }
+      }
+
+      // 4. Update expected cash in DSS if it's a cash sale
+      if (sale.paymentMethod == 'Cash') {
+        await txn.rawUpdate(
+          'UPDATE daily_sales_sheets SET expected_cash = expected_cash + ? WHERE id = ?',
+          [sale.received, sale.dssId]
+        );
+      }
+    });
+    return saleId;
+  }
+
+  Future<List<Sale>> getSalesForDSS(int dssId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sales',
+      where: 'dss_id = ?',
+      whereArgs: [dssId],
+      orderBy: 'id DESC',
+    );
+    return maps.map((map) => Sale.fromMap(map)).toList();
+  }
+
+  Future<List<SaleItem>> getSaleItems(int saleId) async {
+    final db = await instance.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'sale_items',
+      where: 'sale_id = ?',
+      whereArgs: [saleId],
+    );
+    return maps.map((map) => SaleItem.fromMap(map)).toList();
   }
 
   Future close() async {
