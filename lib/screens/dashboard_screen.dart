@@ -1,4 +1,5 @@
 import 'dart:ui';
+import '../services/database_helper.dart';
 import 'package:flutter/material.dart';
 import '../widgets/executive_header.dart';
 import 'login_screen.dart';
@@ -52,7 +53,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: Row(
           children: [
-            // ── Sidebar ────────────────────────────────────────────────────
+            // -- Sidebar ----------------------------------------------------
             _Sidebar(
               navItems: _navItems,
               selectedIndex: _selectedIndex,
@@ -60,7 +61,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onLogout: _handleLogout,
             ),
 
-            // ── Main content area ──────────────────────────────────────────
+            // -- Main content area ------------------------------------------
             Expanded(
               child: Column(
                 children: [
@@ -154,7 +155,7 @@ class _Sidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Brand header ───────────────────────────────────────────────
+          // -- Brand header -----------------------------------------------
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
             child: Row(
@@ -212,7 +213,7 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
 
-          // ── Nav items ──────────────────────────────────────────────────
+          // -- Nav items --------------------------------------------------
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -225,7 +226,7 @@ class _Sidebar extends StatelessWidget {
             ),
           ),
 
-          // ── Footer Profile ─────────────────────────────────────────────
+          // -- Footer Profile ---------------------------------------------
           Padding(
             padding: const EdgeInsets.all(16),
             child: Container(
@@ -522,64 +523,109 @@ class _TopBar extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // DASHBOARD BODY (stats + tables)
 // ---------------------------------------------------------------------------
-class _DashboardBody extends StatelessWidget {
+class _DashboardBody extends StatefulWidget {
   final ValueChanged<int>? onNavigate;
   const _DashboardBody({this.onNavigate});
 
-  // TODO: Replace dummy values with Firestore aggregate queries.
-  static const _stats = [
-    _StatData(
-      label: 'Today Sales',
-      value: 'Rs. 45,300',
-      icon: Icons.point_of_sale_rounded,
-      iconBg: Color(0xFF1565C0),
-      trendValue: '+14%',
-      isTrendUp: true,
-    ),
-    _StatData(
-      label: 'Today Net Sale',
-      value: 'Rs. 41,200',
-      icon: Icons.account_balance_wallet_rounded,
-      iconBg: Color(0xFF0F4C81),
-      trendValue: '+12%',
-      isTrendUp: true,
-    ),
-    _StatData(
-      label: 'Today Return',
-      value: 'Rs. 4,100',
-      icon: Icons.assignment_return_rounded,
-      iconBg: Color(0xFFE65100),
-      trendValue: '-2%',
-      isTrendUp: true,
-    ),
-    _StatData(
-      label: 'Monthly Net Sale',
-      value: 'Rs. 1,245,000',
-      icon: Icons.insert_chart_rounded,
-      iconBg: Color(0xFF6A1B9A),
-      trendValue: '+8%',
-      isTrendUp: true,
-    ),
-    _StatData(
-      label: 'Receivable Dues',
-      value: 'Rs. 18,500',
-      icon: Icons.request_quote_rounded,
-      iconBg: Color(0xFFD32F2F),
-      trendValue: '+5%',
-      isTrendUp: false,
-    ),
-    _StatData(
-      label: 'Low Stock Item',
-      value: '12',
-      icon: Icons.warning_amber_rounded,
-      iconBg: Color(0xFFEF6C00),
-      trendValue: '-3',
-      isTrendUp: true,
-    ),
-  ];
+  @override
+  State<_DashboardBody> createState() => _DashboardBodyState();
+}
+
+class _DashboardBodyState extends State<_DashboardBody> {
+  bool _isLoading = true;
+  Map<String, dynamic>? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final data = await DatabaseHelper.instance.getDashboardData();
+      if (mounted) {
+        setState(() {
+          _data = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading dashboard: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  String _formatCurr(double val) => 'Rs. ${val.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 100),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final d = _data ?? {};
+    final todaySales = d['todaySales'] as double? ?? 0.0;
+    final todayNetSale = d['todayNetSale'] as double? ?? 0.0;
+    final todayReturn = d['todayReturn'] as double? ?? 0.0;
+    final monthlyNetSale = d['monthlyNetSale'] as double? ?? 0.0;
+    final receivables = d['receivables'] as double? ?? 0.0;
+    final lowStockCount = d['lowStockCount'] as int? ?? 0;
+
+    final stats = [
+      _StatData(
+        label: 'Today Sales',
+        value: _formatCurr(todaySales),
+        icon: Icons.point_of_sale_rounded,
+        iconBg: const Color(0xFF1565C0),
+        trendValue: 'Today',
+        isTrendUp: true,
+      ),
+      _StatData(
+        label: 'Today Net Sale',
+        value: _formatCurr(todayNetSale),
+        icon: Icons.account_balance_wallet_rounded,
+        iconBg: const Color(0xFF0F4C81),
+        trendValue: 'Today',
+        isTrendUp: todayNetSale >= 0,
+      ),
+      _StatData(
+        label: 'Today Return',
+        value: _formatCurr(todayReturn),
+        icon: Icons.assignment_return_rounded,
+        iconBg: const Color(0xFFE65100),
+        trendValue: 'Today',
+        isTrendUp: false,
+      ),
+      _StatData(
+        label: 'Monthly Net Sale',
+        value: _formatCurr(monthlyNetSale),
+        icon: Icons.insert_chart_rounded,
+        iconBg: const Color(0xFF6A1B9A),
+        trendValue: 'This Month',
+        isTrendUp: monthlyNetSale >= 0,
+      ),
+      _StatData(
+        label: 'Receivable Dues',
+        value: _formatCurr(receivables),
+        icon: Icons.request_quote_rounded,
+        iconBg: const Color(0xFFD32F2F),
+        trendValue: 'All Time',
+        isTrendUp: false,
+      ),
+      _StatData(
+        label: 'Low Stock Items',
+        value: '$lowStockCount',
+        icon: Icons.warning_amber_rounded,
+        iconBg: const Color(0xFFEF6C00),
+        trendValue: '<= 10 Qty',
+        isTrendUp: false,
+      ),
+    ];
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -601,8 +647,8 @@ class _DashboardBody extends StatelessWidget {
                 mainAxisSpacing: 16,
                 childAspectRatio: constraints.maxWidth < 800 ? 1.6 : 2.2,
               ),
-              itemCount: _stats.length,
-              itemBuilder: (_, i) => _StatCard(data: _stats[i]),
+              itemCount: stats.length,
+              itemBuilder: (_, i) => _StatCard(data: stats[i]),
             );
           },
         ),
@@ -613,31 +659,29 @@ class _DashboardBody extends StatelessWidget {
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _QuickActionsCard(onNavigate: onNavigate),
+            _QuickActionsCard(onNavigate: widget.onNavigate),
             const SizedBox(height: 24),
-            const _SalesTrendCard(),
+            _SalesTrendCard(trend: (d['trend'] as List<dynamic>?) ?? []),
           ],
         ),
         
         const SizedBox(height: 24),
         
         // ── Recent Purchase, Recent Activity, Watchlist ──────────────────
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _RecentPurchaseTable(),
-            SizedBox(height: 24),
-            _RecentActivityList(),
-            SizedBox(height: 24),
-            _OperationalWatchlist(),
+            _RecentPurchaseTable(purchases: (d['recentPurchases'] as List<dynamic>?) ?? []),
+            const SizedBox(height: 24),
+            _RecentActivityList(activities: (d['recentActivity'] as List<dynamic>?) ?? []),
+            const SizedBox(height: 24),
+            _OperationalWatchlist(lowStockCount: lowStockCount, receivables: receivables),
           ],
         ),
       ],
     );
   }
-}
-
-// ---------------------------------------------------------------------------
+}// ---------------------------------------------------------------------------
 // STAT DATA MODEL
 // ---------------------------------------------------------------------------
 class _StatData {
@@ -907,10 +951,15 @@ class _ActionBtn extends StatelessWidget {
 // SALES TREND CARD
 // ---------------------------------------------------------------------------
 class _SalesTrendCard extends StatelessWidget {
-  const _SalesTrendCard();
+  final List<dynamic> trend;
+  const _SalesTrendCard({required this.trend});
 
   @override
   Widget build(BuildContext context) {
+    // Generate simple bars to simulate a trend since fl_chart isn't imported
+    final maxTotal = trend.isEmpty ? 1.0 : trend.map((e) => (e['total'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+    final maxVal = maxTotal == 0 ? 1.0 : maxTotal;
+
     return _DashboardCard(
       title: 'Sales Trend (Last 7 Days)',
       action: const Icon(Icons.show_chart_rounded, color: Colors.grey),
@@ -918,18 +967,41 @@ class _SalesTrendCard extends StatelessWidget {
         height: 200,
         alignment: Alignment.center,
         padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.bar_chart_rounded, size: 48, color: Colors.grey.shade300),
-            const SizedBox(height: 8),
-            Text(
-              'Chart placeholder\n(Use fl_chart package here)',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+        child: trend.isEmpty 
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.bar_chart_rounded, size: 48, color: Colors.grey.shade300),
+                const SizedBox(height: 8),
+                Text('No trend data available', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+              ],
+            )
+          : Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: trend.reversed.map((t) {
+                final date = t['date'] as String;
+                final dateStr = date.substring(8, 10) + '/' + date.substring(5, 7);
+                final total = (t['total'] as num).toDouble();
+                final heightRatio = total / maxVal;
+                
+                return Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 120 * heightRatio,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF5A66F9),
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(dateStr, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
+                  ],
+                );
+              }).toList(),
             ),
-          ],
-        ),
       ),
     );
   }
@@ -939,7 +1011,8 @@ class _SalesTrendCard extends StatelessWidget {
 // RECENT PURCHASE TABLE
 // ---------------------------------------------------------------------------
 class _RecentPurchaseTable extends StatelessWidget {
-  const _RecentPurchaseTable();
+  final List<dynamic> purchases;
+  const _RecentPurchaseTable({required this.purchases});
 
   @override
   Widget build(BuildContext context) {
@@ -951,36 +1024,41 @@ class _RecentPurchaseTable extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          children: List.generate(4, (index) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.blueGrey.shade50,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.receipt_long_rounded, size: 20, color: Colors.blueGrey),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        child: purchases.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No recent purchases', style: TextStyle(color: Colors.grey.shade400, fontSize: 13))),
+              )
+            : Column(
+                children: purchases.map((po) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
                       children: [
-                        const Text('Supplier Name', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1A2E2B))),
-                        Text('INV-202$index • 2 items', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.blueGrey.shade50,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.receipt_long_rounded, size: 20, color: Colors.blueGrey),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(po['supplier'].toString(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1A2E2B))),
+                              Text('${po['po_number']} • ${po['order_date']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                            ],
+                          ),
+                        ),
+                        Text('Rs. ${(po['total'] as num).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF1A2E2B))),
                       ],
                     ),
-                  ),
-                  const Text('Rs. 12,500', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF1A2E2B))),
-                ],
+                  );
+                }).toList(),
               ),
-            );
-          }),
-        ),
       ),
     );
   }
@@ -990,7 +1068,8 @@ class _RecentPurchaseTable extends StatelessWidget {
 // RECENT ACTIVITY LIST
 // ---------------------------------------------------------------------------
 class _RecentActivityList extends StatelessWidget {
-  const _RecentActivityList();
+  final List<dynamic> activities;
+  const _RecentActivityList({required this.activities});
 
   @override
   Widget build(BuildContext context) {
@@ -998,15 +1077,17 @@ class _RecentActivityList extends StatelessWidget {
       title: 'Recent Activity',
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _ActivityItem(time: '10 mins ago', text: 'New sale recorded (INV-1041)'),
-            _ActivityItem(time: '1 hour ago', text: 'Stock added for Panadol 500mg'),
-            _ActivityItem(time: '3 hours ago', text: 'Customer return processed'),
-            _ActivityItem(time: 'Yesterday', text: 'System backup completed'),
-          ],
-        ),
+        child: activities.isEmpty
+            ? Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(child: Text('No recent activity', style: TextStyle(color: Colors.grey.shade400, fontSize: 13))),
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: activities.map((act) {
+                  return _ActivityItem(time: act['date'].toString(), text: '${act['type']} - ${act['description']} (Rs. ${(act['amount'] as num).abs().toStringAsFixed(0)})');
+                }).toList(),
+              ),
       ),
     );
   }
@@ -1055,7 +1136,10 @@ class _ActivityItem extends StatelessWidget {
 // OPERATIONAL WATCHLIST
 // ---------------------------------------------------------------------------
 class _OperationalWatchlist extends StatelessWidget {
-  const _OperationalWatchlist();
+  final int lowStockCount;
+  final double receivables;
+  
+  const _OperationalWatchlist({required this.lowStockCount, required this.receivables});
 
   @override
   Widget build(BuildContext context) {
@@ -1065,19 +1149,17 @@ class _OperationalWatchlist extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _WatchlistItem(label: 'Pending Deliveries', value: '3', color: Colors.orange),
+            _WatchlistItem(label: 'Pending Receivables', value: 'Rs. ${receivables.toStringAsFixed(0)}', color: Colors.orange),
             const SizedBox(height: 12),
-            _WatchlistItem(label: 'Expiring Soon (30 days)', value: '8', color: Colors.red),
+            _WatchlistItem(label: 'Low Stock Items', value: '$lowStockCount', color: Colors.red),
             const SizedBox(height: 12),
-            _WatchlistItem(label: 'Unpaid Invoices', value: '5', color: Colors.purple),
+            _WatchlistItem(label: 'Unpaid Purchases', value: 'Check Ledger', color: Colors.purple),
           ],
         ),
       ),
     );
   }
-}
-
-class _WatchlistItem extends StatelessWidget {
+}class _WatchlistItem extends StatelessWidget {
   final String label;
   final String value;
   final MaterialColor color;

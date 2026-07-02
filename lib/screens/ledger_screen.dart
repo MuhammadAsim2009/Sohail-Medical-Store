@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
+
+import '../services/database_helper.dart';
+import '../models/customer.dart';
+import '../models/supplier.dart';
+import '../models/customer_payment.dart';
+import '../models/supplier_payment.dart';
+import '../models/expense.dart';
 
 // ---------------------------------------------------------------------------
 // MODELS
@@ -20,6 +30,17 @@ class LedgerEntry {
     required this.type,
     required this.amount,
   });
+
+  factory LedgerEntry.fromMap(Map<String, dynamic> map) {
+    return LedgerEntry(
+      date: DateTime.parse(map['date']),
+      title: map['reference'] ?? '',
+      description: map['description'] ?? '',
+      category: map['category'] ?? '',
+      type: map['type'] ?? '',
+      amount: (map['amount'] ?? 0).toDouble(),
+    );
+  }
 }
 
 class CustomerStatementEntry {
@@ -38,6 +59,17 @@ class CustomerStatementEntry {
     required this.credit,
     required this.balance,
   });
+
+  factory CustomerStatementEntry.fromMap(Map<String, dynamic> map) {
+    return CustomerStatementEntry(
+      date: DateTime.parse(map['date']),
+      reference: map['reference'] ?? '',
+      description: map['description'] ?? '',
+      debit: (map['debit'] ?? 0).toDouble(),
+      credit: (map['credit'] ?? 0).toDouble(),
+      balance: (map['balance'] ?? 0).toDouble(),
+    );
+  }
 }
 
 class SupplierStatementEntry {
@@ -56,6 +88,17 @@ class SupplierStatementEntry {
     required this.credit,
     required this.balance,
   });
+
+  factory SupplierStatementEntry.fromMap(Map<String, dynamic> map) {
+    return SupplierStatementEntry(
+      date: DateTime.parse(map['date']),
+      reference: map['reference'] ?? '',
+      description: map['description'] ?? '',
+      debit: (map['debit'] ?? 0).toDouble(),
+      credit: (map['credit'] ?? 0).toDouble(),
+      balance: (map['balance'] ?? 0).toDouble(),
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -82,50 +125,75 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     if (_selectedDateRange == null) return 'All time';
     final start = DateFormat('dd MMM yyyy').format(_selectedDateRange!.start);
     final end = DateFormat('dd MMM yyyy').format(_selectedDateRange!.end);
-    return ' - ';
+    return '$start - $end';
   }
 
+  bool _isLoading = true;
 
-  // Dummy Data for Tab 1 (General Cash Ledger)
-  // TODO: Replace dummy general ledger entries with aggregated Firestore stream combining 'sales', 'salesReturns', 'purchaseOrders', and 'expenses' collections, ordered by date
-  final List<LedgerEntry> _generalLedger = [
-    LedgerEntry(date: DateTime.now().subtract(const Duration(days: 0)), title: 'Sale Invoice', description: 'Sale Invoice: INV-001', category: 'Sales', type: 'SALE', amount: 1250.0),
-    LedgerEntry(date: DateTime.now().subtract(const Duration(days: 0)), title: 'Stationery Expense', description: 'Pens, paper, staples', category: 'Office Supplies', type: 'EXPENSE', amount: -250.0),
-    LedgerEntry(date: DateTime.now().subtract(const Duration(days: 1)), title: 'Supplier Payment', description: 'Payment for PO-102', category: 'Purchases', type: 'EXPENSE', amount: -4500.0),
-    LedgerEntry(date: DateTime.now().subtract(const Duration(days: 1)), title: 'Sale Invoice', description: 'Sale Invoice: INV-002', category: 'Sales', type: 'SALE', amount: 840.0),
-    LedgerEntry(date: DateTime.now().subtract(const Duration(days: 2)), title: 'Refund', description: 'Sales Return Refund: SR-001', category: 'Returns', type: 'REFUND', amount: -150.0),
-    LedgerEntry(date: DateTime.now().subtract(const Duration(days: 2)), title: 'Sale Invoice', description: 'Sale Invoice: INV-003', category: 'Sales', type: 'SALE', amount: 3200.0),
-  ];
+  List<LedgerEntry> _generalLedger = [];
+  List<CustomerStatementEntry> _customerStatements = [];
+  List<SupplierStatementEntry> _supplierStatements = [];
 
-  // Dummy Data for Tab 2 (Customer Statements)
-  String _selectedCustomer = 'Walk-in Customer (0000000000)';
-  // TODO: Replace dummy customer statement with a Firestore query filtered by customerId across 'sales' and 'payments'
-  final Map<String, List<CustomerStatementEntry>> _customerStatements = {
-    'Walk-in Customer (0000000000)': [
-      CustomerStatementEntry(date: DateTime.now().subtract(const Duration(days: 5)), reference: 'INV-100', description: 'Invoice Charge', debit: 500, credit: 0, balance: 500),
-      CustomerStatementEntry(date: DateTime.now().subtract(const Duration(days: 5)), reference: 'PAY-100', description: 'Cash Payment', debit: 0, credit: 500, balance: 0),
-      CustomerStatementEntry(date: DateTime.now().subtract(const Duration(days: 2)), reference: 'INV-102', description: 'Invoice Charge', debit: 1200, credit: 0, balance: 1200),
-      CustomerStatementEntry(date: DateTime.now().subtract(const Duration(days: 1)), reference: 'PAY-102', description: 'Partial Payment', debit: 0, credit: 600, balance: 600),
-    ],
-    'John Doe (03001234567)': [],
-  };
+  List<Customer> _customers = [];
+  List<Supplier> _suppliers = [];
 
-  // Dummy Data for Tab 3 (Supplier Statements)
-  String _selectedSupplier = 'PharmaCorp Inc. (03009876543)';
-  // TODO: Replace dummy supplier statement with a Firestore query filtered by supplierId across 'purchaseOrders' and 'supplierPayments'
-  final Map<String, List<SupplierStatementEntry>> _supplierStatements = {
-    'PharmaCorp Inc. (03009876543)': [
-      SupplierStatementEntry(date: DateTime.now().subtract(const Duration(days: 10)), reference: 'PO-200', description: 'Purchase Order', debit: 8000, credit: 0, balance: 8000),
-      SupplierStatementEntry(date: DateTime.now().subtract(const Duration(days: 8)), reference: 'PAY-200', description: 'Advance Payment', debit: 0, credit: 4000, balance: 4000),
-      SupplierStatementEntry(date: DateTime.now().subtract(const Duration(days: 1)), reference: 'PAY-201', description: 'Final Settlement', debit: 0, credit: 4000, balance: 0),
-    ],
-    'MediSupply Co. (03211234567)': [],
-  };
+  String? _selectedCustomerId;
+  String? _selectedSupplierId;
+
+  Customer? get _selectedCustomerObj => _customers.where((c) => c.id == _selectedCustomerId).firstOrNull;
+  Supplier? get _selectedSupplierObj => _suppliers.where((s) => s.id == _selectedSupplierId).firstOrNull;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
+    _loadInitialData();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) {
+      _loadDataForCurrentTab();
+    }
+  }
+
+  Future<void> _loadInitialData() async {
+    setState(() => _isLoading = true);
+    try {
+      // Load accounts
+      _customers = await DatabaseHelper.instance.getCustomers();
+      _suppliers = await DatabaseHelper.instance.getSuppliers();
+      
+      if (_customers.isNotEmpty) _selectedCustomerId = _customers.first.id;
+      if (_suppliers.isNotEmpty) _selectedSupplierId = _suppliers.first.id;
+
+      await _loadDataForCurrentTab();
+    } catch (e) {
+      debugPrint('LedgerScreen _loadInitialData error: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadDataForCurrentTab() async {
+    setState(() => _isLoading = true);
+    try {
+      if (_tabController.index == 0) {
+        final data = await DatabaseHelper.instance.getGeneralLedger(_selectedDateRange?.start, _selectedDateRange?.end);
+        _generalLedger = data.map((e) => LedgerEntry.fromMap(e)).toList();
+      } else if (_tabController.index == 1) {
+        if (_selectedCustomerId != null) {
+          final data = await DatabaseHelper.instance.getCustomerStatement(_selectedCustomerId!, _selectedDateRange?.start, _selectedDateRange?.end);
+          _customerStatements = data.map((e) => CustomerStatementEntry.fromMap(e)).toList();
+        }
+      } else if (_tabController.index == 2) {
+        if (_selectedSupplierId != null) {
+          final data = await DatabaseHelper.instance.getSupplierStatement(_selectedSupplierId!, _selectedDateRange?.start, _selectedDateRange?.end);
+          _supplierStatements = data.map((e) => SupplierStatementEntry.fromMap(e)).toList();
+        }
+      }
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -156,6 +224,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     );
     if (picked != null) {
       setState(() => _selectedDateRange = picked);
+      _loadDataForCurrentTab();
     }
   }
 
@@ -164,11 +233,12 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Syncing data to Firebase...')));
   }
 
-  void _addExpense() {
-    showDialog(
+  Future<void> _addExpense() async {
+    await showDialog(
       context: context,
       builder: (context) => const _AddExpenseDialog(),
     );
+    _loadDataForCurrentTab();
   }
 
   void _exportCSV() {
@@ -479,6 +549,19 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   // TAB 1: GENERAL CASH LEDGER
   // ---------------------------------------------------------------------------
   Widget _buildGeneralCashLedgerTab({Key? key}) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    // --- Dynamic summary computation ---
+    final fmt = NumberFormat('#,##0.00', 'en_US');
+    final inflow = _generalLedger
+        .where((e) => e.type == 'SALE' || e.type == 'REFUND')
+        .fold(0.0, (sum, e) => sum + e.amount.abs());
+    final outflow = _generalLedger
+        .where((e) => e.type == 'EXPENSE' || e.type == 'PURCHASE')
+        .fold(0.0, (sum, e) => sum + e.amount.abs());
+    final opening = 0.0; // Could be fetched from a settings table in future
+    final closing = opening + inflow - outflow;
+
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -486,13 +569,13 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
         // Summary Cards
         Row(
           children: [
-            Expanded(child: _SummaryStatCard(title: 'Opening', amount: 'Rs. 50,000', icon: Icons.flag, bgColor: Colors.grey.shade100, iconColor: Colors.grey.shade700, textColor: _primary)),
+            Expanded(child: _SummaryStatCard(title: 'Opening', amount: 'Rs. ${fmt.format(opening)}', icon: Icons.flag, bgColor: Colors.grey.shade100, iconColor: Colors.grey.shade700, textColor: _primary)),
             const SizedBox(width: 16),
-            Expanded(child: _SummaryStatCard(title: 'Inflow', amount: 'Rs. 25,000', icon: Icons.call_received, bgColor: Colors.green.shade50, iconColor: Colors.green.shade700, textColor: Colors.green.shade700)),
+            Expanded(child: _SummaryStatCard(title: 'Inflow', amount: 'Rs. ${fmt.format(inflow)}', icon: Icons.call_received, bgColor: Colors.green.shade50, iconColor: Colors.green.shade700, textColor: Colors.green.shade700)),
             const SizedBox(width: 16),
-            Expanded(child: _SummaryStatCard(title: 'Outflow', amount: 'Rs. 10,000', icon: Icons.call_made, bgColor: Colors.red.shade50, iconColor: Colors.red.shade700, textColor: Colors.red.shade700)),
+            Expanded(child: _SummaryStatCard(title: 'Outflow', amount: 'Rs. ${fmt.format(outflow)}', icon: Icons.call_made, bgColor: Colors.red.shade50, iconColor: Colors.red.shade700, textColor: Colors.red.shade700)),
             const SizedBox(width: 16),
-            Expanded(child: _SummaryStatCard(title: 'Closing', amount: 'Rs. 65,000', icon: Icons.account_balance_wallet, bgColor: _primary.withValues(alpha: 0.05), iconColor: _primary, textColor: _primary)),
+            Expanded(child: _SummaryStatCard(title: 'Closing', amount: 'Rs. ${fmt.format(closing)}', icon: Icons.account_balance_wallet, bgColor: _primary.withValues(alpha: 0.05), iconColor: _primary, textColor: _primary)),
           ],
         ),
         const SizedBox(height: 24),
@@ -598,7 +681,8 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   // TAB 2: CUSTOMER STATEMENTS
   // ---------------------------------------------------------------------------
   Widget _buildCustomerStatementsTab({Key? key}) {
-    final entries = _customerStatements[_selectedCustomer] ?? [];
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final entries = _customerStatements;
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -608,13 +692,20 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
           children: [
             _AccountSelector(
               icon: Icons.person_outline,
-              value: _selectedCustomer,
-              items: _customerStatements.keys.toList(),
-              onChanged: (val) => setState(() => _selectedCustomer = val!),
+              value: _selectedCustomerId,
+              items: _customers.isEmpty 
+                  ? const [DropdownMenuItem<String>(value: null, child: Text('No customers'))]
+                  : _customers.map((c) => DropdownMenuItem<String>(value: c.id, child: Text(c.name))).toList(),
+              onChanged: _customers.isEmpty ? null : (val) {
+                if (val != null) {
+                  setState(() => _selectedCustomerId = val);
+                  _loadDataForCurrentTab();
+                }
+              },
             ),
             const Spacer(),
             OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: _selectedCustomerObj == null ? null : () => _printCustomerStatement(_selectedCustomerObj!),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: const Text('Receivable statement'),
               style: OutlinedButton.styleFrom(
@@ -642,16 +733,25 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_selectedCustomer.split('(')[0].trim(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary)),
-                    Text(_selectedCustomer, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                    Text(_selectedCustomerObj?.name ?? 'No Customer Selected', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary)),
+                    Text(_selectedCustomerObj?.phone ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),
               ),
-              _StatementPill(label: 'Advance Credit: Rs. 0', color: Colors.green.shade700, bgColor: Colors.green.shade50),
+              _StatementPill(
+                label: 'Advance Credit: Rs. ${NumberFormat('#,##0.00').format(_selectedCustomerObj?.advanceAmount ?? 0)}',
+                color: Colors.green.shade700, bgColor: Colors.green.shade50,
+              ),
               const SizedBox(width: 8),
-              _StatementPill(label: 'Opening Rs. 500', color: Colors.grey.shade700, bgColor: Colors.grey.shade100),
+              _StatementPill(
+                label: 'Total Receivable: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.fold(0.0, (s, e) => s + e.debit))}',
+                color: Colors.grey.shade700, bgColor: Colors.grey.shade100,
+              ),
               const SizedBox(width: 8),
-              _StatementPill(label: 'Closing Rs. 600', color: _primary, bgColor: _primary.withValues(alpha: 0.05)),
+              _StatementPill(
+                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.last.balance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
+                color: _primary, bgColor: _primary.withValues(alpha: 0.05),
+              ),
             ],
           ),
         ),
@@ -687,7 +787,8 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   // TAB 3: SUPPLIER STATEMENTS
   // ---------------------------------------------------------------------------
   Widget _buildSupplierStatementsTab({Key? key}) {
-    final entries = _supplierStatements[_selectedSupplier] ?? [];
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    final entries = _supplierStatements;
     return Column(
       key: key,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -697,13 +798,20 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
           children: [
             _AccountSelector(
               icon: Icons.business_outlined,
-              value: _selectedSupplier,
-              items: _supplierStatements.keys.toList(),
-              onChanged: (val) => setState(() => _selectedSupplier = val!),
+              value: _selectedSupplierId,
+              items: _suppliers.isEmpty 
+                  ? const [DropdownMenuItem<String>(value: null, child: Text('No suppliers'))]
+                  : _suppliers.map((s) => DropdownMenuItem<String>(value: s.id, child: Text(s.companyName))).toList(),
+              onChanged: _suppliers.isEmpty ? null : (val) {
+                if (val != null) {
+                  setState(() => _selectedSupplierId = val);
+                  _loadDataForCurrentTab();
+                }
+              },
             ),
             const Spacer(),
             OutlinedButton.icon(
-              onPressed: () {},
+              onPressed: _selectedSupplierObj == null ? null : () => _printSupplierStatement(_selectedSupplierObj!),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
               label: const Text('Payable statement'),
               style: OutlinedButton.styleFrom(
@@ -731,16 +839,25 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_selectedSupplier.split('(')[0].trim(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary)),
-                    Text(_selectedSupplier, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                    Text(_selectedSupplierObj?.companyName ?? 'No Supplier Selected', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary)),
+                    Text(_selectedSupplierObj?.contactPerson ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),
               ),
-              _StatementPill(label: 'Settled: Rs. 8000', color: Colors.green.shade700, bgColor: Colors.green.shade50),
+              _StatementPill(
+                label: 'Total Paid: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.fold(0.0, (s, e) => s + e.credit))}',
+                color: Colors.green.shade700, bgColor: Colors.green.shade50,
+              ),
               const SizedBox(width: 8),
-              _StatementPill(label: 'Opening Rs. 8000', color: Colors.grey.shade700, bgColor: Colors.grey.shade100),
+              _StatementPill(
+                label: 'Total Payable: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.fold(0.0, (s, e) => s + e.debit))}',
+                color: Colors.grey.shade700, bgColor: Colors.grey.shade100,
+              ),
               const SizedBox(width: 8),
-              _StatementPill(label: 'Closing Rs. 0', color: _primary, bgColor: _primary.withValues(alpha: 0.05)),
+              _StatementPill(
+                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.isNotEmpty ? _supplierStatements.last.balance : (_selectedSupplierObj?.pendingAmount ?? 0))}',
+                color: _primary, bgColor: _primary.withValues(alpha: 0.05),
+              ),
             ],
           ),
         ),
@@ -873,6 +990,207 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
       ),
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // PDF GENERATION
+  // ---------------------------------------------------------------------------
+  Future<void> _printCustomerStatement(Customer customer) async {
+    final entries = _customerStatements;
+    final pdf = pw.Document();
+    final dateRange = _selectedDateRange == null
+        ? 'All Time'
+        : '${DateFormat('dd MMM yyyy').format(_selectedDateRange!.start)} - ${DateFormat('dd MMM yyyy').format(_selectedDateRange!.end)}';
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context ctx) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Customer Receivable Statement',
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Period: $dateRange', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+              pw.Text('Sohail Medical Store',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+          pw.Divider(thickness: 1),
+          pw.SizedBox(height: 8),
+          // Customer Info
+          pw.Row(
+            children: [
+              pw.Text('Customer: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(customer.name),
+              pw.SizedBox(width: 24),
+              pw.Text('Phone: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(customer.phone),
+            ],
+          ),
+          pw.SizedBox(height: 16),
+          // Table Header
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(3),
+              3: const pw.FlexColumnWidth(2),
+              4: const pw.FlexColumnWidth(2),
+              5: const pw.FlexColumnWidth(2),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                children: [
+                  for (final h in ['Date', 'Reference', 'Description', 'Debit (Paid)', 'Credit (Owed)', 'Balance'])
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    ),
+                ],
+              ),
+              for (final e in entries)
+                pw.TableRow(
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(DateFormat('dd/MM/yyyy').format(e.date), style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.reference, style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.description, style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.debit > 0 ? 'Rs. ${e.debit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.credit > 0 ? 'Rs. ${e.credit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Rs. ${e.balance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                  ],
+                ),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          // Totals
+          if (entries.isNotEmpty)
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Total Receivable: Rs. ${NumberFormat('#,##0.00').format(entries.fold(0.0, (s, e) => s + e.debit))}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.last.balance)}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+  }
+
+  Future<void> _printSupplierStatement(Supplier supplier) async {
+    final entries = _supplierStatements;
+    final pdf = pw.Document();
+    final dateRange = _selectedDateRange == null
+        ? 'All Time'
+        : '${DateFormat('dd MMM yyyy').format(_selectedDateRange!.start)} - ${DateFormat('dd MMM yyyy').format(_selectedDateRange!.end)}';
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (pw.Context ctx) => [
+          // Header
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Supplier Payable Statement',
+                      style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Period: $dateRange', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
+              pw.Text('Sohail Medical Store',
+                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            ],
+          ),
+          pw.Divider(thickness: 1),
+          pw.SizedBox(height: 8),
+          // Supplier Info
+          pw.Row(
+            children: [
+              pw.Text('Supplier: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(supplier.companyName),
+              pw.SizedBox(width: 24),
+              pw.Text('Contact: ', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+              pw.Text(supplier.contactPerson),
+            ],
+          ),
+          pw.SizedBox(height: 16),
+          // Table
+          pw.Table(
+            border: pw.TableBorder.all(color: PdfColors.grey300),
+            columnWidths: {
+              0: const pw.FlexColumnWidth(2),
+              1: const pw.FlexColumnWidth(2),
+              2: const pw.FlexColumnWidth(3),
+              3: const pw.FlexColumnWidth(2),
+              4: const pw.FlexColumnWidth(2),
+              5: const pw.FlexColumnWidth(2),
+            },
+            children: [
+              pw.TableRow(
+                decoration: const pw.BoxDecoration(color: PdfColors.grey200),
+                children: [
+                  for (final h in ['Date', 'Reference', 'Description', 'Debit (Owed)', 'Credit (Paid)', 'Balance'])
+                    pw.Padding(
+                      padding: const pw.EdgeInsets.all(6),
+                      child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+                    ),
+                ],
+              ),
+              for (final e in entries)
+                pw.TableRow(
+                  children: [
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(DateFormat('dd/MM/yyyy').format(e.date), style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.reference, style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.description, style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.debit > 0 ? 'Rs. ${e.debit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.credit > 0 ? 'Rs. ${e.credit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9))),
+                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Rs. ${e.balance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                  ],
+                ),
+            ],
+          ),
+          pw.SizedBox(height: 12),
+          // Totals
+          if (entries.isNotEmpty)
+            pw.Align(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Total Payable: Rs. ${NumberFormat('#,##0.00').format(entries.fold(0.0, (s, e) => s + e.debit))}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.last.balance)}',
+                      style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -935,15 +1253,15 @@ class _SummaryStatCard extends StatelessWidget {
 
 class _AccountSelector extends StatelessWidget {
   final IconData icon;
-  final String value;
-  final List<String> items;
-  final ValueChanged<String?> onChanged;
+  final String? value;
+  final List<DropdownMenuItem<String>> items;
+  final ValueChanged<String?>? onChanged;
 
   const _AccountSelector({
     required this.icon,
     required this.value,
     required this.items,
-    required this.onChanged,
+    this.onChanged,
   });
 
   @override
@@ -966,7 +1284,7 @@ class _AccountSelector extends StatelessWidget {
               icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade400),
               style: TextStyle(color: Colors.grey.shade800, fontSize: 14, fontWeight: FontWeight.w600),
               onChanged: onChanged,
-              items: items.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              items: items,
             ),
           ),
         ],
@@ -1126,9 +1444,23 @@ class _AddExpenseDialogState extends State<_AddExpenseDialog> {
                 ),
                 const SizedBox(width: 12),
                 ElevatedButton(
-                  onPressed: () {
-                    // TODO: Write expense to SQLite/Firestore
-                    Navigator.pop(context);
+                  onPressed: () async {
+                    final amount = double.tryParse(_amountController.text) ?? 0.0;
+                    if (amount <= 0) return;
+                    
+                    final expense = Expense(
+                      title: _titleController.text.trim(),
+                      category: _category,
+                      amount: amount,
+                      notes: _notesController.text.trim(),
+                      date: DateTime.now().toIso8601String(),
+                    );
+                    
+                    await DatabaseHelper.instance.insertExpense(expense);
+                    
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF5A66F9),

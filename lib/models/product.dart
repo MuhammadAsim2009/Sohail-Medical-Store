@@ -60,7 +60,7 @@ class Product {
     List<ProductUnit> pkg = [];
     if (map['packaging'] != null) {
       try {
-        var decoded = jsonDecode(map['packaging']) as List;
+        var decoded = jsonDecode(map['packaging']) as List? ?? [];
         pkg = decoded.map((e) => ProductUnit.fromMap(e as Map<String, dynamic>)).toList();
       } catch (e) {
         // fallback

@@ -73,6 +73,7 @@ class _BillingScreenState extends State<BillingScreen> {
     if (_currentDSS == null) return;
     showDialog(
       context: context,
+      useRootNavigator: true,
       builder: (_) =>
           _NewSaleDialog(dssId: _currentDSS!.id!, onSaleAdded: _loadData),
     );
@@ -482,20 +483,313 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
+
   void _showOpenDSSDialog() {
     showDialog(
       context: context,
-      builder: (_) => _OpenDSSDialog(onOpened: _loadData),
+      useRootNavigator: true,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          width: 420,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 40,
+                spreadRadius: 0,
+                offset: const Offset(0, 16),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Gradient header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0A3356), Color(0xFF0F4C81), Color(0xFF1565C0)],
+                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                      ),
+                      child: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 26),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Open Sales Shift',
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    const SizedBox(height: 4),
+                    Text('Start accepting sales for today',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
+                  ],
+                ),
+              ),
+              // Body
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 8),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0F7FF),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFBFD9F5)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, color: Color(0xFF0F4C81), size: 18),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Opening a new Daily Sales Sheet will allow you to record sales for today.',
+                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              foregroundColor: Colors.grey.shade600,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey.shade200),
+                              ),
+                            ),
+                            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(colors: [Color(0xFF0F4C81), Color(0xFF1565C0)]),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(color: const Color(0xFF0F4C81).withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4)),
+                              ],
+                            ),
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                try {
+                                  await DatabaseHelper.instance.openDSS(0);
+                                  _loadData();
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade700),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                              label: const Text('Open Shift', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                foregroundColor: Colors.white,
+                                shadowColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
   void _showCloseDSSDialog() {
     if (_currentDSS == null) return;
+    final dssId = _currentDSS!.id!;
     showDialog(
       context: context,
-      builder: (_) => _CloseDSSDialog(dss: _currentDSS!, onClosed: _loadData),
+      useRootNavigator: true,
+      barrierColor: Colors.black.withValues(alpha: 0.45),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Container(
+          width: 420,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.12),
+                blurRadius: 40,
+                spreadRadius: 0,
+                offset: const Offset(0, 16),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Gradient header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(28, 28, 28, 24),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Colors.red.shade900, Colors.red.shade700, Colors.red.shade500],
+                  ),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                      ),
+                      child: const Icon(Icons.lock_rounded, color: Colors.white, size: 26),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Close Sales Shift',
+                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    const SizedBox(height: 4),
+                    Text('End the current Daily Sales Sheet',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
+                  ],
+                ),
+              ),
+              // Body
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 8),
+                child: Column(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.shade100),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.warning_amber_rounded, color: Colors.red.shade600, size: 18),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              "Closing the sales sheet will lock today's records. No new sales can be added until a new shift is opened.",
+                              style: TextStyle(fontSize: 13, color: Colors.red.shade800, height: 1.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () => Navigator.pop(ctx),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              foregroundColor: Colors.grey.shade600,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                side: BorderSide(color: Colors.grey.shade200),
+                              ),
+                            ),
+                            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(colors: [Colors.red.shade700, Colors.red.shade500]),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(color: Colors.red.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4)),
+                              ],
+                            ),
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                Navigator.pop(ctx);
+                                try {
+                                  await DatabaseHelper.instance.closeDSS(dssId, 0);
+                                  _loadData();
+                                } catch (e) {
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade700),
+                                    );
+                                  }
+                                }
+                              },
+                              icon: const Icon(Icons.lock_rounded, size: 18),
+                              label: const Text('Close Day', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.transparent,
+                                foregroundColor: Colors.white,
+                                shadowColor: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
+
 
   // ── Search Bar ────────────────────────────
   Widget _buildSearchBar() {
@@ -1016,6 +1310,7 @@ class _SaleRowState extends State<_SaleRow> {
     
     showDialog(
       context: context,
+      useRootNavigator: true,
       builder: (context) {
         return Dialog(
           backgroundColor: Colors.white,
@@ -1626,7 +1921,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
               productId: c.product.id!,
               productName: '${c.product.name} (${c.unit})',
               quantity: c.baseUnits,
-              price: c.product.sellPrice,
+              price: c.total / c.baseUnits,
               total: c.total,
             ),
           )

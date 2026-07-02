@@ -6,6 +6,8 @@ import '../models/supplier.dart';
 import '../models/customer.dart';
 import '../models/daily_sales_sheet.dart';
 import '../models/sale.dart';
+import '../models/expense.dart';
+import '../models/sales_return.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -24,7 +26,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 6,
+      version: 10,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -128,6 +130,77 @@ CREATE TABLE IF NOT EXISTS sale_items (
   total           REAL NOT NULL,
   FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
+    }
+    if (oldVersion < 7) {
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS suppliers_new (
+  id                 TEXT PRIMARY KEY,
+  companyName        TEXT NOT NULL,
+  contactPerson      TEXT NOT NULL,
+  phone              TEXT NOT NULL,
+  email              TEXT NOT NULL,
+  address            TEXT NOT NULL,
+  categoriesSupplied TEXT NOT NULL,
+  lastOrderDate      TEXT NOT NULL,
+  pendingAmount      REAL NOT NULL DEFAULT 0.0,
+  advanceAmount      REAL NOT NULL DEFAULT 0.0
+)""");
+    }
+    if (oldVersion < 8) {
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS expenses (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  date        TEXT NOT NULL,
+  category    TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  notes       TEXT
+)""");
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS customer_payments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id TEXT NOT NULL,
+  date        TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  reference   TEXT NOT NULL,
+  notes       TEXT,
+  FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+)""");
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id TEXT NOT NULL,
+  date        TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  reference   TEXT NOT NULL,
+  notes       TEXT,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
+)""");
+    }
+    if (oldVersion < 9) {
+      final cols = await db.rawQuery("PRAGMA table_info(suppliers)");
+      final colNames = cols.map((c) => c['name'] as String).toSet();
+      if (colNames.contains('company_name')) {
+        await db.execute('ALTER TABLE suppliers RENAME COLUMN company_name TO companyName');
+      }
+      if (colNames.contains('contact_person')) {
+        await db.execute('ALTER TABLE suppliers RENAME COLUMN contact_person TO contactPerson');
+      }
+      if (colNames.contains('categories_supplied')) {
+        await db.execute('ALTER TABLE suppliers RENAME COLUMN categories_supplied TO categoriesSupplied');
+      }
+      if (colNames.contains('last_order_date')) {
+        await db.execute('ALTER TABLE suppliers RENAME COLUMN last_order_date TO lastOrderDate');
+      }
+      if (colNames.contains('pending_amount')) {
+        await db.execute('ALTER TABLE suppliers RENAME COLUMN pending_amount TO pendingAmount');
+      }
+      if (colNames.contains('advance_amount')) {
+        await db.execute('ALTER TABLE suppliers RENAME COLUMN advance_amount TO advanceAmount');
+      }
+    }
+    if (oldVersion < 10) {
+      await db.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
     }
   }
 
@@ -248,9 +321,100 @@ CREATE TABLE IF NOT EXISTS sale_items (
   total           REAL NOT NULL,
   FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS sales_returns (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  dss_id          INTEGER NOT NULL,
+  date            TEXT NOT NULL,
+  invoice_number  TEXT NOT NULL,
+  customer_name   TEXT,
+  mode            TEXT NOT NULL,
+  reason          TEXT NOT NULL,
+  total_refund    REAL NOT NULL,
+  cash_refunded   REAL NOT NULL,
+  credit_issued   REAL NOT NULL,
+  status          TEXT NOT NULL
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS sales_return_items (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  sales_return_id   INTEGER NOT NULL,
+  product_id        INTEGER NOT NULL,
+  product_name      TEXT NOT NULL,
+  quantity_returned REAL NOT NULL,
+  price             REAL NOT NULL,
+  total             REAL NOT NULL,
+  FOREIGN KEY (sales_return_id) REFERENCES sales_returns (id) ON DELETE CASCADE
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS expenses (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  date        TEXT NOT NULL,
+  category    TEXT NOT NULL,
+  title       TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  notes       TEXT
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS customer_payments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  customer_id TEXT NOT NULL,
+  date        TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  reference   TEXT NOT NULL,
+  notes       TEXT,
+  FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
+)""");
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS supplier_payments (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  supplier_id TEXT NOT NULL,
+  date        TEXT NOT NULL,
+  amount      REAL NOT NULL,
+  reference   TEXT NOT NULL,
+  notes       TEXT,
+  FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
+)""");
+
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
+    );
   }
 
-  // ── PRODUCTS ────────────────────────────────────────────────────────────────
+  // ---------------------------------------------------------------------------
+  // SETTINGS
+  // ---------------------------------------------------------------------------
+
+  Future<String?> getSetting(String key) async {
+    final db = await instance.database;
+    final maps = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    if (maps.isNotEmpty) {
+      return maps.first['value'] as String?;
+    }
+    return null;
+  }
+
+  Future<void> setSetting(String key, String value) async {
+    final db = await instance.database;
+    await db.insert(
+      'settings',
+      {'key': key, 'value': value},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<Map<String, String>> getAllSettings() async {
+    final db = await instance.database;
+    final maps = await db.query('settings');
+    return {for (var map in maps) map['key'] as String: map['value'] as String};
+  }
+
+  // -- PRODUCTS ----------------------------------------------------------------
 
   Future<Product> insertProduct(Product product) async {
     final db = await instance.database;
@@ -299,7 +463,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
     });
   }
 
-  // ── PURCHASE ORDERS ─────────────────────────────────────────────────────────
+  // -- PURCHASE ORDERS ---------------------------------------------------------
 
   Future<String> _nextPoNumber(Transaction txn) async {
     final rows =
@@ -410,9 +574,6 @@ CREATE TABLE IF NOT EXISTS sale_items (
         final multiplier = product.getMultiplier(item.unitPurchased);
         final newStock = product.stock + item.quantity * multiplier;
 
-        // Always update stock; update prices only if non-zero values were entered
-        // This way new products get their prices set on first purchase,
-        // and re-purchased items update to latest prices.
         final Map<String, dynamic> updateMap = {'stock': newStock};
         if (item.purchasePrice > 0) updateMap['cost_price'] = item.purchasePrice;
         if (item.sellingPrice > 0)  updateMap['sell_price'] = item.sellingPrice;
@@ -431,7 +592,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
     });
   }
 
-  // ── SUPPLIERS ────────────────────────────────────────────────────────────────
+  // -- SUPPLIERS ---------------------------------------------------------------
 
   Future<void> insertSupplier(Supplier supplier) async {
     final db = await instance.database;
@@ -463,9 +624,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
     return db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ---------------------------------------------------------------------------
-  // Customers
-  // ---------------------------------------------------------------------------
+  // -- CUSTOMERS ---------------------------------------------------------------
+
   Future<int> insertCustomer(Customer customer) async {
     final db = await instance.database;
     return await db.insert('customers', customer.toMap());
@@ -488,9 +648,8 @@ CREATE TABLE IF NOT EXISTS sale_items (
     return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
   }
 
-  // ---------------------------------------------------------------------------
-  // Daily Sales Sheets (DSS)
-  // ---------------------------------------------------------------------------
+  // -- DAILY SALES SHEETS (DSS) ------------------------------------------------
+
   Future<DailySalesSheet?> getCurrentOpenDSS() async {
     final db = await instance.database;
     final List<Map<String, dynamic>> maps = await db.query(
@@ -507,12 +666,10 @@ CREATE TABLE IF NOT EXISTS sale_items (
 
   Future<int> openDSS(double openingBalance) async {
     final db = await instance.database;
-    // Check if one is already open
     final current = await getCurrentOpenDSS();
     if (current != null) {
       throw Exception('A Daily Sales Sheet is already open. Close it first.');
     }
-    
     final dss = DailySalesSheet(
       date: DateTime.now().toIso8601String(),
       openingBalance: openingBalance,
@@ -525,7 +682,6 @@ CREATE TABLE IF NOT EXISTS sale_items (
 
   Future<int> closeDSS(int dssId, double actualCash) async {
     final db = await instance.database;
-    // Recalculate expected cash based on sales
     final List<Map<String, dynamic>> result = await db.rawQuery(
       'SELECT SUM(received) as total_cash FROM sales WHERE dss_id = ? AND payment_method = ?',
       [dssId, 'Cash']
@@ -534,13 +690,10 @@ CREATE TABLE IF NOT EXISTS sale_items (
     if (result.isNotEmpty && result.first['total_cash'] != null) {
       totalCashSales = result.first['total_cash'] as double;
     }
-
     final dssMaps = await db.query('daily_sales_sheets', where: 'id = ?', whereArgs: [dssId]);
     if (dssMaps.isEmpty) throw Exception('DSS not found');
-    
     final dss = DailySalesSheet.fromMap(dssMaps.first);
     final expectedCash = dss.openingBalance + totalCashSales;
-
     return await db.update(
       'daily_sales_sheets',
       {
@@ -553,33 +706,25 @@ CREATE TABLE IF NOT EXISTS sale_items (
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Sales
-  // ---------------------------------------------------------------------------
+  // -- SALES -------------------------------------------------------------------
+
   Future<int> insertSale(Sale sale, List<SaleItem> items) async {
     final db = await instance.database;
     int saleId = 0;
     await db.transaction((txn) async {
-      // 1. Insert Sale
       final saleMap = sale.toMap();
-      saleMap.remove('id'); // let autoincrement handle it
+      saleMap.remove('id');
       saleId = await txn.insert('sales', saleMap);
-
-      // 2. Insert Sale Items and update inventory
       for (var item in items) {
         final itemMap = item.toMap();
         itemMap.remove('id');
         itemMap['sale_id'] = saleId;
         await txn.insert('sale_items', itemMap);
-
-        // Deduct inventory
         await txn.rawUpdate(
           'UPDATE products SET stock = stock - ? WHERE id = ?',
           [item.quantity, item.productId]
         );
       }
-
-      // 3. Update Customer Balance and Total Purchases if customer is linked
       if (sale.customerId != null && sale.customerId!.isNotEmpty) {
         if (sale.balance > 0) {
           await txn.rawUpdate(
@@ -593,8 +738,6 @@ CREATE TABLE IF NOT EXISTS sale_items (
           );
         }
       }
-
-      // 4. Update expected cash in DSS if it's a cash sale
       if (sale.paymentMethod == 'Cash') {
         await txn.rawUpdate(
           'UPDATE daily_sales_sheets SET expected_cash = expected_cash + ? WHERE id = ?',
@@ -624,6 +767,399 @@ CREATE TABLE IF NOT EXISTS sale_items (
       whereArgs: [saleId],
     );
     return maps.map((map) => SaleItem.fromMap(map)).toList();
+  }
+
+  // -- REPORTS -----------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getSalesReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT
+        s.date,
+        s.invoice_number,
+        COALESCE(s.customer_name, 'Walk-in') AS customer_name,
+        s.total,
+        s.received,
+        s.balance,
+        s.payment_method
+      FROM sales s
+      WHERE date(s.date) BETWEEN date(?) AND date(?)
+      ORDER BY s.date DESC
+    ''', [fromDate, toDate]);
+  }
+
+  Future<List<Map<String, dynamic>>> getProductReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT
+        p.name AS product_name,
+        p.category,
+        p.stock,
+        p.sell_price,
+        COALESCE(SUM(si.quantity), 0) AS qty_sold,
+        COALESCE(SUM(si.total), 0)    AS revenue
+      FROM products p
+      LEFT JOIN sale_items si ON si.product_id = p.id
+      LEFT JOIN sales s ON s.id = si.sale_id
+        AND date(s.date) BETWEEN date(?) AND date(?)
+      GROUP BY p.id
+      ORDER BY revenue DESC
+    ''', [fromDate, toDate]);
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomerReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT
+        c.name,
+        c.phone,
+        COALESCE(SUM(s.total), 0)   AS total_purchases,
+        COALESCE(SUM(s.balance), 0) AS outstanding,
+        COUNT(s.id)                 AS visit_count
+      FROM customers c
+      LEFT JOIN sales s ON s.customer_id = c.id
+        AND date(s.date) BETWEEN date(?) AND date(?)
+      GROUP BY c.id
+      ORDER BY total_purchases DESC
+    ''', [fromDate, toDate]);
+  }
+
+  Future<List<Map<String, dynamic>>> getInventoryReportData() async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT
+        name,
+        category,
+        packaging,
+        stock,
+        threshold,
+        cost_price,
+        sell_price,
+        ROUND(stock * sell_price, 2) AS stock_value,
+        CASE WHEN stock <= threshold THEN 'Low' ELSE 'OK' END AS status
+      FROM products
+      ORDER BY stock ASC
+    ''');
+  }
+
+  Future<List<Map<String, dynamic>>> getPurchaseReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT
+        po.po_number,
+        po.supplier,
+        po.order_date,
+        po.status,
+        COALESCE(SUM(poi.quantity * poi.purchase_price), 0) AS total_cost
+      FROM purchase_orders po
+      LEFT JOIN purchase_order_items poi ON poi.order_id = po.id
+      WHERE date(po.order_date) BETWEEN date(?) AND date(?)
+      GROUP BY po.id
+      ORDER BY po.order_date DESC
+    ''', [fromDate, toDate]);
+  }
+
+  Future<List<Map<String, dynamic>>> getExpenseReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT date, category, title, amount, notes
+      FROM expenses
+      WHERE date(date) BETWEEN date(?) AND date(?)
+      ORDER BY date DESC
+    ''', [fromDate, toDate]);
+  }
+
+  // -- DASHBOARD ---------------------------------------------------------------
+
+  Future<Map<String, dynamic>> getDashboardData() async {
+    final db = await instance.database;
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    final monthStart = today.substring(0, 7) + '-01';
+
+    // Today sales
+    final todaySalesRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(total), 0.0) as val FROM sales WHERE date(date) = date(?)",
+      [today],
+    );
+    final todaySales = (todaySalesRows.first['val'] as num?)?.toDouble() ?? 0.0;
+
+    // Today returns
+    final todayReturnRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(total_refund), 0.0) as val FROM sales_returns WHERE date(date) = date(?)",
+      [today],
+    );
+    final todayReturn = (todayReturnRows.first['val'] as num?)?.toDouble() ?? 0.0;
+
+    final todayNetSale = todaySales - todayReturn;
+
+    // Monthly net sale
+    final monthlySalesRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(total), 0.0) as val FROM sales WHERE date(date) >= date(?)",
+      [monthStart],
+    );
+    final monthlySales = (monthlySalesRows.first['val'] as num?)?.toDouble() ?? 0.0;
+
+    final monthlyReturnRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(total_refund), 0.0) as val FROM sales_returns WHERE date(date) >= date(?)",
+      [monthStart],
+    );
+    final monthlyReturn = (monthlyReturnRows.first['val'] as num?)?.toDouble() ?? 0.0;
+    final monthlyNetSale = monthlySales - monthlyReturn;
+
+    // Receivables
+    final receivablesRows = await db.rawQuery(
+      "SELECT COALESCE(SUM(pendingAmount), 0.0) as val FROM customers",
+    );
+    final receivables = (receivablesRows.first['val'] as num?)?.toDouble() ?? 0.0;
+
+    // Low stock count
+    final lowStockRows = await db.rawQuery(
+      "SELECT COUNT(*) as cnt FROM products WHERE stock <= threshold",
+    );
+    final lowStockCount = (lowStockRows.first['cnt'] as int?) ?? 0;
+
+    // 7-day trend
+    final List<Map<String, dynamic>> trend = [];
+    for (int i = 0; i < 7; i++) {
+      final date = DateTime.now().subtract(Duration(days: i));
+      final dateStr = date.toIso8601String().substring(0, 10);
+      final dayRows = await db.rawQuery(
+        "SELECT COALESCE(SUM(total), 0.0) as total FROM sales WHERE date(date) = date(?)",
+        [dateStr],
+      );
+      trend.add({'date': dateStr, 'total': (dayRows.first['total'] as num?)?.toDouble() ?? 0.0});
+    }
+
+    // Recent purchase orders
+    final recentPOs = await db.rawQuery('''
+      SELECT po_number, supplier, order_date,
+        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) AS total
+      FROM purchase_orders
+      ORDER BY id DESC LIMIT 5
+    ''');
+
+    // Recent activity (from ledger: sales, returns, expenses)
+    final recentActivity = await db.rawQuery('''
+      SELECT date, 'Sale' AS type, invoice_number AS description, total AS amount FROM sales
+      UNION ALL
+      SELECT date, 'Return' AS type, invoice_number AS description, -total_refund AS amount FROM sales_returns
+      UNION ALL
+      SELECT date, 'Expense' AS type, title AS description, -amount AS amount FROM expenses
+      ORDER BY date DESC LIMIT 5
+    ''');
+
+    return {
+      'todaySales': todaySales,
+      'todayReturn': todayReturn,
+      'todayNetSale': todayNetSale,
+      'monthlyNetSale': monthlyNetSale,
+      'receivables': receivables,
+      'lowStockCount': lowStockCount,
+      'trend': trend,
+      'recentPOs': recentPOs,
+      'recentActivity': recentActivity,
+    };
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT
+        s.companyName AS supplier,
+        s.phone,
+        s.pendingAmount,
+        COALESCE(SUM(po.paid_amount), 0) AS paid,
+        COUNT(po.id) AS order_count
+      FROM suppliers s
+      LEFT JOIN purchase_orders po ON po.supplier = s.companyName
+        AND date(po.order_date) BETWEEN date(?) AND date(?)
+      GROUP BY s.id
+      ORDER BY s.pendingAmount DESC
+    ''', [fromDate, toDate]);
+  }
+
+  Future<List<Map<String, dynamic>>> getLedgerReportData({
+    required String fromDate,
+    required String toDate,
+  }) async {
+    final db = await instance.database;
+    return await db.rawQuery('''
+      SELECT date, 'Sale' AS type, invoice_number AS description, total AS debit, 0 AS credit FROM sales
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Return' AS type, invoice_number AS description, 0 AS debit, total_refund AS credit FROM sales_returns
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Expense' AS type, title AS description, 0 AS debit, amount AS credit FROM expenses
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      ORDER BY date DESC
+    ''', [fromDate, toDate, fromDate, toDate, fromDate, toDate]);
+  }
+
+  // -- GENERAL LEDGER ----------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getGeneralLedger(DateTime? from, DateTime? to) async {
+    final db = await instance.database;
+    final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
+    final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
+    return await db.rawQuery('''
+      SELECT date, 'Sale' AS type, invoice_number AS ref, customer_name AS party, total AS debit, 0.0 AS credit FROM sales
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Return' AS type, invoice_number AS ref, customer_name AS party, 0.0 AS debit, total_refund AS credit FROM sales_returns
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Expense' AS type, category AS ref, title AS party, 0.0 AS debit, amount AS credit FROM expenses
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Receipt' AS type, reference AS ref, 'Customer' AS party, amount AS debit, 0.0 AS credit FROM customer_payments
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Payment' AS type, reference AS ref, 'Supplier' AS party, 0.0 AS debit, amount AS credit FROM supplier_payments
+        WHERE date(date) BETWEEN date(?) AND date(?)
+      ORDER BY date DESC
+    ''', [f, t, f, t, f, t, f, t, f, t]);
+  }
+
+  Future<List<Map<String, dynamic>>> getCustomerStatement(String customerId, DateTime? from, DateTime? to) async {
+    final db = await instance.database;
+    final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
+    final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
+    final sales = await db.rawQuery('''
+      SELECT date, invoice_number AS ref, 'Sale' AS type, total AS debit, 0.0 AS credit
+      FROM sales WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
+    ''', [customerId, f, t]);
+    final payments = await db.rawQuery('''
+      SELECT date, reference AS ref, 'Payment' AS type, 0.0 AS debit, amount AS credit
+      FROM customer_payments WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
+    ''', [customerId, f, t]);
+    final all = [...sales, ...payments];
+    all.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    return all;
+  }
+
+  Future<List<Map<String, dynamic>>> getSupplierStatement(String supplierId, DateTime? from, DateTime? to) async {
+    final db = await instance.database;
+    final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
+    final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
+    // Get supplier name
+    final supplier = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
+    if (supplier.isEmpty) return [];
+    final name = supplier.first['companyName'] as String;
+    final orders = await db.rawQuery('''
+      SELECT order_date AS date, po_number AS ref, 'Purchase' AS type,
+        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) AS debit, 0.0 AS credit
+      FROM purchase_orders WHERE supplier = ? AND date(order_date) BETWEEN date(?) AND date(?)
+    ''', [name, f, t]);
+    final payments = await db.rawQuery('''
+      SELECT date, reference AS ref, 'Payment' AS type, 0.0 AS debit, amount AS credit
+      FROM supplier_payments WHERE supplier_id = ? AND date(date) BETWEEN date(?) AND date(?)
+    ''', [supplierId, f, t]);
+    final all = [...orders, ...payments];
+    all.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    return all;
+  }
+
+  Future<int> insertExpense(Expense expense) async {
+    final db = await instance.database;
+    final map = expense.toMap();
+    map.remove('id');
+    return await db.insert('expenses', map);
+  }
+
+  // -- SALES (ALL) -------------------------------------------------------------
+
+  Future<List<Sale>> getAllSales() async {
+    final db = await instance.database;
+    final maps = await db.query('sales', orderBy: 'id DESC');
+    return maps.map((m) => Sale.fromMap(m)).toList();
+  }
+
+  // -- SALES RETURNS -----------------------------------------------------------
+
+  Future<List<SalesReturn>> getAllSalesReturns() async {
+    final db = await instance.database;
+    final maps = await db.query('sales_returns', orderBy: 'id DESC');
+    return maps.map((m) => SalesReturn.fromMap(m)).toList();
+  }
+
+  Future<int> insertSalesReturn(SalesReturn returnData) async {
+    final db = await instance.database;
+    int returnId = 0;
+    await db.transaction((txn) async {
+      final items = returnData.items;
+      final returnMap = returnData.toMap();
+      returnMap.remove('id');
+      returnId = await txn.insert('sales_returns', returnMap);
+      for (final item in items) {
+        final itemMap = item.toMap();
+        itemMap.remove('id');
+        itemMap['sales_return_id'] = returnId;
+        await txn.insert('sales_return_items', itemMap);
+        // Restock
+        if (item.productId != null) {
+          await txn.rawUpdate(
+            'UPDATE products SET stock = stock + ? WHERE id = ?',
+            [item.quantityReturned, item.productId],
+          );
+        }
+      }
+    });
+    return returnId;
+  }
+
+  Future<List<SalesReturnItem>> getReturnItems(int returnId) async {
+    final db = await instance.database;
+    final maps = await db.query('sales_return_items', where: 'sales_return_id = ?', whereArgs: [returnId]);
+    return maps.map((m) => SalesReturnItem.fromMap(m)).toList();
+  }
+
+  Future<int> deleteSalesReturn(int id) async {
+    final db = await instance.database;
+    return await db.delete('sales_returns', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // -- DEBUGGING ---------------------------------------------------------------
+  Future<void> clearAllData() async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      final tables = [
+        'sales_return_items',
+        'sales_returns',
+        'sale_items',
+        'sales',
+        'daily_sales_sheets',
+        'expenses',
+        'supplier_payments',
+        'customer_payments',
+        'purchase_order_items',
+        'purchase_orders',
+        'products',
+        'customers',
+        'suppliers',
+      ];
+      for (final table in tables) {
+        await txn.delete(table);
+      }
+    });
   }
 
   Future close() async {
