@@ -1021,37 +1021,55 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
     return await db.rawQuery('''
-      SELECT date, 'Sale' AS type, invoice_number AS ref, customer_name AS party, total AS debit, 0.0 AS credit FROM sales
+      SELECT date, 'Sale' AS type, invoice_number AS ref, customer_name AS party, received AS debit, 0.0 AS credit, received AS amount FROM sales
+        WHERE received > 0 AND date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Return' AS type, invoice_number AS ref, customer_name AS party, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
+        WHERE total_refund > 0 AND date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, 'Expense' AS type, category AS ref, title AS party, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
         WHERE date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Return' AS type, invoice_number AS ref, customer_name AS party, 0.0 AS debit, total_refund AS credit FROM sales_returns
+      SELECT date, 'Receipt' AS type, reference AS ref, 'Customer' AS party, amount AS debit, 0.0 AS credit, amount AS amount FROM customer_payments
         WHERE date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Expense' AS type, category AS ref, title AS party, 0.0 AS debit, amount AS credit FROM expenses
+      SELECT date, 'Payment' AS type, reference AS ref, 'Supplier' AS party, 0.0 AS debit, amount AS credit, -amount AS amount FROM supplier_payments
         WHERE date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Receipt' AS type, reference AS ref, 'Customer' AS party, amount AS debit, 0.0 AS credit FROM customer_payments
-        WHERE date(date) BETWEEN date(?) AND date(?)
-      UNION ALL
-      SELECT date, 'Payment' AS type, reference AS ref, 'Supplier' AS party, 0.0 AS debit, amount AS credit FROM supplier_payments
-        WHERE date(date) BETWEEN date(?) AND date(?)
+      SELECT order_date AS date, 'Purchase' AS type, po_number AS ref, supplier AS party, 0.0 AS debit, paid_amount AS credit, -paid_amount AS amount FROM purchase_orders
+        WHERE paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?)
       ORDER BY date DESC
-    ''', [f, t, f, t, f, t, f, t, f, t]);
+    ''', [f, t, f, t, f, t, f, t, f, t, f, t]);
   }
 
   Future<List<Map<String, dynamic>>> getCustomerStatement(String customerId, DateTime? from, DateTime? to) async {
     final db = await instance.database;
     final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
-    final sales = await db.rawQuery('''
-      SELECT date, invoice_number AS ref, 'Sale' AS type, total AS debit, 0.0 AS credit
+    final transactions = await db.rawQuery('''
+      SELECT date, invoice_number AS reference, 'Sale Invoice' AS description, 'Sale' AS type, 0.0 AS debit, total AS credit
       FROM sales WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
-    ''', [customerId, f, t]);
-    final payments = await db.rawQuery('''
-      SELECT date, reference AS ref, 'Payment' AS type, 0.0 AS debit, amount AS credit
+      UNION ALL
+      SELECT date, invoice_number AS reference, 'Advance received at Sale' AS description, 'Sale Payment' AS type, received AS debit, 0.0 AS credit
+      FROM sales WHERE customer_id = ? AND received > 0 AND date(date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, reference AS reference, 'Payment received' AS description, 'Payment' AS type, amount AS debit, 0.0 AS credit
       FROM customer_payments WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
-    ''', [customerId, f, t]);
-    final all = [...sales, ...payments];
+      UNION ALL
+      SELECT sr.date, sr.invoice_number AS reference, 'Items returned' AS description, 'Return' AS type, sr.total_refund AS debit, sr.cash_refunded AS credit
+      FROM sales_returns sr JOIN sales s ON sr.invoice_number = s.invoice_number
+      WHERE s.customer_id = ? AND date(sr.date) BETWEEN date(?) AND date(?)
+    ''', [customerId, f, t, customerId, f, t, customerId, f, t, customerId, f, t]);
+    
+    // Process running balance
+    final all = List<Map<String, dynamic>>.from(transactions);
+    all.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+    double balance = 0.0;
+    for (int i = 0; i < all.length; i++) {
+      balance += (all[i]['credit'] as num) - (all[i]['debit'] as num);
+      all[i] = {...all[i], 'balance': balance};
+    }
+    // Sort descending for UI
     all.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
     return all;
   }
@@ -1064,16 +1082,28 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final supplier = await db.query('suppliers', where: 'id = ?', whereArgs: [supplierId]);
     if (supplier.isEmpty) return [];
     final name = supplier.first['companyName'] as String;
-    final orders = await db.rawQuery('''
-      SELECT order_date AS date, po_number AS ref, 'Purchase' AS type,
+    
+    final transactions = await db.rawQuery('''
+      SELECT order_date AS date, po_number AS reference, 'Purchase Order' AS description, 'Purchase' AS type,
         COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) AS debit, 0.0 AS credit
       FROM purchase_orders WHERE supplier = ? AND date(order_date) BETWEEN date(?) AND date(?)
-    ''', [name, f, t]);
-    final payments = await db.rawQuery('''
-      SELECT date, reference AS ref, 'Payment' AS type, 0.0 AS debit, amount AS credit
+      UNION ALL
+      SELECT order_date AS date, po_number AS reference, 'Payment at Purchase' AS description, 'Purchase Payment' AS type,
+        0.0 AS debit, paid_amount AS credit
+      FROM purchase_orders WHERE supplier = ? AND paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?)
+      UNION ALL
+      SELECT date, reference AS reference, 'Payment to Supplier' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit
       FROM supplier_payments WHERE supplier_id = ? AND date(date) BETWEEN date(?) AND date(?)
-    ''', [supplierId, f, t]);
-    final all = [...orders, ...payments];
+    ''', [name, f, t, name, f, t, supplierId, f, t]);
+    
+    final all = List<Map<String, dynamic>>.from(transactions);
+    all.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+    double balance = 0.0;
+    for (int i = 0; i < all.length; i++) {
+      balance += (all[i]['debit'] as num) - (all[i]['credit'] as num);
+      all[i] = {...all[i], 'balance': balance};
+    }
+    // Sort descending for UI
     all.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
     return all;
   }
@@ -1122,6 +1152,12 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           );
         }
       }
+      
+      // Update original sale's balance and status
+      await txn.rawUpdate(
+        'UPDATE sales SET balance = balance - ?, status = CASE WHEN balance - ? <= 0.01 THEN \'Paid\' ELSE status END WHERE invoice_number = ?',
+        [returnData.creditIssued, returnData.creditIssued, returnData.invoiceNumber],
+      );
     });
     return returnId;
   }

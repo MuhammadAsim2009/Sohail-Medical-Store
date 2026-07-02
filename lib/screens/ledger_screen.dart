@@ -749,7 +749,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               ),
               const SizedBox(width: 8),
               _StatementPill(
-                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.last.balance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
+                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.first.balance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
                 color: _primary, bgColor: _primary.withValues(alpha: 0.05),
               ),
             ],
@@ -855,7 +855,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               ),
               const SizedBox(width: 8),
               _StatementPill(
-                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.isNotEmpty ? _supplierStatements.last.balance : (_selectedSupplierObj?.pendingAmount ?? 0))}',
+                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.isNotEmpty ? _supplierStatements.first.balance : (_selectedSupplierObj?.pendingAmount ?? 0))}',
                 color: _primary, bgColor: _primary.withValues(alpha: 0.05),
               ),
             ],
