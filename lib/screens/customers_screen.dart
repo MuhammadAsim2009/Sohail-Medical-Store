@@ -838,31 +838,58 @@ class _LedgerEntry {
   final DateTime date;
   final String reference;
   final String description;
-  final double? debit;
-  final double? credit;
+  final double debit;
+  final double credit;
   final double balance;
 
   _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance);
 }
 
-class _CustomerLedgerDialog extends StatelessWidget {
+class _CustomerLedgerDialog extends StatefulWidget {
   final Customer customer;
 
   const _CustomerLedgerDialog({required this.customer});
 
   @override
-  Widget build(BuildContext context) {
-    // Mock ledger entries mimicking the image
-    final entries = [
-      _LedgerEntry(DateTime(2026, 6, 27), 'INV-1', 'Invoice INV-1', null, 2800, 2800),
-      _LedgerEntry(DateTime(2026, 6, 27), 'REC-INV-1', 'Payment received for Invoice INV-1', 2800, null, 0),
-      _LedgerEntry(DateTime(2026, 6, 27), 'ADV-INV-1', 'Advance received from customer after Invoice INV-1', 200, null, -200),
-      _LedgerEntry(DateTime(2026, 6, 27), 'SR-1', 'Sales Return SR-1 against INV-1', 224, null, -424),
-    ];
+  State<_CustomerLedgerDialog> createState() => _CustomerLedgerDialogState();
+}
 
-    bool isAdvance = customer.advanceAmount > 0;
-    double closingBalance = isAdvance ? customer.advanceAmount : customer.pendingAmount;
-    
+class _CustomerLedgerDialogState extends State<_CustomerLedgerDialog> {
+  late final Future<List<_LedgerEntry>> _entriesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _entriesFuture = _loadEntries();
+  }
+
+  Future<List<_LedgerEntry>> _loadEntries() async {
+    final customerId = widget.customer.id;
+    if (customerId == null || customerId.isEmpty) {
+      return [];
+    }
+
+    final rows = await DatabaseHelper.instance.getCustomerStatement(customerId, null, null);
+    return rows.map((row) {
+      return _LedgerEntry(
+        DateTime.parse(row['date'].toString()),
+        row['reference']?.toString() ?? '',
+        row['description']?.toString() ?? '',
+        (row['debit'] as num?)?.toDouble() ?? 0.0,
+        (row['credit'] as num?)?.toDouble() ?? 0.0,
+        (row['balance'] as num?)?.toDouble() ?? 0.0,
+      );
+    }).toList();
+  }
+
+  double _closingBalance(List<_LedgerEntry> entries) {
+    if (entries.isNotEmpty) return entries.first.balance;
+    if (widget.customer.pendingAmount > 0) return widget.customer.pendingAmount;
+    return widget.customer.advanceAmount;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       backgroundColor: Colors.white,
@@ -870,173 +897,273 @@ class _CustomerLedgerDialog extends StatelessWidget {
       child: Container(
         width: 850,
         padding: const EdgeInsets.all(32),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF3E5F5), // Light purple
-                    borderRadius: BorderRadius.circular(12),
+        child: FutureBuilder<List<_LedgerEntry>>(
+          future: _entriesFuture,
+          builder: (context, snapshot) {
+            final entries = snapshot.data ?? const <_LedgerEntry>[];
+            final closingBalance = _closingBalance(entries);
+            final hasAdvance = widget.customer.advanceAmount > widget.customer.pendingAmount &&
+                widget.customer.advanceAmount > 0;
+            final balanceLabel = hasAdvance ? 'Advance credit' : (closingBalance > 0 ? 'Pending balance' : 'Cleared');
+            final balanceColor = hasAdvance ? Colors.green.shade700 : (closingBalance > 0 ? Colors.red.shade700 : Colors.grey.shade600);
+            final totalDebit = entries.fold<double>(0.0, (sum, e) => sum + e.debit);
+            final totalCredit = entries.fold<double>(0.0, (sum, e) => sum + e.credit);
+
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 560,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+
+            if (snapshot.hasError) {
+              return SizedBox(
+                height: 560,
+                child: Center(
+                  child: Text(
+                    'Failed to load customer ledger',
+                    style: TextStyle(color: Colors.red.shade700, fontWeight: FontWeight.w600),
                   ),
-                  child: const Icon(Icons.receipt_long, color: Color(0xFF7E57C2), size: 24),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Customer Ledger', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
-                      const SizedBox(height: 4),
-                      Text('Financial statement for ${customer.name}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  color: Colors.grey.shade500,
-                  onPressed: () => Navigator.of(context).pop(),
-                  splashRadius: 24,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            // Main Card
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey.shade200),
-                borderRadius: BorderRadius.circular(16),
-              ),
+              );
+            }
+
+            return SingleChildScrollView(
               child: Column(
+                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Customer Info Row
                   Row(
                     children: [
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFE8F5E9), // Light green
+                          color: const Color(0xFFF3E5F5),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.account_balance_wallet, color: Color(0xFF4CAF50)),
+                        child: const Icon(Icons.receipt_long, color: Color(0xFF7E57C2), size: 24),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(customer.name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
-                            const SizedBox(height: 2),
-                            Text('Customer statement and running receivable balance.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                            const SizedBox(height: 2),
-                            Text(customer.phone, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                            const Text(
+                              'Customer Ledger',
+                              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B)),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Financial statement for ${widget.customer.name}',
+                              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                            ),
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(isAdvance ? 'Advance credit' : 'Pending balance', style: TextStyle(fontSize: 12, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
-                            const SizedBox(height: 4),
-                            Text('Rs. ${NumberFormat('#,##0').format(closingBalance)}', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
-                          ],
-                        ),
+                      IconButton(
+                        icon: const Icon(Icons.close),
+                        color: Colors.grey.shade500,
+                        onPressed: () => Navigator.of(context).pop(),
+                        splashRadius: 24,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
                   const SizedBox(height: 24),
-                  // Summary Boxes
-                  Row(
-                    children: [
-                      Expanded(child: _buildSummaryBox(title: 'Opening balance', value: 'Rs. 0', subtitle: '', bgColor: Colors.blue.shade50, valueColor: Colors.blue.shade700)),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildSummaryBox(title: 'Closing balance', value: 'Rs. ${NumberFormat('#,##0').format(closingBalance)}', subtitle: isAdvance ? 'Advance credit' : (customer.pendingAmount > 0 ? 'Pending balance' : 'Cleared'), bgColor: const Color(0xFFE8F5E9), valueColor: Colors.green.shade700)),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade200), borderRadius: BorderRadius.circular(12)),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Ledger notes', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
-                              const SizedBox(height: 4),
-                              Text('Debits reflect incoming payments. Credits reflect outstanding invoice obligations.', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                            ],
-                          ),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey.shade200),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F5E9),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(Icons.account_balance_wallet, color: Color(0xFF4CAF50)),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    widget.customer.name,
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B)),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Live customer statement and running receivable balance.',
+                                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(widget.customer.phone, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                              decoration: BoxDecoration(
+                                color: hasAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    balanceLabel,
+                                    style: TextStyle(fontSize: 12, color: balanceColor),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Rs. ${NumberFormat('#,##0').format(closingBalance)}',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: balanceColor),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 24),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildSummaryBox(
+                                title: 'Total debit',
+                                value: 'Rs. ${NumberFormat('#,##0').format(totalDebit)}',
+                                subtitle: 'Amount billed to the customer',
+                                bgColor: Colors.red.shade50,
+                                valueColor: Colors.red.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildSummaryBox(
+                                title: 'Total credit',
+                                value: 'Rs. ${NumberFormat('#,##0').format(totalCredit)}',
+                                subtitle: 'Payments and returns applied',
+                                bgColor: Colors.green.shade50,
+                                valueColor: Colors.green.shade700,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildSummaryBox(
+                                title: 'Closing balance',
+                                value: 'Rs. ${NumberFormat('#,##0').format(closingBalance)}',
+                                subtitle: balanceLabel,
+                                bgColor: Colors.blue.shade50,
+                                valueColor: Colors.blue.shade700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(flex: 2, child: _headerText('DATE')),
+                        Expanded(flex: 2, child: _headerText('REFERENCE')),
+                        Expanded(flex: 4, child: _headerText('DESCRIPTION')),
+                        Expanded(flex: 2, child: _headerText('DEBIT (OWED)')),
+                        Expanded(flex: 2, child: _headerText('CREDIT (PAID)')),
+                        Expanded(flex: 2, child: _headerText('BALANCE')),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    height: 250,
+                    child: entries.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No ledger activity found.',
+                              style: TextStyle(color: Colors.grey.shade500),
+                            ),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: entries.length,
+                            separatorBuilder: (context, index) =>
+                                const Divider(height: 1, color: Color(0xFFF5F5F5)),
+                            itemBuilder: (context, index) {
+                              final entry = entries[index];
+                              return Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        DateFormat('dd MMM yyyy').format(entry.date),
+                                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(entry.reference, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+                                    ),
+                                    Expanded(
+                                      flex: 4,
+                                      child: Text(entry.description, style: TextStyle(fontSize: 13, color: Colors.grey.shade800)),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        entry.debit > 0 ? 'Rs. ${NumberFormat('#,##0').format(entry.debit)}' : '-',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.red.shade600),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        entry.credit > 0 ? 'Rs. ${NumberFormat('#,##0').format(entry.credit)}' : '-',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.green.shade600),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'Rs. ${NumberFormat('#,##0').format(entry.balance)}',
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            // Table Header
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-              decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
-              ),
-              child: Row(
-                children: [
-                  Expanded(flex: 2, child: _headerText('DATE')),
-                  Expanded(flex: 2, child: _headerText('REFERENCE')),
-                  Expanded(flex: 4, child: _headerText('DESCRIPTION')),
-                  Expanded(flex: 2, child: _headerText('DEBIT (PAID)')),
-                  Expanded(flex: 2, child: _headerText('CREDIT (OWED)')),
-                  Expanded(flex: 2, child: _headerText('BALANCE')),
-                ],
-              ),
-            ),
-            // Table Rows
-            SizedBox(
-              height: 250,
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: entries.length,
-                separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF5F5F5)),
-                itemBuilder: (context, index) {
-                  final entry = entries[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(flex: 2, child: Text(DateFormat('dd MMM yyyy').format(entry.date), style: TextStyle(fontSize: 13, color: Colors.grey.shade600))),
-                        Expanded(flex: 2, child: Text(entry.reference, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500))),
-                        Expanded(flex: 4, child: Text(entry.description, style: TextStyle(fontSize: 13, color: Colors.grey.shade800))),
-                        Expanded(flex: 2, child: Text(entry.debit != null ? 'Rs. ${NumberFormat('#,##0').format(entry.debit)}' : '-', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.green.shade600))),
-                        Expanded(flex: 2, child: Text(entry.credit != null ? 'Rs. ${NumberFormat('#,##0').format(entry.credit)}' : '-', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.red.shade500))),
-                        Expanded(flex: 2, child: Text('Rs. ${NumberFormat('#,##0').format(entry.balance)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold))),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildSummaryBox({required String title, required String value, required String subtitle, required Color bgColor, required Color valueColor}) {
+  Widget _buildSummaryBox({
+    required String title,
+    required String value,
+    required String subtitle,
+    required Color bgColor,
+    required Color valueColor,
+  }) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

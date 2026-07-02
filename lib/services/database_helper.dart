@@ -889,7 +889,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   Future<Map<String, dynamic>> getDashboardData() async {
     final db = await instance.database;
     final today = DateTime.now().toIso8601String().substring(0, 10);
-    final monthStart = today.substring(0, 7) + '-01';
+    final monthStart = '${today.substring(0, 7)}-01';
 
     // Today sales
     final todaySalesRows = await db.rawQuery(
@@ -1047,16 +1047,16 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
     final transactions = await db.rawQuery('''
-      SELECT date, invoice_number AS reference, 'Sale Invoice' AS description, 'Sale' AS type, 0.0 AS debit, total AS credit
+      SELECT date, invoice_number AS reference, 'Sale Invoice' AS description, 'Sale' AS type, total AS debit, 0.0 AS credit
       FROM sales WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, invoice_number AS reference, 'Advance received at Sale' AS description, 'Sale Payment' AS type, received AS debit, 0.0 AS credit
+      SELECT date, invoice_number AS reference, 'Advance received at Sale' AS description, 'Sale Payment' AS type, 0.0 AS debit, received AS credit
       FROM sales WHERE customer_id = ? AND received > 0 AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, reference AS reference, 'Payment received' AS description, 'Payment' AS type, amount AS debit, 0.0 AS credit
+      SELECT date, reference AS reference, 'Payment received' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit
       FROM customer_payments WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT sr.date, sr.invoice_number AS reference, 'Items returned' AS description, 'Return' AS type, sr.total_refund AS debit, sr.cash_refunded AS credit
+      SELECT sr.date, sr.invoice_number AS reference, 'Items returned' AS description, 'Return' AS type, 0.0 AS debit, sr.total_refund AS credit
       FROM sales_returns sr JOIN sales s ON sr.invoice_number = s.invoice_number
       WHERE s.customer_id = ? AND date(sr.date) BETWEEN date(?) AND date(?)
     ''', [customerId, f, t, customerId, f, t, customerId, f, t, customerId, f, t]);
@@ -1066,7 +1066,8 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     all.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
     double balance = 0.0;
     for (int i = 0; i < all.length; i++) {
-      balance += (all[i]['credit'] as num) - (all[i]['debit'] as num);
+      balance += (all[i]['debit'] as num) - (all[i]['credit'] as num);
+      if (balance < 0) balance = 0.0;
       all[i] = {...all[i], 'balance': balance};
     }
     // Sort descending for UI
@@ -1135,6 +1136,17 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     int returnId = 0;
     await db.transaction((txn) async {
+      final saleRows = await txn.query(
+        'sales',
+        columns: ['customer_id', 'balance'],
+        where: 'invoice_number = ?',
+        whereArgs: [returnData.invoiceNumber],
+        limit: 1,
+      );
+      final String? saleCustomerId = saleRows.isNotEmpty ? saleRows.first['customer_id']?.toString() : null;
+      final saleBalance = saleRows.isNotEmpty ? (saleRows.first['balance'] as num?)?.toDouble() ?? 0.0 : 0.0;
+      final returnAmount = returnData.totalRefund;
+
       final items = returnData.items;
       final returnMap = returnData.toMap();
       returnMap.remove('id');
@@ -1145,19 +1157,24 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         itemMap['sales_return_id'] = returnId;
         await txn.insert('sales_return_items', itemMap);
         // Restock
-        if (item.productId != null) {
-          await txn.rawUpdate(
-            'UPDATE products SET stock = stock + ? WHERE id = ?',
-            [item.quantityReturned, item.productId],
-          );
-        }
+        await txn.rawUpdate(
+          'UPDATE products SET stock = stock + ? WHERE id = ?',
+          [item.quantityReturned, item.productId],
+        );
       }
       
       // Update original sale's balance and status
       await txn.rawUpdate(
-        'UPDATE sales SET balance = balance - ?, status = CASE WHEN balance - ? <= 0.01 THEN \'Paid\' ELSE status END WHERE invoice_number = ?',
-        [returnData.creditIssued, returnData.creditIssued, returnData.invoiceNumber],
+        'UPDATE sales SET balance = CASE WHEN balance - ? <= 0.01 THEN 0 ELSE balance - ? END, status = CASE WHEN balance - ? <= 0.01 THEN \'Paid\' ELSE status END WHERE invoice_number = ?',
+        [returnAmount, returnAmount, returnAmount, returnData.invoiceNumber],
       );
+
+      if (saleCustomerId?.isNotEmpty == true && saleBalance > 0) {
+        await txn.rawUpdate(
+          'UPDATE customers SET pendingAmount = CASE WHEN pendingAmount - ? <= 0.01 THEN 0 ELSE pendingAmount - ? END WHERE id = ?',
+          [returnAmount, returnAmount, saleCustomerId],
+        );
+      }
     });
     return returnId;
   }

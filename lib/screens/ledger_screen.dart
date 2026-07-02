@@ -7,8 +7,6 @@ import 'package:printing/printing.dart';
 import '../services/database_helper.dart';
 import '../models/customer.dart';
 import '../models/supplier.dart';
-import '../models/customer_payment.dart';
-import '../models/supplier_payment.dart';
 import '../models/expense.dart';
 
 // ---------------------------------------------------------------------------
@@ -744,7 +742,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               ),
               const SizedBox(width: 8),
               _StatementPill(
-                label: 'Total Receivable: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.fold(0.0, (s, e) => s + e.debit))}',
+                label: 'Outstanding Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.first.balance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
                 color: Colors.grey.shade700, bgColor: Colors.grey.shade100,
               ),
               const SizedBox(width: 8),
@@ -773,7 +771,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildTableHeader(['DATE', 'REFERENCE', 'DESCRIPTION', 'DEBIT (PAID)', 'CREDIT (OWED)', 'BALANCE']),
+              _buildTableHeader(['DATE', 'REFERENCE', 'DESCRIPTION', 'DEBIT (OWED)', 'CREDIT (PAID)', 'BALANCE']),
               if (entries.isEmpty) _buildEmptyState('No customer ledger activity yet'),
               for (var entry in entries) _buildStatementRow(entry, true),
             ],
@@ -943,14 +941,14 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                 flex: 1, 
                 child: Text(
                   e.debit > 0 ? 'Rs. ${e.debit.toStringAsFixed(2)}' : '-', 
-                  style: TextStyle(color: isCustomer ? Colors.green.shade700 : Colors.red.shade700, fontSize: 13, fontWeight: FontWeight.w600)
+                  style: TextStyle(color: Colors.red.shade700, fontSize: 13, fontWeight: FontWeight.w600)
                 )
               ),
               Expanded(
                 flex: 1, 
                 child: Text(
                   e.credit > 0 ? 'Rs. ${e.credit.toStringAsFixed(2)}' : '-', 
-                  style: TextStyle(color: isCustomer ? Colors.red.shade700 : Colors.green.shade700, fontSize: 13, fontWeight: FontWeight.w600)
+                  style: TextStyle(color: Colors.green.shade700, fontSize: 13, fontWeight: FontWeight.w600)
                 )
               ),
               Expanded(
@@ -1051,7 +1049,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               pw.TableRow(
                 decoration: const pw.BoxDecoration(color: PdfColors.grey200),
                 children: [
-                  for (final h in ['Date', 'Reference', 'Description', 'Debit (Paid)', 'Credit (Owed)', 'Balance'])
+                  for (final h in ['Date', 'Reference', 'Description', 'Debit (Owed)', 'Credit (Paid)', 'Balance'])
                     pw.Padding(
                       padding: const pw.EdgeInsets.all(6),
                       child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
@@ -1064,11 +1062,11 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                     pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(DateFormat('dd/MM/yyyy').format(e.date), style: const pw.TextStyle(fontSize: 9))),
                     pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.reference, style: const pw.TextStyle(fontSize: 9))),
                     pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.description, style: const pw.TextStyle(fontSize: 9))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.debit > 0 ? 'Rs. ${e.debit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.credit > 0 ? 'Rs. ${e.credit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9))),
-                    pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Rs. ${e.balance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                  ],
-                ),
+                  pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.debit > 0 ? 'Rs. ${e.debit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9, color: PdfColors.red))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text(e.credit > 0 ? 'Rs. ${e.credit.toStringAsFixed(2)}' : '-', style: const pw.TextStyle(fontSize: 9, color: PdfColors.green))),
+                  pw.Padding(padding: const pw.EdgeInsets.all(6), child: pw.Text('Rs. ${e.balance.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                ],
+              ),
             ],
           ),
           pw.SizedBox(height: 12),
@@ -1079,9 +1077,9 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('Total Receivable: Rs. ${NumberFormat('#,##0.00').format(entries.fold(0.0, (s, e) => s + e.debit))}',
+                  pw.Text('Outstanding Balance: Rs. ${NumberFormat('#,##0.00').format(entries.first.balance)}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.last.balance)}',
+                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.first.balance)}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ],
               ),
