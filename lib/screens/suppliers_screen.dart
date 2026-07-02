@@ -783,8 +783,9 @@ class _LedgerEntry {
   final double debit;
   final double credit;
   final double balance;
+  final double closingBalance;
 
-  _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance);
+  _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance, this.closingBalance);
 }
 
 class _SupplierLedgerDialog extends StatefulWidget {
@@ -820,14 +821,14 @@ class _SupplierLedgerDialogState extends State<_SupplierLedgerDialog> {
         (row['debit'] as num?)?.toDouble() ?? 0.0,
         (row['credit'] as num?)?.toDouble() ?? 0.0,
         (row['balance'] as num?)?.toDouble() ?? 0.0,
+        (row['closing_balance'] as num?)?.toDouble() ?? (row['balance'] as num?)?.toDouble() ?? 0.0,
       );
     }).toList();
   }
 
   double _closingBalance(List<_LedgerEntry> entries) {
-    if (entries.isNotEmpty) return entries.first.balance;
-    if (widget.supplier.pendingAmount > 0) return widget.supplier.pendingAmount;
-    return widget.supplier.advanceAmount;
+    if (entries.isNotEmpty) return entries.first.closingBalance;
+    return widget.supplier.advanceAmount - widget.supplier.pendingAmount;
   }
 
   @override
@@ -844,10 +845,9 @@ class _SupplierLedgerDialogState extends State<_SupplierLedgerDialog> {
           builder: (context, snapshot) {
             final entries = snapshot.data ?? const <_LedgerEntry>[];
             final closingBalance = _closingBalance(entries);
-            final hasAdvance = widget.supplier.advanceAmount > widget.supplier.pendingAmount &&
-                widget.supplier.advanceAmount > 0;
-            final balanceLabel = hasAdvance ? 'Advance credit' : (closingBalance > 0 ? 'Pending balance' : 'Cleared');
-            final balanceColor = hasAdvance ? Colors.green.shade700 : (closingBalance > 0 ? Colors.red.shade700 : Colors.grey.shade600);
+            final hasAdvance = closingBalance > 0;
+            final balanceLabel = hasAdvance ? 'Advance credit' : (closingBalance < 0 ? 'Pending balance' : 'Cleared');
+            final balanceColor = hasAdvance ? Colors.green.shade700 : (closingBalance < 0 ? Colors.red.shade700 : Colors.grey.shade600);
             final totalDebit = entries.fold<double>(0.0, (sum, e) => sum + e.debit);
             final totalCredit = entries.fold<double>(0.0, (sum, e) => sum + e.credit);
 
@@ -1161,8 +1161,8 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
 
   @override
   Widget build(BuildContext context) {
-    bool isAdvance = widget.supplier.advanceAmount > 0;
-    bool hasPending = widget.supplier.pendingAmount > 0;
+    final double netBalance = widget.supplier.advanceAmount - widget.supplier.pendingAmount;
+    final bool isAdvance = netBalance > 0;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1211,7 +1211,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
               const SizedBox(height: 24),
 
               // Status Box (Advance/Pending)
-              if (isAdvance || hasPending)
+              if (netBalance != 0)
                 Container(
                   margin: const EdgeInsets.only(bottom: 24),
                   padding: const EdgeInsets.all(20),
@@ -1228,11 +1228,30 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(isAdvance ? 'Advance credit' : 'Pending balance', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
+                            Text(
+                              netBalance == 0
+                                  ? 'Cleared'
+                                  : (isAdvance ? 'Advance credit' : 'Pending balance'),
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                            ),
                             const SizedBox(height: 4),
-                            Text('Rs. ${NumberFormat('#,##0').format(isAdvance ? widget.supplier.advanceAmount : widget.supplier.pendingAmount)}', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: isAdvance ? Colors.green.shade700 : Colors.red.shade700)),
+                            Text(
+                              'Rs. ${NumberFormat('#,##0').format(netBalance.abs())}',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: netBalance == 0 ? Colors.grey.shade700 : (isAdvance ? Colors.green.shade700 : Colors.red.shade700),
+                              ),
+                            ),
                             const SizedBox(height: 4),
-                            Text(isAdvance ? 'This supplier already has advance credit available in the ledger.' : 'This supplier has an outstanding balance.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                            Text(
+                              netBalance == 0
+                                  ? 'This supplier ledger is fully cleared.'
+                                  : (isAdvance
+                                      ? 'This supplier already has advance credit available in the ledger.'
+                                      : 'This supplier has an outstanding balance.'),
+                              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                            ),
                           ],
                         ),
                       ),

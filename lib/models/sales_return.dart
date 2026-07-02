@@ -3,6 +3,7 @@ class SalesReturnItem {
   int? salesReturnId;
   int productId;
   String productName;
+  String unitName;
   double quantityReturned;
   double price;
   double total;
@@ -12,6 +13,7 @@ class SalesReturnItem {
     this.salesReturnId,
     required this.productId,
     required this.productName,
+    this.unitName = 'Base Unit',
     required this.quantityReturned,
     required this.price,
     required this.total,
@@ -23,6 +25,7 @@ class SalesReturnItem {
       'sales_return_id': salesReturnId,
       'product_id': productId,
       'product_name': productName,
+      'unit_name': unitName,
       'quantity_returned': quantityReturned,
       'price': price,
       'total': total,
@@ -35,6 +38,7 @@ class SalesReturnItem {
       salesReturnId: map['sales_return_id'],
       productId: map['product_id'],
       productName: map['product_name'],
+      unitName: map['unit_name']?.toString() ?? 'Base Unit',
       quantityReturned: map['quantity_returned'],
       price: map['price'],
       total: map['total'],

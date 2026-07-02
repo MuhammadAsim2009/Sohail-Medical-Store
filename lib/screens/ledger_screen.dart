@@ -48,6 +48,7 @@ class CustomerStatementEntry {
   final double debit; // Owed
   final double credit; // Paid
   final double balance;
+  final double closingBalance;
 
   CustomerStatementEntry({
     required this.date,
@@ -56,6 +57,7 @@ class CustomerStatementEntry {
     required this.debit,
     required this.credit,
     required this.balance,
+    required this.closingBalance,
   });
 
   factory CustomerStatementEntry.fromMap(Map<String, dynamic> map) {
@@ -66,6 +68,7 @@ class CustomerStatementEntry {
       debit: (map['debit'] ?? 0).toDouble(),
       credit: (map['credit'] ?? 0).toDouble(),
       balance: (map['balance'] ?? 0).toDouble(),
+      closingBalance: (map['closing_balance'] ?? map['balance'] ?? 0).toDouble(),
     );
   }
 }
@@ -77,6 +80,7 @@ class SupplierStatementEntry {
   final double debit; // Owed
   final double credit; // Paid
   final double balance;
+  final double closingBalance;
 
   SupplierStatementEntry({
     required this.date,
@@ -85,6 +89,7 @@ class SupplierStatementEntry {
     required this.debit,
     required this.credit,
     required this.balance,
+    required this.closingBalance,
   });
 
   factory SupplierStatementEntry.fromMap(Map<String, dynamic> map) {
@@ -95,6 +100,7 @@ class SupplierStatementEntry {
       debit: (map['debit'] ?? 0).toDouble(),
       credit: (map['credit'] ?? 0).toDouble(),
       balance: (map['balance'] ?? 0).toDouble(),
+      closingBalance: (map['closing_balance'] ?? map['balance'] ?? 0).toDouble(),
     );
   }
 }
@@ -742,12 +748,12 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               ),
               const SizedBox(width: 8),
               _StatementPill(
-                label: 'Outstanding Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.first.balance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
+                label: 'Outstanding Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.first.closingBalance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
                 color: Colors.grey.shade700, bgColor: Colors.grey.shade100,
               ),
               const SizedBox(width: 8),
               _StatementPill(
-                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.first.balance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
+                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_customerStatements.isNotEmpty ? _customerStatements.first.closingBalance : (_selectedCustomerObj?.pendingAmount ?? 0))}',
                 color: _primary, bgColor: _primary.withValues(alpha: 0.05),
               ),
             ],
@@ -853,7 +859,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               ),
               const SizedBox(width: 8),
               _StatementPill(
-                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.isNotEmpty ? _supplierStatements.first.balance : (_selectedSupplierObj?.pendingAmount ?? 0))}',
+                label: 'Balance: Rs. ${NumberFormat('#,##0.00').format(_supplierStatements.isNotEmpty ? _supplierStatements.first.closingBalance : (_selectedSupplierObj?.pendingAmount ?? 0))}',
                 color: _primary, bgColor: _primary.withValues(alpha: 0.05),
               ),
             ],
@@ -1077,9 +1083,9 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.end,
                 children: [
-                  pw.Text('Outstanding Balance: Rs. ${NumberFormat('#,##0.00').format(entries.first.balance)}',
+                  pw.Text('Outstanding Balance: Rs. ${NumberFormat('#,##0.00').format(entries.first.closingBalance)}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.first.balance)}',
+                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.first.closingBalance)}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ],
               ),
@@ -1178,7 +1184,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                 children: [
                   pw.Text('Total Payable: Rs. ${NumberFormat('#,##0.00').format(entries.fold(0.0, (s, e) => s + e.debit))}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.last.balance)}',
+                  pw.Text('Closing Balance: Rs. ${NumberFormat('#,##0.00').format(entries.last.closingBalance)}',
                       style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
                 ],
               ),

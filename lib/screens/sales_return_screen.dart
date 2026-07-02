@@ -593,8 +593,9 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
     final returnItems = _openItems.map((i) => SalesReturnItem(
       productId: i.product.id!,
       productName: i.product.name,
-      quantityReturned: i.qty.toDouble(),
-      price: i.product.sellPrice * (1 - i.discount / 100),
+      unitName: i.unit,
+      quantityReturned: i.baseUnits.toDouble(),
+      price: i.unitPrice * (1 - i.discount / 100),
       total: i.lineTotal,
     )).toList();
 
@@ -936,6 +937,7 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
                     child: Row(
                       children: [
                         Expanded(flex: 4, child: Text('PRODUCT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
+                        Expanded(flex: 2, child: Text('UNIT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                         Expanded(flex: 2, child: Text('QTY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                         Expanded(flex: 2, child: Text('DISC %', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                         Expanded(flex: 2, child: Text('TOTAL', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
@@ -953,14 +955,30 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
                         children: [
                           Expanded(flex: 4, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(item.product.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600), overflow: TextOverflow.ellipsis),
-                            Text('Rs. ${item.product.sellPrice.toStringAsFixed(0)}/unit', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+                            Text('Rs. ${item.unitPrice.toStringAsFixed(0)}/${item.unit}', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
                           ])),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              item.unit,
+                              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                            ),
+                          ),
                           Expanded(flex: 2, child: Text('×${item.qty}', style: const TextStyle(fontSize: 13))),
                           Expanded(flex: 2, child: Text('${item.discount}%', style: const TextStyle(fontSize: 13))),
                           Expanded(flex: 2, child: Text('Rs. ${item.lineTotal.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))),
                           IconButton(
-                            icon: Icon(Icons.remove_circle_outline, color: Colors.red.shade300, size: 18),
-                            onPressed: () => setState(() => _openItems.removeAt(idx)),
+                            icon: Icon(Icons.edit_outlined, color: _kPrimary, size: 18),
+                            onPressed: () async {
+                              final edited = await showDialog<_OpenReturnItem>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (_) => _EditOpenReturnItemDialog(item: item),
+                              );
+                              if (edited != null && mounted) {
+                                setState(() => _openItems[idx] = edited);
+                              }
+                            },
                             constraints: const BoxConstraints(),
                             padding: const EdgeInsets.all(4),
                           ),
@@ -1058,12 +1076,116 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
 // ---------------------------------------------------------------------------
 class _OpenReturnItem {
   final Product product;
-  final int qty;
-  final double discount;
+  String unit;
+  int qty;
+  double discount;
 
-  _OpenReturnItem({required this.product, required this.qty, required this.discount});
+  _OpenReturnItem({required this.product, required this.unit, required this.qty, required this.discount});
 
-  double get lineTotal => product.sellPrice * qty * (1 - discount / 100);
+  int get multiplier => product.packaging.isNotEmpty ? product.getMultiplier(unit) : 1;
+  double get unitPrice {
+    if (product.packaging.isEmpty) return product.sellPrice;
+    final firstMultiplier = product.getMultiplier(product.packaging.first.name);
+    return product.sellPrice * multiplier / firstMultiplier;
+  }
+  int get baseUnits => qty * multiplier;
+  double get lineTotal => unitPrice * qty * (1 - discount / 100);
+}
+
+List<String> _unitOptionsFor(Product product) {
+  if (product.packaging.isEmpty) return ['Base Unit'];
+  return product.packaging.map((u) => u.name).toList();
+}
+
+class _EditOpenReturnItemDialog extends StatefulWidget {
+  final _OpenReturnItem item;
+
+  const _EditOpenReturnItemDialog({required this.item});
+
+  @override
+  State<_EditOpenReturnItemDialog> createState() => _EditOpenReturnItemDialogState();
+}
+
+class _EditOpenReturnItemDialogState extends State<_EditOpenReturnItemDialog> {
+  late String _unit;
+  late TextEditingController _qtyCtrl;
+  late TextEditingController _discCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    final units = _unitOptionsFor(widget.item.product);
+    _unit = units.contains(widget.item.unit) ? widget.item.unit : units.first;
+    _qtyCtrl = TextEditingController(text: widget.item.qty.toString());
+    _discCtrl = TextEditingController(text: widget.item.discount.toStringAsFixed(0));
+  }
+
+  @override
+  void dispose() {
+    _qtyCtrl.dispose();
+    _discCtrl.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final qty = int.tryParse(_qtyCtrl.text) ?? widget.item.qty;
+    final discount = double.tryParse(_discCtrl.text) ?? widget.item.discount;
+    if (qty <= 0) return;
+    Navigator.pop(
+      context,
+      _OpenReturnItem(
+        product: widget.item.product,
+        unit: _unit,
+        qty: qty,
+        discount: discount,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final units = _unitOptionsFor(widget.item.product);
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Text('Edit return item', style: TextStyle(fontWeight: FontWeight.w700)),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(widget.item.product.name, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              initialValue: _unit,
+              isExpanded: true,
+              decoration: const InputDecoration(labelText: 'Unit'),
+              items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+              onChanged: (val) => setState(() => _unit = val ?? _unit),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _qtyCtrl,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Quantity'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _discCtrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Discount %'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        ElevatedButton(onPressed: _save, child: const Text('Save')),
+      ],
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1080,6 +1202,7 @@ class _AddProductRow extends StatefulWidget {
 
 class _AddProductRowState extends State<_AddProductRow> {
   Product? _product;
+  String? _unit;
   final TextEditingController _qtyCtrl = TextEditingController(text: '1');
   final TextEditingController _discCtrl = TextEditingController(text: '0');
 
@@ -1095,8 +1218,14 @@ class _AddProductRowState extends State<_AddProductRow> {
     final qty = int.tryParse(_qtyCtrl.text) ?? 1;
     final disc = double.tryParse(_discCtrl.text) ?? 0;
     if (qty <= 0) return;
-    widget.onAdd(_OpenReturnItem(product: _product!, qty: qty, discount: disc));
-    setState(() { _product = null; _qtyCtrl.text = '1'; _discCtrl.text = '0'; });
+    final unit = _unit ?? (_product!.packaging.isNotEmpty ? _product!.packaging.first.name : 'Base Unit');
+    widget.onAdd(_OpenReturnItem(product: _product!, unit: unit, qty: qty, discount: disc));
+    setState(() {
+      _product = null;
+      _unit = null;
+      _qtyCtrl.text = '1';
+      _discCtrl.text = '0';
+    });
   }
 
   @override
@@ -1121,7 +1250,10 @@ class _AddProductRowState extends State<_AddProductRow> {
                 return widget.products.where((p) => p.name.toLowerCase().contains(q) || p.sku.toLowerCase().contains(q));
               },
               displayStringForOption: (p) => p.name,
-              onSelected: (p) => setState(() => _product = p),
+              onSelected: (p) => setState(() {
+                _product = p;
+                _unit = p.packaging.isNotEmpty ? p.packaging.first.name : 'Base Unit';
+              }),
               fieldViewBuilder: (ctx, ctrl, fn, submit) {
                 return TextField(
                   controller: ctrl,
@@ -1170,6 +1302,28 @@ class _AddProductRowState extends State<_AddProductRow> {
                   ),
                 );
               },
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 110,
+            child: DropdownButtonFormField<String>(
+              initialValue: _unit,
+              isExpanded: true,
+              decoration: InputDecoration(
+                labelText: 'Unit',
+                labelStyle: const TextStyle(fontSize: 12),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide(color: Colors.grey.shade300)),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _kPrimary, width: 1.5)),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              ),
+              items: _product == null
+                  ? const []
+                  : _unitOptionsFor(_product!).map((u) => DropdownMenuItem(value: u, child: Text(u, overflow: TextOverflow.ellipsis))).toList(),
+              onChanged: _product == null ? null : (val) => setState(() => _unit = val),
             ),
           ),
           const SizedBox(width: 10),
@@ -1307,7 +1461,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
 
     final returnItems = widget.items
         .where((i) => (_returnQty[i.id!] ?? 0) > 0)
-        .map((i) => SalesReturnItem(productId: i.productId, productName: i.productName, quantityReturned: _returnQty[i.id!]!, price: i.price, total: _returnQty[i.id!]! * i.price))
+        .map((i) => SalesReturnItem(productId: i.productId, productName: i.productName, unitName: 'Base Unit', quantityReturned: _returnQty[i.id!]!, price: i.price, total: _returnQty[i.id!]! * i.price))
         .toList();
 
     final ret = SalesReturn(
@@ -1654,6 +1808,7 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                                   child: Row(
                                     children: [
                                       Expanded(flex: 4, child: Text('PRODUCT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
+                                      Expanded(flex: 2, child: Text('UNIT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                                       Expanded(flex: 2, child: Text('QTY RETURNED', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                                       Expanded(flex: 2, child: Text('UNIT PRICE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                                       Expanded(flex: 2, child: Text('REFUND', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
@@ -1684,6 +1839,7 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                                           ),
                                           Expanded(child: Text(item.productName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
                                         ])),
+                                        Expanded(flex: 2, child: Text(item.unitName, style: const TextStyle(fontSize: 13))),
                                         Expanded(flex: 2, child: Text(item.quantityReturned.toStringAsFixed(0), style: const TextStyle(fontSize: 13))),
                                         Expanded(flex: 2, child: Text('Rs. ${item.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13))),
                                         Expanded(flex: 2, child: Text('Rs. ${item.total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)))),
@@ -2001,4 +2157,3 @@ class _SummaryTile extends StatelessWidget {
     );
   }
 }
-

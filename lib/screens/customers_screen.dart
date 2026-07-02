@@ -841,8 +841,9 @@ class _LedgerEntry {
   final double debit;
   final double credit;
   final double balance;
+  final double closingBalance;
 
-  _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance);
+  _LedgerEntry(this.date, this.reference, this.description, this.debit, this.credit, this.balance, this.closingBalance);
 }
 
 class _CustomerLedgerDialog extends StatefulWidget {
@@ -878,12 +879,13 @@ class _CustomerLedgerDialogState extends State<_CustomerLedgerDialog> {
         (row['debit'] as num?)?.toDouble() ?? 0.0,
         (row['credit'] as num?)?.toDouble() ?? 0.0,
         (row['balance'] as num?)?.toDouble() ?? 0.0,
+        (row['closing_balance'] as num?)?.toDouble() ?? (row['balance'] as num?)?.toDouble() ?? 0.0,
       );
     }).toList();
   }
 
   double _closingBalance(List<_LedgerEntry> entries) {
-    if (entries.isNotEmpty) return entries.first.balance;
+    if (entries.isNotEmpty) return entries.first.closingBalance;
     if (widget.customer.pendingAmount > 0) return widget.customer.pendingAmount;
     return widget.customer.advanceAmount;
   }
@@ -902,8 +904,7 @@ class _CustomerLedgerDialogState extends State<_CustomerLedgerDialog> {
           builder: (context, snapshot) {
             final entries = snapshot.data ?? const <_LedgerEntry>[];
             final closingBalance = _closingBalance(entries);
-            final hasAdvance = widget.customer.advanceAmount > widget.customer.pendingAmount &&
-                widget.customer.advanceAmount > 0;
+            final hasAdvance = closingBalance < 0;
             final balanceLabel = hasAdvance ? 'Advance credit' : (closingBalance > 0 ? 'Pending balance' : 'Cleared');
             final balanceColor = hasAdvance ? Colors.green.shade700 : (closingBalance > 0 ? Colors.red.shade700 : Colors.grey.shade600);
             final totalDebit = entries.fold<double>(0.0, (sum, e) => sum + e.debit);

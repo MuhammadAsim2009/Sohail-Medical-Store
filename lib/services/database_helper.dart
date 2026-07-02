@@ -26,7 +26,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 10,
+      version: 11,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -202,6 +202,13 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     if (oldVersion < 10) {
       await db.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
     }
+    if (oldVersion < 11) {
+      final cols = await db.rawQuery("PRAGMA table_info(sales_return_items)");
+      final colNames = cols.map((c) => c['name'] as String).toSet();
+      if (!colNames.contains('unit_name')) {
+        await db.execute("ALTER TABLE sales_return_items ADD COLUMN unit_name TEXT NOT NULL DEFAULT 'Base Unit'");
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
@@ -343,6 +350,7 @@ CREATE TABLE IF NOT EXISTS sales_return_items (
   sales_return_id   INTEGER NOT NULL,
   product_id        INTEGER NOT NULL,
   product_name      TEXT NOT NULL,
+  unit_name         TEXT NOT NULL DEFAULT 'Base Unit',
   quantity_returned REAL NOT NULL,
   price             REAL NOT NULL,
   total             REAL NOT NULL,
@@ -588,6 +596,33 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           'cost_price': item.purchasePrice,
           'total_cost': item.quantity * item.purchasePrice,
         });
+      }
+
+      final supplierRows = await txn.query(
+        'suppliers',
+        where: 'companyName = ?',
+        whereArgs: [order.supplier],
+        limit: 1,
+      );
+      if (supplierRows.isNotEmpty) {
+        final supplier = supplierRows.first;
+        final supplierId = supplier['id']?.toString();
+        if (supplierId != null && supplierId.isNotEmpty) {
+          final orderTotal = order.totalAmount;
+          final paidAmount = order.paidAmount;
+          final dueAmount = (orderTotal - paidAmount).clamp(0.0, double.infinity);
+          final advanceAmount = (paidAmount - orderTotal).clamp(0.0, double.infinity);
+          final existingPending = (supplier['pendingAmount'] as num?)?.toDouble() ?? 0.0;
+          final existingAdvance = (supplier['advanceAmount'] as num?)?.toDouble() ?? 0.0;
+          final updates = <String, Object?>{
+            'lastOrderDate': DateTime.now().toIso8601String(),
+            'pendingAmount': existingPending + dueAmount,
+          };
+          if (advanceAmount > 0) {
+            updates['advanceAmount'] = existingAdvance + advanceAmount;
+          }
+          await txn.update('suppliers', updates, where: 'id = ?', whereArgs: [supplierId]);
+        }
       }
     });
   }
@@ -1047,31 +1082,42 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
     final transactions = await db.rawQuery('''
-      SELECT date, invoice_number AS reference, 'Sale Invoice' AS description, 'Sale' AS type, total AS debit, 0.0 AS credit
+      SELECT date, invoice_number AS reference, 'Sale Invoice' AS description, 'Sale' AS type, total AS debit, 0.0 AS credit, 3 AS sort_order
       FROM sales WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, invoice_number AS reference, 'Advance received at Sale' AS description, 'Sale Payment' AS type, 0.0 AS debit, received AS credit
+      SELECT date, invoice_number AS reference, 'Advance received at Sale' AS description, 'Sale Payment' AS type, 0.0 AS debit, received AS credit, 0 AS sort_order
       FROM sales WHERE customer_id = ? AND received > 0 AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, reference AS reference, 'Payment received' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit
+      SELECT date, reference AS reference, 'Payment received' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit, 1 AS sort_order
       FROM customer_payments WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT sr.date, sr.invoice_number AS reference, 'Items returned' AS description, 'Return' AS type, 0.0 AS debit, sr.total_refund AS credit
+      SELECT sr.date, sr.invoice_number AS reference, 'Items returned' AS description, 'Return' AS type, 0.0 AS debit, sr.total_refund AS credit, 2 AS sort_order
       FROM sales_returns sr JOIN sales s ON sr.invoice_number = s.invoice_number
       WHERE s.customer_id = ? AND date(sr.date) BETWEEN date(?) AND date(?)
     ''', [customerId, f, t, customerId, f, t, customerId, f, t, customerId, f, t]);
     
     // Process running balance
     final all = List<Map<String, dynamic>>.from(transactions);
-    all.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+    all.sort((a, b) {
+      final dateCmp = (a['date'] as String).compareTo(b['date'] as String);
+      if (dateCmp != 0) return dateCmp;
+      return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
+    });
     double balance = 0.0;
     for (int i = 0; i < all.length; i++) {
       balance += (all[i]['debit'] as num) - (all[i]['credit'] as num);
-      if (balance < 0) balance = 0.0;
       all[i] = {...all[i], 'balance': balance};
     }
+    final closingBalance = balance;
+    for (var i = 0; i < all.length; i++) {
+      all[i] = {...all[i], 'closing_balance': closingBalance};
+    }
     // Sort descending for UI
-    all.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    all.sort((a, b) {
+      final dateCmp = (b['date'] as String).compareTo(a['date'] as String);
+      if (dateCmp != 0) return dateCmp;
+      return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
+    });
     return all;
   }
 
@@ -1086,26 +1132,38 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     
     final transactions = await db.rawQuery('''
       SELECT order_date AS date, po_number AS reference, 'Purchase Order' AS description, 'Purchase' AS type,
-        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) AS debit, 0.0 AS credit
+        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) AS debit, 0.0 AS credit, 2 AS sort_order
       FROM purchase_orders WHERE supplier = ? AND date(order_date) BETWEEN date(?) AND date(?)
       UNION ALL
       SELECT order_date AS date, po_number AS reference, 'Payment at Purchase' AS description, 'Purchase Payment' AS type,
-        0.0 AS debit, paid_amount AS credit
+        0.0 AS debit, paid_amount AS credit, 1 AS sort_order
       FROM purchase_orders WHERE supplier = ? AND paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, reference AS reference, 'Payment to Supplier' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit
+      SELECT date, reference AS reference, 'Payment to Supplier' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit, 0 AS sort_order
       FROM supplier_payments WHERE supplier_id = ? AND date(date) BETWEEN date(?) AND date(?)
     ''', [name, f, t, name, f, t, supplierId, f, t]);
     
     final all = List<Map<String, dynamic>>.from(transactions);
-    all.sort((a, b) => (a['date'] as String).compareTo(b['date'] as String));
+    all.sort((a, b) {
+      final dateCmp = (a['date'] as String).compareTo(b['date'] as String);
+      if (dateCmp != 0) return dateCmp;
+      return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
+    });
     double balance = 0.0;
     for (int i = 0; i < all.length; i++) {
       balance += (all[i]['debit'] as num) - (all[i]['credit'] as num);
       all[i] = {...all[i], 'balance': balance};
     }
+    final closingBalance = balance;
+    for (var i = 0; i < all.length; i++) {
+      all[i] = {...all[i], 'closing_balance': closingBalance};
+    }
     // Sort descending for UI
-    all.sort((a, b) => (b['date'] as String).compareTo(a['date'] as String));
+    all.sort((a, b) {
+      final dateCmp = (b['date'] as String).compareTo(a['date'] as String);
+      if (dateCmp != 0) return dateCmp;
+      return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
+    });
     return all;
   }
 
