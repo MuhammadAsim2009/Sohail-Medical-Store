@@ -6,6 +6,7 @@ import '../models/sale.dart';
 import '../models/product.dart';
 import '../models/customer.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 
 // ---------------------------------------------------------------------------
 // THEME TOKENS
@@ -277,7 +278,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               child: Row(
                 children: [
-                  _Col('RET-${r.id}', flex: 2, bold: true, color: _kPrimary),
+                  _Col(r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}', flex: 2, bold: true, color: _kPrimary),
                   _Col(dateStr, flex: 2),
                   _Col(r.invoiceNumber, flex: 2),
                   _Col(r.customerName ?? 'Walk-in', flex: 3),
@@ -307,17 +308,17 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
                         ),
                         const SizedBox(width: 8),
                         Tooltip(
-                          message: 'Delete return',
+                          message: 'Edit return',
                           child: InkWell(
-                            onTap: () => _showDeleteReturnDialog(r),
+                            onTap: () => _showEditReturnDialog(r),
                             borderRadius: BorderRadius.circular(8),
                             child: Container(
                               padding: const EdgeInsets.all(7),
                               decoration: BoxDecoration(
-                                color: Colors.red.shade50,
+                                color: const Color(0xFFEBF3FB),
                                 borderRadius: BorderRadius.circular(8),
                               ),
-                              child: Icon(Icons.delete_outline, size: 16, color: Colors.red.shade500),
+                              child: const Icon(Icons.edit_outlined, size: 16, color: _kPrimary),
                             ),
                           ),
                         ),
@@ -354,14 +355,14 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
     );
   }
 
-  void _showDeleteReturnDialog(SalesReturn r) {
+  void _showEditReturnDialog(SalesReturn r) {
     showDialog(
       context: context,
       useRootNavigator: true,
       barrierColor: Colors.black.withValues(alpha: 0.45),
-      builder: (_) => _DeleteReturnDialog(
+      builder: (_) => _EditReturnDialog(
         salesReturn: r,
-        onDeleted: _loadData,
+        onSaved: _loadData,
       ),
     );
   }
@@ -558,7 +559,7 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
   // ── Invoice Return: proceed to process dialog ─────────────────────────────
   Future<void> _proceedWithInvoice() async {
     if (_selectedSale == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select an invoice first.'), backgroundColor: Colors.red));
+      AppFeedback.show(context, 'Please select an invoice first.', type: AppFeedbackType.error);
       return;
     }
     setState(() => _isLoadingSales = true);
@@ -586,7 +587,7 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
 
   Future<void> _submitOpenReturn() async {
     if (_openItems.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please add at least one item.'), backgroundColor: Colors.red));
+      AppFeedback.show(context, 'Please add at least one item.', type: AppFeedbackType.error);
       return;
     }
 
@@ -620,7 +621,7 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
     if (!mounted) return;
     Navigator.pop(context);
     widget.onReturnProcessed();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Open return processed successfully!'), backgroundColor: Colors.green));
+    AppFeedback.show(context, 'Open return processed successfully!', type: AppFeedbackType.success);
   }
 
   @override
@@ -1441,33 +1442,135 @@ class _ProcessReturnDialog extends StatefulWidget {
 }
 
 class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
-  final Map<int, double> _returnQty = {};
+  final Map<int, int> _returnQty = {};
+  final Map<int, String> _selectedUnits = {};
+  final Map<int, Product> _productById = {};
   bool _isProcessing = false;
 
   @override
   void initState() {
     super.initState();
-    for (var item in widget.items) { _returnQty[item.id!] = 0; }
+    _loadProducts();
+    for (var item in widget.items) {
+      _returnQty[item.id!] = 0;
+    }
   }
 
-  double get _total => widget.items.fold(0, (s, i) => s + (_returnQty[i.id!] ?? 0) * i.price);
+  Future<void> _loadProducts() async {
+    final products = await DatabaseHelper.instance.getAllProducts();
+    if (!mounted) return;
+    setState(() {
+      for (final product in products) {
+        if (product.id != null) {
+          _productById[product.id!] = product;
+        }
+      }
+      for (final item in widget.items) {
+        final product = _productById[item.productId];
+        final defaultUnit = product != null && product.packaging.isNotEmpty ? product.packaging.first.name : 'Base Unit';
+        _selectedUnits[item.id!] = defaultUnit;
+      }
+    });
+  }
+
+  Product? _productFor(SaleItem item) => _productById[item.productId];
+
+  String _saleUnitFor(SaleItem item) {
+    final match = RegExp(r'\(([^)]+)\)\s*$').firstMatch(item.productName);
+    return match?.group(1)?.trim() ?? 'Base Unit';
+  }
+
+  double _saleQtyInUnit(SaleItem item) {
+    final unit = _saleUnitFor(item);
+    final product = _productFor(item);
+    final multiplier = product?.getMultiplier(unit) ?? 1;
+    if (multiplier <= 0) return item.quantity.toDouble();
+    return item.quantity / multiplier;
+  }
+
+  List<String> _unitOptionsFor(SaleItem item) {
+    final product = _productFor(item);
+    if (product == null || product.packaging.isEmpty) return ['Base Unit'];
+    return product.packaging.map((u) => u.name).toList();
+  }
+
+  String _selectedUnitFor(SaleItem item) {
+    final options = _unitOptionsFor(item);
+    final current = _selectedUnits[item.id!];
+    if (current != null && options.contains(current)) return current;
+    return options.first;
+  }
+
+  void _setUnit(SaleItem item, String unit) {
+    setState(() {
+      _selectedUnits[item.id!] = unit;
+      final maxQty = _maxQtyFor(item, unit);
+      final currentQty = _returnQty[item.id!] ?? 0;
+      if (currentQty > maxQty) {
+        _returnQty[item.id!] = maxQty;
+      }
+    });
+  }
+
+  int _multiplierFor(SaleItem item, String unit) {
+    final product = _productFor(item);
+    if (product == null || product.packaging.isEmpty) return 1;
+    return product.getMultiplier(unit);
+  }
+
+  double _unitPriceFor(SaleItem item, String unit) {
+    final product = _productFor(item);
+    if (product == null) return item.price;
+    if (product.packaging.isEmpty) return product.sellPrice;
+    final firstMultiplier = product.getMultiplier(product.packaging.first.name);
+    return product.sellPrice * _multiplierFor(item, unit) / firstMultiplier;
+  }
+
+  int _maxQtyFor(SaleItem item, String unit) {
+    final multiplier = _multiplierFor(item, unit);
+    if (multiplier <= 0) return 0;
+    return (item.quantity / multiplier).floor();
+  }
+
+  double get _total {
+    return widget.items.fold(0, (sum, item) {
+      final qty = _returnQty[item.id!] ?? 0;
+      if (qty <= 0) return sum;
+      final unit = _selectedUnitFor(item);
+      return sum + qty * _unitPriceFor(item, unit);
+    });
+  }
 
   Future<void> _process() async {
     if (_total <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select at least one item to return.'), backgroundColor: Colors.red));
+      AppFeedback.show(context, 'Select at least one item to return.', type: AppFeedbackType.error);
       return;
     }
     setState(() => _isProcessing = true);
 
     final returnItems = widget.items
         .where((i) => (_returnQty[i.id!] ?? 0) > 0)
-        .map((i) => SalesReturnItem(productId: i.productId, productName: i.productName, unitName: 'Base Unit', quantityReturned: _returnQty[i.id!]!, price: i.price, total: _returnQty[i.id!]! * i.price))
+        .map((i) {
+          final unit = _selectedUnitFor(i);
+          final qty = _returnQty[i.id!] ?? 0;
+          final unitPrice = _unitPriceFor(i, unit);
+          final multiplier = _multiplierFor(i, unit);
+          return SalesReturnItem(
+            productId: i.productId,
+            productName: i.productName,
+            unitName: unit,
+            quantityReturned: (qty * multiplier).toDouble(),
+            price: unitPrice,
+            total: qty * unitPrice,
+          );
+        })
         .toList();
 
     final ret = SalesReturn(
       dssId: widget.dssId,
       date: DateTime.now(),
       invoiceNumber: widget.sale.invoiceNumber,
+      returnNumber: await DatabaseHelper.instance.nextReturnNumber(),
       customerName: widget.sale.customerName,
       mode: widget.mode,
       reason: widget.reason,
@@ -1483,7 +1586,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
     setState(() => _isProcessing = false);
     Navigator.pop(context);
     widget.onProcessed();
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Return processed successfully!'), backgroundColor: Colors.green));
+    AppFeedback.show(context, 'Return processed successfully!', type: AppFeedbackType.success);
   }
 
   @override
@@ -1556,7 +1659,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
                             child: Row(
                               children: [
                                 Expanded(flex: 4, child: Text('ITEM', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
-                                Expanded(flex: 2, child: Text('PRICE/UNIT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
+                                Expanded(flex: 2, child: Text('UNIT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                                 Expanded(flex: 2, child: Text('PURCHASED', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                                 Expanded(flex: 3, child: Text('RETURN QTY', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
                                 Expanded(flex: 2, child: Text('REFUND', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.grey.shade500, letterSpacing: 0.5))),
@@ -1565,25 +1668,49 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
                           ),
                           ...widget.items.map((item) {
                             final qty = _returnQty[item.id!] ?? 0;
+                            final unit = _selectedUnitFor(item);
+                            final maxQty = _maxQtyFor(item, unit);
+                            final unitPrice = _unitPriceFor(item, unit);
+                            final purchasedUnit = _saleUnitFor(item);
+                            final purchasedQty = _saleQtyInUnit(item);
                             return Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                               decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.grey.shade100))),
                               child: Row(
                                 children: [
                                   Expanded(flex: 4, child: Text(item.productName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                  Expanded(flex: 2, child: Text('Rs. ${item.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13))),
-                                  Expanded(flex: 2, child: Text(item.quantity.toStringAsFixed(0), style: const TextStyle(fontSize: 13))),
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        isExpanded: true,
+                                        value: unit,
+                                        items: _unitOptionsFor(item).map((u) => DropdownMenuItem(value: u, child: Text(u, overflow: TextOverflow.ellipsis))).toList(),
+                                        onChanged: (val) {
+                                          if (val != null) _setUnit(item, val);
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      '${purchasedQty.toStringAsFixed(purchasedQty == purchasedQty.roundToDouble() ? 0 : 2)} $purchasedUnit',
+                                      style: const TextStyle(fontSize: 13),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
                                   Expanded(
                                     flex: 3,
                                     child: Row(
                                       children: [
                                         _QtyBtn(icon: Icons.remove, onTap: qty > 0 ? () => setState(() => _returnQty[item.id!] = qty - 1) : null),
-                                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text(qty.toStringAsFixed(0), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
-                                        _QtyBtn(icon: Icons.add, onTap: qty < item.quantity ? () => setState(() => _returnQty[item.id!] = qty + 1) : null),
+                                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text(qty.toString(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
+                                        _QtyBtn(icon: Icons.add, onTap: qty < maxQty ? () => setState(() => _returnQty[item.id!] = qty + 1) : null),
                                       ],
                                     ),
                                   ),
-                                  Expanded(flex: 2, child: Text('Rs. ${(qty * item.price).toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)))),
+                                  Expanded(flex: 2, child: Text('Rs. ${(qty * unitPrice).toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)))),
                                 ],
                               ),
                             );
@@ -1744,7 +1871,7 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('RET-${r.id}', style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                        Text(r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}', style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                         const SizedBox(height: 3),
                         Text('${r.invoiceNumber}  •  $dateStr', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
                         const SizedBox(height: 10),
@@ -1914,7 +2041,7 @@ class _DeleteReturnDialogState extends State<_DeleteReturnDialog> {
     widget.onDeleted();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('RET-${widget.salesReturn.id} deleted and stock restored.'),
+        content: Text('${widget.salesReturn.returnNumber.isNotEmpty ? widget.salesReturn.returnNumber : 'SR-${widget.salesReturn.id}'} deleted and stock restored.'),
         backgroundColor: Colors.red.shade700,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -1969,7 +2096,7 @@ class _DeleteReturnDialogState extends State<_DeleteReturnDialog> {
                       children: [
                         const Text('Delete Return', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                         const SizedBox(height: 4),
-                        Text('RET-${r.id}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
+                        Text('${r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}'}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
                       ],
                     ),
                   ),
@@ -2088,6 +2215,285 @@ class _DeleteReturnDialogState extends State<_DeleteReturnDialog> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// EDIT RETURN DIALOG
+// ---------------------------------------------------------------------------
+class _EditReturnDialog extends StatefulWidget {
+  final SalesReturn salesReturn;
+  final VoidCallback onSaved;
+
+  const _EditReturnDialog({required this.salesReturn, required this.onSaved});
+
+  @override
+  State<_EditReturnDialog> createState() => _EditReturnDialogState();
+}
+
+class _EditReturnDialogState extends State<_EditReturnDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late DateTime _date;
+  late final TextEditingController _customerCtrl;
+  late String _mode;
+  late String _status;
+  late final TextEditingController _reasonCtrl;
+  bool _isSaving = false;
+
+  static const List<String> _modes = ['Cash Refund', 'Store Credit', 'Exchange'];
+  static const List<String> _statuses = ['Posted', 'Draft'];
+
+  @override
+  void initState() {
+    super.initState();
+    _date = widget.salesReturn.date;
+    _customerCtrl = TextEditingController(text: widget.salesReturn.customerName ?? '');
+    _mode = widget.salesReturn.mode;
+    _status = widget.salesReturn.status;
+    _reasonCtrl = TextEditingController(text: widget.salesReturn.reason);
+  }
+
+  @override
+  void dispose() {
+    _customerCtrl.dispose();
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _date,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+    if (picked != null) {
+      setState(() => _date = picked);
+    }
+  }
+
+  Future<void> _save() async {
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (widget.salesReturn.id == null) return;
+
+    setState(() => _isSaving = true);
+    try {
+      final total = widget.salesReturn.totalRefund;
+      final updated = SalesReturn(
+        id: widget.salesReturn.id,
+        dssId: widget.salesReturn.dssId,
+        date: _date,
+        invoiceNumber: widget.salesReturn.invoiceNumber,
+        returnNumber: widget.salesReturn.returnNumber,
+        customerName: _customerCtrl.text.trim().isEmpty ? null : _customerCtrl.text.trim(),
+        mode: _mode,
+        reason: _reasonCtrl.text.trim(),
+        totalRefund: total,
+        cashRefunded: _mode == 'Cash Refund' ? total : 0.0,
+        creditIssued: _mode == 'Store Credit' ? total : 0.0,
+        status: _status,
+        items: widget.salesReturn.items,
+      );
+      await DatabaseHelper.instance.updateSalesReturn(updated);
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.onSaved();
+      AppFeedback.show(context, 'Return updated successfully!', type: AppFeedbackType.success);
+    } catch (e) {
+      if (!mounted) return;
+      AppFeedback.show(context, 'Failed to update return: $e', type: AppFeedbackType.error);
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final r = widget.salesReturn;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      child: Container(
+        width: 520,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.13), blurRadius: 40, offset: const Offset(0, 16))],
+        ),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(28, 24, 20, 24),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0A3356), Color(0xFF0F4C81), Color(0xFF1565C0)],
+                  ),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                      ),
+                      child: const Icon(Icons.edit_outlined, color: Colors.white, size: 22),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Edit Return', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                          const SizedBox(height: 4),
+                          Text('${r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}'}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: Icon(Icons.close, color: Colors.white.withValues(alpha: 0.75), size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(28),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextFormField(
+                      initialValue: r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}',
+                      readOnly: true,
+                      decoration: InputDecoration(
+                        labelText: 'Return Number',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    InkWell(
+                      onTap: _pickDate,
+                      borderRadius: BorderRadius.circular(12),
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: 'Return Date',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}',
+                              style: const TextStyle(fontSize: 14),
+                            ),
+                            const Icon(Icons.calendar_month_outlined, size: 18),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _customerCtrl,
+                      decoration: InputDecoration(
+                        labelText: 'Customer Name',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (value) => value == null || value.trim().isEmpty ? 'Customer name is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: _mode,
+                      decoration: InputDecoration(
+                        labelText: 'Refund Mode',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      items: _modes.map((mode) => DropdownMenuItem(value: mode, child: Text(mode))).toList(),
+                      validator: (value) => value == null || value.isEmpty ? 'Select a refund mode' : null,
+                      onChanged: (value) {
+                        if (value != null) setState(() => _mode = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      initialValue: _status,
+                      decoration: InputDecoration(
+                        labelText: 'Status',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      items: _statuses.map((status) => DropdownMenuItem(value: status, child: Text(status))).toList(),
+                      validator: (value) => value == null || value.isEmpty ? 'Select a status' : null,
+                      onChanged: (value) {
+                        if (value != null) setState(() => _status = value);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Refund Amount: Rs. ${r.totalRefund.toStringAsFixed(0)}', style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _reasonCtrl,
+                      maxLines: 3,
+                      decoration: InputDecoration(
+                        labelText: 'Reason',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      validator: (value) => value == null || value.trim().isEmpty ? 'Reason is required' : null,
+                    ),
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(child: Text('Cash refunded: Rs. ${(_mode == 'Cash Refund' ? r.totalRefund : 0).toStringAsFixed(0)}')),
+                          Expanded(child: Text('Store credit: Rs. ${(_mode == 'Store Credit' ? r.totalRefund : 0).toStringAsFixed(0)}')),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.fromLTRB(28, 16, 28, 24),
+                decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.grey.shade100))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: _isSaving ? null : () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton.icon(
+                      onPressed: _isSaving ? null : _save,
+                      icon: _isSaving
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                          : const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save Changes'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

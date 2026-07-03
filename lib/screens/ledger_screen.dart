@@ -32,10 +32,10 @@ class LedgerEntry {
   factory LedgerEntry.fromMap(Map<String, dynamic> map) {
     return LedgerEntry(
       date: DateTime.parse(map['date']),
-      title: map['reference'] ?? '',
+      title: map['title'] ?? map['reference'] ?? '',
       description: map['description'] ?? '',
       category: map['category'] ?? '',
-      type: map['type'] ?? '',
+      type: (map['type'] ?? '').toString().toUpperCase(),
       amount: (map['amount'] ?? 0).toDouble(),
     );
   }
@@ -234,7 +234,12 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
 
   void _syncNow() {
     // TODO: Wire "Sync now" to trigger actual SQLite-to-Firestore sync and update the "Updated [time]" timestamp
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Syncing data to Firebase...')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Syncing data to Firebase...'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   Future<void> _addExpense() async {
@@ -247,7 +252,12 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
 
   void _exportCSV() {
     // TODO: Implement real CSV export logic for "Export CSV" button
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Exporting CSV...')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Exporting CSV...'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
@@ -558,10 +568,10 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     // --- Dynamic summary computation ---
     final fmt = NumberFormat('#,##0.00', 'en_US');
     final inflow = _generalLedger
-        .where((e) => e.type == 'SALE' || e.type == 'REFUND')
+        .where((e) => e.amount > 0)
         .fold(0.0, (sum, e) => sum + e.amount.abs());
     final outflow = _generalLedger
-        .where((e) => e.type == 'EXPENSE' || e.type == 'PURCHASE')
+        .where((e) => e.amount < 0)
         .fold(0.0, (sum, e) => sum + e.amount.abs());
     final opening = 0.0; // Could be fetched from a settings table in future
     final closing = opening + inflow - outflow;

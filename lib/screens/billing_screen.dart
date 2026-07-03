@@ -1879,6 +1879,124 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     });
   }
 
+  List<String> _unitOptionsForProduct(Product product) {
+    if (product.packaging.isEmpty) return ['Base Unit'];
+    return product.packaging.map((u) => u.name).toList();
+  }
+
+  double _pricePerUnitFor(Product product, String unit) {
+    if (product.packaging.isEmpty) return product.sellPrice;
+    final firstMultiplier = product.getMultiplier(product.packaging.first.name);
+    return product.sellPrice * product.getMultiplier(unit) / firstMultiplier;
+  }
+
+  Future<void> _editCartItem(int index) async {
+    final item = _cart[index];
+    final qtyController = TextEditingController(text: item.unitQty.toString());
+    String selectedUnit = item.unit;
+    final units = _unitOptionsForProduct(item.product);
+
+    final edited = await showDialog<_CartItem>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final otherBaseUnits = _cart
+                .asMap()
+                .entries
+                .where((entry) => entry.key != index && entry.value.product.id == item.product.id)
+                .fold(0, (sum, entry) => sum + entry.value.baseUnits);
+            final multiplier = item.product.getMultiplier(selectedUnit);
+            final maxQty = ((item.product.stock - otherBaseUnits) / multiplier).floor().clamp(0, item.product.stock.toInt());
+            final pricePerUnit = _pricePerUnitFor(item.product, selectedUnit);
+
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              title: const Text('Edit cart item'),
+              content: SizedBox(
+                width: 420,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      initialValue: selectedUnit,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Unit'),
+                      items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                      onChanged: (val) {
+                        if (val == null) return;
+                        setDialogState(() {
+                          selectedUnit = val;
+                          final newMultiplier = item.product.getMultiplier(selectedUnit);
+                          final newMaxQty = ((item.product.stock - otherBaseUnits) / newMultiplier).floor();
+                          final currentQty = int.tryParse(qtyController.text.trim()) ?? 1;
+                          if (currentQty > newMaxQty) {
+                            qtyController.text = newMaxQty.clamp(0, 999999).toString();
+                          }
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: qtyController,
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        labelText: 'Quantity',
+                        helperText: 'Max: $maxQty',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Price: Rs. ${pricePerUnit.toStringAsFixed(0)} / $selectedUnit',
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final qty = int.tryParse(qtyController.text.trim()) ?? 0;
+                    if (qty <= 0 || qty > maxQty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Enter a valid quantity within stock limits.')),
+                      );
+                      return;
+                    }
+                    Navigator.pop(
+                      dialogContext,
+                      _CartItem(
+                        product: item.product,
+                        unit: selectedUnit,
+                        unitQty: qty,
+                        pricePerUnit: pricePerUnit,
+                      ),
+                    );
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    qtyController.dispose();
+
+    if (edited != null && mounted) {
+      setState(() => _cart[index] = edited);
+    }
+  }
+
   void _saveSale() async {
     if (_cart.isEmpty) return;
 
@@ -1902,8 +2020,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     setState(() => _isSaving = true);
 
     try {
+      final invoiceNumber = await DatabaseHelper.instance.nextSaleInvoiceNumber();
       final sale = Sale(
-        invoiceNumber: 'INV-${DateTime.now().millisecondsSinceEpoch}',
+        invoiceNumber: invoiceNumber,
         dssId: widget.dssId,
         customerId: _selectedCustomer?.id,
         customerName: _selectedCustomer?.name,
@@ -2557,14 +2676,12 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                               width: 40,
                                               child: IconButton(
                                                 icon: const Icon(
-                                                  Icons.delete_outline,
+                                                  Icons.edit_outlined,
                                                   size: 16,
-                                                  color: Colors.red,
+                                                  color: _primary,
                                                 ),
-                                                onPressed: () => setState(
-                                                  () => _cart.removeAt(i),
-                                                ),
-                                                tooltip: 'Remove',
+                                                onPressed: () => _editCartItem(i),
+                                                tooltip: 'Edit',
                                               ),
                                             ),
                                           ],

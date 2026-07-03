@@ -51,6 +51,7 @@ class SalesReturn {
   int dssId;
   DateTime date;
   String invoiceNumber;
+  String returnNumber;
   String? customerName;
   String mode; // 'Cash Refund', 'Store Credit', etc.
   String reason;
@@ -65,6 +66,7 @@ class SalesReturn {
     required this.dssId,
     required this.date,
     required this.invoiceNumber,
+    this.returnNumber = '',
     this.customerName,
     required this.mode,
     required this.reason,
@@ -81,6 +83,7 @@ class SalesReturn {
       'dss_id': dssId,
       'date': date.toIso8601String(),
       'invoice_number': invoiceNumber,
+      'return_number': returnNumber,
       'customer_name': customerName,
       'mode': mode,
       'reason': reason,
@@ -97,6 +100,7 @@ class SalesReturn {
       dssId: map['dss_id'],
       date: DateTime.parse(map['date']),
       invoiceNumber: map['invoice_number'],
+      returnNumber: map['return_number']?.toString() ?? '',
       customerName: map['customer_name'],
       mode: map['mode'],
       reason: map['reason'],

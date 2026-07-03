@@ -8,6 +8,8 @@ import '../models/daily_sales_sheet.dart';
 import '../models/sale.dart';
 import '../models/expense.dart';
 import '../models/sales_return.dart';
+import '../models/customer_payment.dart';
+import '../models/supplier_payment.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -26,7 +28,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 11,
+      version: 12,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -163,6 +165,7 @@ CREATE TABLE IF NOT EXISTS customer_payments (
   date        TEXT NOT NULL,
   amount      REAL NOT NULL,
   reference   TEXT NOT NULL,
+  invoice_number TEXT,
   notes       TEXT,
   FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
 )""");
@@ -173,6 +176,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   date        TEXT NOT NULL,
   amount      REAL NOT NULL,
   reference   TEXT NOT NULL,
+  invoice_number TEXT,
   notes       TEXT,
   FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
 )""");
@@ -207,6 +211,25 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       final colNames = cols.map((c) => c['name'] as String).toSet();
       if (!colNames.contains('unit_name')) {
         await db.execute("ALTER TABLE sales_return_items ADD COLUMN unit_name TEXT NOT NULL DEFAULT 'Base Unit'");
+      }
+    }
+    if (oldVersion < 12) {
+      final customerPaymentCols = await db.rawQuery("PRAGMA table_info(customer_payments)");
+      final customerPaymentNames = customerPaymentCols.map((c) => c['name'] as String).toSet();
+      if (!customerPaymentNames.contains('invoice_number')) {
+        await db.execute("ALTER TABLE customer_payments ADD COLUMN invoice_number TEXT");
+      }
+
+      final supplierPaymentCols = await db.rawQuery("PRAGMA table_info(supplier_payments)");
+      final supplierPaymentNames = supplierPaymentCols.map((c) => c['name'] as String).toSet();
+      if (!supplierPaymentNames.contains('invoice_number')) {
+        await db.execute("ALTER TABLE supplier_payments ADD COLUMN invoice_number TEXT");
+      }
+
+      final returnCols = await db.rawQuery("PRAGMA table_info(sales_returns)");
+      final returnNames = returnCols.map((c) => c['name'] as String).toSet();
+      if (!returnNames.contains('return_number')) {
+        await db.execute("ALTER TABLE sales_returns ADD COLUMN return_number TEXT");
       }
     }
   }
@@ -335,6 +358,7 @@ CREATE TABLE IF NOT EXISTS sales_returns (
   dss_id          INTEGER NOT NULL,
   date            TEXT NOT NULL,
   invoice_number  TEXT NOT NULL,
+  return_number   TEXT,
   customer_name   TEXT,
   mode            TEXT NOT NULL,
   reason          TEXT NOT NULL,
@@ -374,6 +398,7 @@ CREATE TABLE IF NOT EXISTS customer_payments (
   date        TEXT NOT NULL,
   amount      REAL NOT NULL,
   reference   TEXT NOT NULL,
+  invoice_number TEXT,
   notes       TEXT,
   FOREIGN KEY (customer_id) REFERENCES customers (id) ON DELETE CASCADE
 )""");
@@ -385,6 +410,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   date        TEXT NOT NULL,
   amount      REAL NOT NULL,
   reference   TEXT NOT NULL,
+  invoice_number TEXT,
   notes       TEXT,
   FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
 )""");
@@ -659,6 +685,20 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     return db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<String> nextSaleInvoiceNumber() async {
+    final db = await instance.database;
+    final rows = await db.rawQuery('SELECT COUNT(*) AS cnt FROM sales');
+    final count = (rows.first['cnt'] as int?) ?? 0;
+    return 'INV-${(count + 1).toString().padLeft(3, '0')}';
+  }
+
+  Future<String> nextReturnNumber() async {
+    final db = await instance.database;
+    final rows = await db.rawQuery('SELECT COUNT(*) AS cnt FROM sales_returns');
+    final count = (rows.first['cnt'] as int?) ?? 0;
+    return 'SR-${(count + 1).toString().padLeft(3, '0')}';
+  }
+
   // -- CUSTOMERS ---------------------------------------------------------------
 
   Future<int> insertCustomer(Customer customer) async {
@@ -761,17 +801,12 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         );
       }
       if (sale.customerId != null && sale.customerId!.isNotEmpty) {
-        if (sale.balance > 0) {
-          await txn.rawUpdate(
-            'UPDATE customers SET pendingAmount = pendingAmount + ?, totalPurchases = totalPurchases + ?, lastVisit = ? WHERE id = ?',
-            [sale.balance, sale.total, sale.date, sale.customerId]
-          );
-        } else {
-          await txn.rawUpdate(
-            'UPDATE customers SET totalPurchases = totalPurchases + ?, lastVisit = ? WHERE id = ?',
-            [sale.total, sale.date, sale.customerId]
-          );
-        }
+        final dueAmount = (sale.total - sale.received).clamp(0.0, double.infinity);
+        final advanceAmount = (sale.received - sale.total).clamp(0.0, double.infinity);
+        await txn.rawUpdate(
+          'UPDATE customers SET pendingAmount = pendingAmount + ?, advanceAmount = advanceAmount + ?, totalPurchases = totalPurchases + ?, lastVisit = ? WHERE id = ?',
+          [dueAmount, advanceAmount, sale.total, sale.date, sale.customerId]
+        );
       }
       if (sale.paymentMethod == 'Cash') {
         await txn.rawUpdate(
@@ -781,6 +816,64 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       }
     });
     return saleId;
+  }
+
+  Future<int> insertCustomerPayment(CustomerPayment payment) async {
+    final db = await instance.database;
+    return await db.transaction((txn) async {
+      final paymentMap = payment.toMap();
+      paymentMap.remove('id');
+      final id = await txn.insert('customer_payments', paymentMap);
+
+      final customerRows = await txn.query('customers', where: 'id = ?', whereArgs: [payment.customerId], limit: 1);
+      if (customerRows.isNotEmpty) {
+        final customer = customerRows.first;
+        final existingPending = (customer['pendingAmount'] as num?)?.toDouble() ?? 0.0;
+        final existingAdvance = (customer['advanceAmount'] as num?)?.toDouble() ?? 0.0;
+        final amount = payment.amount;
+        final appliedToPending = amount <= existingPending ? amount : existingPending;
+        final extraAdvance = amount > existingPending ? amount - existingPending : 0.0;
+        await txn.update(
+          'customers',
+          {
+            'pendingAmount': (existingPending - appliedToPending).clamp(0.0, double.infinity),
+            'advanceAmount': existingAdvance + extraAdvance,
+          },
+          where: 'id = ?',
+          whereArgs: [payment.customerId],
+        );
+      }
+      return id;
+    });
+  }
+
+  Future<int> insertSupplierPayment(SupplierPayment payment) async {
+    final db = await instance.database;
+    return await db.transaction((txn) async {
+      final paymentMap = payment.toMap();
+      paymentMap.remove('id');
+      final id = await txn.insert('supplier_payments', paymentMap);
+
+      final supplierRows = await txn.query('suppliers', where: 'id = ?', whereArgs: [payment.supplierId], limit: 1);
+      if (supplierRows.isNotEmpty) {
+        final supplier = supplierRows.first;
+        final existingPending = (supplier['pendingAmount'] as num?)?.toDouble() ?? 0.0;
+        final existingAdvance = (supplier['advanceAmount'] as num?)?.toDouble() ?? 0.0;
+        final amount = payment.amount;
+        final appliedToPending = amount <= existingPending ? amount : existingPending;
+        final extraAdvance = amount > existingPending ? amount - existingPending : 0.0;
+        await txn.update(
+          'suppliers',
+          {
+            'pendingAmount': (existingPending - appliedToPending).clamp(0.0, double.infinity),
+            'advanceAmount': existingAdvance + extraAdvance,
+          },
+          where: 'id = ?',
+          whereArgs: [payment.supplierId],
+        );
+      }
+      return id;
+    });
   }
 
   Future<List<Sale>> getSalesForDSS(int dssId) async {
@@ -1056,22 +1149,22 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
     return await db.rawQuery('''
-      SELECT date, 'Sale' AS type, invoice_number AS ref, customer_name AS party, received AS debit, 0.0 AS credit, received AS amount FROM sales
+      SELECT date, invoice_number AS title, customer_name AS description, 'Sales' AS category, 'Sale' AS type, received AS debit, 0.0 AS credit, received AS amount FROM sales
         WHERE received > 0 AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Return' AS type, invoice_number AS ref, customer_name AS party, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
+      SELECT date, return_number AS title, customer_name AS description, 'Sales Return' AS category, 'Return' AS type, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
         WHERE total_refund > 0 AND date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Expense' AS type, category AS ref, title AS party, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
+      SELECT date, title AS title, notes AS description, category AS category, 'Expense' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
         WHERE date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Receipt' AS type, reference AS ref, 'Customer' AS party, amount AS debit, 0.0 AS credit, amount AS amount FROM customer_payments
+      SELECT date, COALESCE(invoice_number, reference) AS title, reference AS description, 'Customer Receipt' AS category, 'Receipt' AS type, amount AS debit, 0.0 AS credit, amount AS amount FROM customer_payments
         WHERE date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT date, 'Payment' AS type, reference AS ref, 'Supplier' AS party, 0.0 AS debit, amount AS credit, -amount AS amount FROM supplier_payments
+      SELECT date, COALESCE(invoice_number, reference) AS title, reference AS description, 'Supplier Payment' AS category, 'Payment' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM supplier_payments
         WHERE date(date) BETWEEN date(?) AND date(?)
       UNION ALL
-      SELECT order_date AS date, 'Purchase' AS type, po_number AS ref, supplier AS party, 0.0 AS debit, paid_amount AS credit, -paid_amount AS amount FROM purchase_orders
+      SELECT order_date AS date, po_number AS title, supplier AS description, 'Purchase' AS category, 'Purchase' AS type, 0.0 AS debit, paid_amount AS credit, -paid_amount AS amount FROM purchase_orders
         WHERE paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?)
       ORDER BY date DESC
     ''', [f, t, f, t, f, t, f, t, f, t, f, t]);
@@ -1081,6 +1174,9 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
+    final customerRows = await db.query('customers', where: 'id = ?', whereArgs: [customerId], limit: 1);
+    if (customerRows.isEmpty) return [];
+    final customerName = customerRows.first['name'] as String;
     final transactions = await db.rawQuery('''
       SELECT date, invoice_number AS reference, 'Sale Invoice' AS description, 'Sale' AS type, total AS debit, 0.0 AS credit, 3 AS sort_order
       FROM sales WHERE customer_id = ? AND date(date) BETWEEN date(?) AND date(?)
@@ -1094,7 +1190,11 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       SELECT sr.date, sr.invoice_number AS reference, 'Items returned' AS description, 'Return' AS type, 0.0 AS debit, sr.total_refund AS credit, 2 AS sort_order
       FROM sales_returns sr JOIN sales s ON sr.invoice_number = s.invoice_number
       WHERE s.customer_id = ? AND date(sr.date) BETWEEN date(?) AND date(?)
-    ''', [customerId, f, t, customerId, f, t, customerId, f, t, customerId, f, t]);
+      UNION ALL
+      SELECT sr.date, sr.return_number AS reference, 'Open Return' AS description, 'Return' AS type, 0.0 AS debit, sr.total_refund AS credit, 2 AS sort_order
+      FROM sales_returns sr
+      WHERE sr.customer_name = ? AND sr.invoice_number LIKE 'OPEN-%' AND date(sr.date) BETWEEN date(?) AND date(?)
+    ''', [customerId, f, t, customerId, f, t, customerId, f, t, customerId, f, t, customerName, f, t]);
     
     // Process running balance
     final all = List<Map<String, dynamic>>.from(transactions);
@@ -1109,15 +1209,22 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       all[i] = {...all[i], 'balance': balance};
     }
     final closingBalance = balance;
-    for (var i = 0; i < all.length; i++) {
-      all[i] = {...all[i], 'closing_balance': closingBalance};
-    }
     // Sort descending for UI
     all.sort((a, b) {
       final dateCmp = (b['date'] as String).compareTo(a['date'] as String);
       if (dateCmp != 0) return dateCmp;
       return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
     });
+    balance = closingBalance;
+    for (var i = 0; i < all.length; i++) {
+      final row = all[i];
+      all[i] = {
+        ...row,
+        'balance': balance,
+        'closing_balance': closingBalance,
+      };
+      balance -= (row['debit'] as num).toDouble() - (row['credit'] as num).toDouble();
+    }
     return all;
   }
 
@@ -1155,15 +1262,22 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       all[i] = {...all[i], 'balance': balance};
     }
     final closingBalance = balance;
-    for (var i = 0; i < all.length; i++) {
-      all[i] = {...all[i], 'closing_balance': closingBalance};
-    }
     // Sort descending for UI
     all.sort((a, b) {
       final dateCmp = (b['date'] as String).compareTo(a['date'] as String);
       if (dateCmp != 0) return dateCmp;
       return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
     });
+    balance = closingBalance;
+    for (var i = 0; i < all.length; i++) {
+      final row = all[i];
+      all[i] = {
+        ...row,
+        'balance': balance,
+        'closing_balance': closingBalance,
+      };
+      balance -= (row['debit'] as num).toDouble() - (row['credit'] as num).toDouble();
+    }
     return all;
   }
 
@@ -1208,6 +1322,11 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       final items = returnData.items;
       final returnMap = returnData.toMap();
       returnMap.remove('id');
+      if ((returnMap['return_number']?.toString() ?? '').trim().isEmpty) {
+        final nextRows = await txn.rawQuery('SELECT COUNT(*) AS cnt FROM sales_returns');
+        final count = (nextRows.first['cnt'] as int?) ?? 0;
+        returnMap['return_number'] = 'SR-${(count + 1).toString().padLeft(3, '0')}';
+      }
       returnId = await txn.insert('sales_returns', returnMap);
       for (final item in items) {
         final itemMap = item.toMap();
@@ -1248,6 +1367,17 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     return await db.delete('sales_returns', where: 'id = ?', whereArgs: [id]);
   }
 
+  Future<int> updateSalesReturn(SalesReturn returnData) async {
+    final db = await instance.database;
+    final map = returnData.toMap();
+    final id = returnData.id;
+    if (id == null) {
+      throw ArgumentError('Sales return id is required for update.');
+    }
+    map.remove('id');
+    return db.update('sales_returns', map, where: 'id = ?', whereArgs: [id]);
+  }
+
   // -- DEBUGGING ---------------------------------------------------------------
   Future<void> clearAllData() async {
     final db = await instance.database;
@@ -1273,8 +1403,11 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     });
   }
 
-  Future close() async {
-    final db = await instance.database;
-    db.close();
+  Future<void> closeDatabase() async {
+    final db = _database;
+    if (db != null) {
+      await db.close();
+      _database = null;
+    }
   }
 }

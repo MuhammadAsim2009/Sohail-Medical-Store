@@ -252,7 +252,7 @@ class _Sidebar extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Alee', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text('Admin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                         Text('Admin', style: TextStyle(color: Color(0xFF8F9BB3), fontSize: 11)),
                       ],
                     ),
@@ -503,7 +503,7 @@ class _TopBar extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Alee', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.1)),
+                    const Text('Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.1)),
                     Text('Admin', style: TextStyle(fontSize: 10, color: Colors.grey.shade500, height: 1.1)),
                   ],
                 ),

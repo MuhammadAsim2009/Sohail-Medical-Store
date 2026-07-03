@@ -6,6 +6,7 @@ class CustomerPayment {
   final String date;
   final double amount;
   final String reference;
+  final String? invoiceNumber;
   final String notes;
 
   CustomerPayment({
@@ -14,6 +15,7 @@ class CustomerPayment {
     required this.date,
     required this.amount,
     required this.reference,
+    this.invoiceNumber,
     this.notes = '',
   });
 
@@ -23,6 +25,7 @@ class CustomerPayment {
     String? date,
     double? amount,
     String? reference,
+    String? invoiceNumber,
     String? notes,
   }) {
     return CustomerPayment(
@@ -31,6 +34,7 @@ class CustomerPayment {
       date: date ?? this.date,
       amount: amount ?? this.amount,
       reference: reference ?? this.reference,
+      invoiceNumber: invoiceNumber ?? this.invoiceNumber,
       notes: notes ?? this.notes,
     );
   }
@@ -42,6 +46,7 @@ class CustomerPayment {
       'date': date,
       'amount': amount,
       'reference': reference,
+      'invoice_number': invoiceNumber,
       'notes': notes,
     };
   }
@@ -53,6 +58,7 @@ class CustomerPayment {
       date: map['date'] ?? '',
       amount: (map['amount'] ?? 0).toDouble(),
       reference: map['reference'] ?? '',
+      invoiceNumber: map['invoice_number']?.toString(),
       notes: map['notes'] ?? '',
     );
   }

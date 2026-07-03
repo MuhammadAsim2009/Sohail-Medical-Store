@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 
 import '../services/database_helper.dart';
 import '../models/customer.dart';
+import '../models/customer_payment.dart';
+import '../models/sale.dart';
 // ---------------------------------------------------------------------------
 // SCREEN
 // ---------------------------------------------------------------------------
@@ -157,7 +159,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
           ),
         );
       },
-    );
+    ).then((saved) {
+      if (saved == true) {
+        _loadCustomers();
+      }
+    });
   }
 
   void _confirmDelete(Customer c) {
@@ -1212,11 +1218,15 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
   final _notesController = TextEditingController();
   String _paymentMethod = 'Cash';
   bool _isGeneralReceipt = true;
+  bool _isSaving = false;
+  List<Sale> _availableInvoices = [];
+  String? _selectedInvoiceNumber;
 
   @override
   void initState() {
     super.initState();
     _receiptController.text = 'PAY-CUST-${DateTime.now().millisecondsSinceEpoch}';
+    _loadInvoices();
   }
 
   @override
@@ -1225,6 +1235,39 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
     _receiptController.dispose();
     _notesController.dispose();
     super.dispose();
+  }
+
+  Future<void> _loadInvoices() async {
+    final sales = await DatabaseHelper.instance.getAllSales();
+    final invoices = sales
+        .where((s) => s.customerId == widget.customer.id && s.balance > 0)
+        .toList()
+      ..sort((a, b) => b.date.compareTo(a.date));
+    if (!mounted) return;
+    setState(() {
+      _availableInvoices = invoices;
+      if (_availableInvoices.isNotEmpty) {
+        _isGeneralReceipt = false;
+        _selectedInvoiceNumber = _availableInvoices.first.invoiceNumber;
+        _amountController.text = _availableInvoices.first.balance.toStringAsFixed(0);
+      }
+    });
+  }
+
+  void _syncSelectedInvoice(String? invoiceNumber) {
+    setState(() {
+      _selectedInvoiceNumber = invoiceNumber;
+      Sale? selected;
+      for (final sale in _availableInvoices) {
+        if (sale.invoiceNumber == invoiceNumber) {
+          selected = sale;
+          break;
+        }
+      }
+      if (selected != null) {
+        _amountController.text = selected.balance.toStringAsFixed(0);
+      }
+    });
   }
 
   @override
@@ -1320,14 +1363,37 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                   children: [
                     const Text('Invoice Selection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
                     const SizedBox(height: 4),
-                    Text('Apply the receipt to a single invoice or keep it unassigned.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                    Text(
+                      _availableInvoices.isEmpty
+                          ? 'No open invoices found for this customer. You can still record a general receipt.'
+                          : 'Select an open invoice or record a general receipt.',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    ),
                     const SizedBox(height: 16),
+                    if (_availableInvoices.isNotEmpty)
+                      DropdownButtonFormField<String>(
+                        initialValue: _selectedInvoiceNumber,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: 'Apply to invoice',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        items: _availableInvoices
+                            .map((sale) => DropdownMenuItem<String>(
+                                  value: sale.invoiceNumber,
+                                  child: Text('${sale.invoiceNumber}  •  Rs. ${sale.balance.toStringAsFixed(0)} pending', overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            _syncSelectedInvoice(value);
+                            setState(() => _isGeneralReceipt = false);
+                          }
+                        },
+                      ),
+                    if (_availableInvoices.isNotEmpty) const SizedBox(height: 12),
                     InkWell(
-                      onTap: () {
-                        setState(() {
-                          _isGeneralReceipt = true;
-                        });
-                      },
+                      onTap: () => setState(() => _isGeneralReceipt = true),
                       borderRadius: BorderRadius.circular(12),
                       child: Container(
                         padding: const EdgeInsets.all(16),
@@ -1353,7 +1419,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                                 children: [
                                   Text('General receipt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade800)),
                                   const SizedBox(height: 4),
-                                  Text('Receive payment without linking it to a specific invoice.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                                  Text('Record a payment without linking it to a specific invoice.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
                                 ],
                               ),
                             ),
@@ -1464,35 +1530,36 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                   ),
                   const SizedBox(width: 12),
                   ElevatedButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      
-                      final screenWidth = MediaQuery.of(context).size.width;
-                      const snackBarWidth = 400.0;
-                      final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
-                      
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Row(
-                            children: [
-                              Icon(Icons.check_circle, color: Colors.white, size: 20),
-                              SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  'Payment recorded successfully',
-                                  style: TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-                                ),
+                    onPressed: _isSaving
+                        ? null
+                        : () async {
+                            final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
+                            if (amount <= 0) return;
+
+                            setState(() => _isSaving = true);
+                            final invoiceNumber = _isGeneralReceipt ? null : _selectedInvoiceNumber;
+                            final reference = invoiceNumber ?? _receiptController.text.trim();
+
+                            await DatabaseHelper.instance.insertCustomerPayment(
+                              CustomerPayment(
+                                customerId: widget.customer.id ?? '',
+                                date: DateTime.now().toIso8601String(),
+                                amount: amount,
+                                reference: reference,
+                                invoiceNumber: invoiceNumber,
+                                notes: _notesController.text.trim(),
                               ),
-                            ],
-                          ),
-                          backgroundColor: Colors.green.shade600,
-                          behavior: SnackBarBehavior.floating,
-                          margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      );
-                    },
+                            );
+
+                            if (!mounted) return;
+                            Navigator.of(context).pop(true);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Payment recorded for ${invoiceNumber ?? 'general receipt'}'),
+                                backgroundColor: Colors.green.shade600,
+                              ),
+                            );
+                          },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF5D5FEF),
                       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -1501,7 +1568,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
-                    child: const Text('Record payment', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                    child: Text(_isSaving ? 'Saving...' : 'Record payment', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
                   ),
                 ],
               ),

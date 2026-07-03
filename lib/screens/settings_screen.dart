@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
+import 'package:file_picker/file_picker.dart';
 import '../widgets/executive_header.dart';
 import '../services/database_helper.dart';
 
@@ -274,7 +275,76 @@ class _BackupRestoreContent extends StatelessWidget {
   }
 
   Future<void> _restore(BuildContext context) async {
-     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Restore not implemented. Please overwrite pharmacy.db manually in app directory.')));
+    final messenger = ScaffoldMessenger.of(context);
+    String? selectedPath;
+    final restored = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Restore Database'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                selectedPath == null ? 'No backup file selected.' : selectedPath!,
+                style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final result = await FilePicker.platform.pickFiles(
+                    dialogTitle: 'Select backup database',
+                    type: FileType.custom,
+                    allowedExtensions: ['db', 'sqlite', 'sqlite3'],
+                    allowMultiple: false,
+                  );
+                  final path = result?.files.single.path;
+                  if (path != null && path.isNotEmpty) {
+                    setDialogState(() => selectedPath = path);
+                  }
+                },
+                icon: const Icon(Icons.folder_open_outlined, size: 18),
+                label: const Text('Browse'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selectedPath == null ? null : () => Navigator.pop(ctx, true),
+              child: const Text('Restore'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (restored != true || selectedPath == null) {
+      return;
+    }
+
+    try {
+      final source = File(selectedPath!);
+      if (!await source.exists()) {
+        messenger.showSnackBar(const SnackBar(content: Text('Backup file not found.')));
+        return;
+      }
+
+      final dbPath = await getDatabasesPath();
+      final target = File(p.join(dbPath, 'pharmacy.db'));
+
+      await DatabaseHelper.instance.closeDatabase();
+      await source.copy(target.path);
+      await DatabaseHelper.instance.database;
+
+      messenger.showSnackBar(const SnackBar(content: Text('Database restored successfully. Restart the app if needed.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+    }
   }
 
   Future<void> _clearAllData(BuildContext context) async {
