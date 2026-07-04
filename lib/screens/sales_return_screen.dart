@@ -1108,6 +1108,7 @@ class _EditOpenReturnItemDialog extends StatefulWidget {
 }
 
 class _EditOpenReturnItemDialogState extends State<_EditOpenReturnItemDialog> {
+  final _formKey = GlobalKey<FormState>();
   late String _unit;
   late TextEditingController _qtyCtrl;
   late TextEditingController _discCtrl;
@@ -1129,6 +1130,7 @@ class _EditOpenReturnItemDialogState extends State<_EditOpenReturnItemDialog> {
   }
 
   void _save() {
+    if (!_formKey.currentState!.validate()) return;
     final qty = int.tryParse(_qtyCtrl.text) ?? widget.item.qty;
     final discount = double.tryParse(_discCtrl.text) ?? widget.item.discount;
     if (qty <= 0) return;
@@ -1151,34 +1153,42 @@ class _EditOpenReturnItemDialogState extends State<_EditOpenReturnItemDialog> {
       title: const Text('Edit return item', style: TextStyle(fontWeight: FontWeight.w700)),
       content: SizedBox(
         width: 420,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(widget.item.product.name, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
-            ),
-            const SizedBox(height: 14),
-            DropdownButtonFormField<String>(
-              initialValue: _unit,
-              isExpanded: true,
-              decoration: const InputDecoration(labelText: 'Unit'),
-              items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-              onChanged: (val) => setState(() => _unit = val ?? _unit),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _qtyCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(labelText: 'Quantity'),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _discCtrl,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Discount %'),
-            ),
-          ],
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(widget.item.product.name, style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
+              ),
+              const SizedBox(height: 14),
+              DropdownButtonFormField<String>(
+                initialValue: _unit,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Unit'),
+                items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                onChanged: (val) => setState(() => _unit = val ?? _unit),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _qtyCtrl,
+                keyboardType: TextInputType.number,
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return 'Required';
+                  if ((int.tryParse(val) ?? 0) <= 0) return 'Must be > 0';
+                  return null;
+                },
+                decoration: const InputDecoration(labelText: 'Quantity'),
+              ),
+              const SizedBox(height: 12),
+              TextFormField(
+                controller: _discCtrl,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Discount %'),
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
@@ -2039,14 +2049,7 @@ class _DeleteReturnDialogState extends State<_DeleteReturnDialog> {
     if (!mounted) return;
     Navigator.pop(context);
     widget.onDeleted();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${widget.salesReturn.returnNumber.isNotEmpty ? widget.salesReturn.returnNumber : 'SR-${widget.salesReturn.id}'} deleted and stock restored.'),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+    AppFeedback.show(context, '${widget.salesReturn.returnNumber.isNotEmpty ? widget.salesReturn.returnNumber : 'SR-${widget.salesReturn.id}'} deleted and stock restored.', type: AppFeedbackType.success);
   }
 
   @override
@@ -2485,6 +2488,10 @@ class _EditReturnDialogState extends State<_EditReturnDialog> {
                     const SizedBox(width: 12),
                     ElevatedButton.icon(
                       onPressed: _isSaving ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF0F4C81),
+                        foregroundColor: Colors.white,
+                      ),
                       icon: _isSaving
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : const Icon(Icons.save_outlined, size: 18),

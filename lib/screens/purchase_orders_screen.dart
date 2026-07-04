@@ -5,6 +5,7 @@ import '../models/product.dart';
 import '../models/purchase_order.dart';
 import '../models/supplier.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PURCHASE ORDERS SCREEN
@@ -65,7 +66,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     if (order != null) {
       final saved = await DatabaseHelper.instance.insertPurchaseOrder(order);
       setState(() => _orders.insert(0, saved));
-      _snack('Purchase order ${saved.poNumber} created');
+      AppFeedback.show(context, 'Purchase order ${saved.poNumber} created', type: AppFeedbackType.success);
     }
   }
 
@@ -80,14 +81,14 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     if (updated != null) {
       await DatabaseHelper.instance.updatePurchaseOrder(updated);
       await _load();
-      _snack('Order updated');
+      AppFeedback.show(context, 'Order updated', type: AppFeedbackType.success);
     }
   }
 
   Future<void> _postOrder(PurchaseOrder order) async {
     await DatabaseHelper.instance.receivePurchaseOrder(order);
     await _load();
-    _snack('Order posted — stock updated successfully', green: true);
+    AppFeedback.show(context, 'Order posted — stock updated successfully', type: AppFeedbackType.success);
   }
 
   Future<void> _cancelOrder(PurchaseOrder order) async {
@@ -110,7 +111,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     if (confirm == true) {
       await DatabaseHelper.instance.updateOrderStatus(order.id!, 'Cancelled');
       await _load();
-      _snack('Order cancelled');
+      AppFeedback.show(context, 'Order cancelled', type: AppFeedbackType.info);
     }
   }
 
@@ -124,25 +125,6 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
             : null,
       ),
     );
-  }
-
-  void _snack(String msg, {bool green = false, IconData icon = Icons.info_outline_rounded}) {
-    final screenWidth = MediaQuery.of(context).size.width;
-    const snackBarWidth = 420.0;
-    final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Row(children: [
-        Icon(green ? Icons.check_circle_rounded : icon, color: Colors.white, size: 20),
-        const SizedBox(width: 12),
-        Expanded(child: Text(msg, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14))),
-      ]),
-      backgroundColor: green ? Colors.green.shade600 : const Color(0xFF0F4C81),
-      behavior: SnackBarBehavior.floating,
-      margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      duration: const Duration(seconds: 3),
-    ));
   }
 
   @override
@@ -700,6 +682,7 @@ class _OrderFormDialog extends StatefulWidget {
 }
 
 class _OrderFormDialogState extends State<_OrderFormDialog> {
+  final _formKey = GlobalKey<FormState>();
   String? _selectedSupplier;
   final _taxCtrl      = TextEditingController(text: '0');
   final _paidCtrl     = TextEditingController(text: '0');
@@ -779,6 +762,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
   final _currency = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 0);
 
   void _save() {
+    if (!_formKey.currentState!.validate()) return;
     if (_selectedSupplier == null || _selectedSupplier!.isEmpty || _items.isEmpty) return;
     setState(() => _saving = true);
 
@@ -848,9 +832,11 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
 
           // ── Body ───────────────────────────────────────────────────────────
           Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            child: Form(
+              key: _formKey,
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(20),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 // Left column
                 Expanded(
                   flex: 3,
@@ -878,6 +864,10 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
                                     setState(() {
                                       _selectedSupplier = val;
                                     });
+                                  },
+                                  validator: (val) {
+                                    if (val == null || val.isEmpty) return 'Please select a supplier';
+                                    return null;
                                   },
                                 ),
                         ),
@@ -966,9 +956,10 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
               ]),
             ),
           ),
+        ), // Added closing for Flexible
 
-          // ── Footer ─────────────────────────────────────────────────────────
-          Container(
+        // ── Footer ─────────────────────────────────────────────────────────
+        Container(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -1247,6 +1238,11 @@ class _ItemCardState extends State<_ItemCard> {
                           }); 
                           widget.onChanged(); 
                         },
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'Required';
+                          if ((double.tryParse(v) ?? 0) <= 0) return 'Must be > 0';
+                          return null;
+                        },
                       ),
                     ),
                     if (widget.row.product.packaging.isNotEmpty)
@@ -1279,6 +1275,11 @@ class _ItemCardState extends State<_ItemCard> {
                     _updateDiscount();
                     widget.onChanged(); 
                   },
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if ((double.tryParse(v) ?? 0) < 0) return 'Invalid';
+                    return null;
+                  },
                 ),
               )),
               const SizedBox(width: 10),
@@ -1292,6 +1293,11 @@ class _ItemCardState extends State<_ItemCard> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
                   onChanged: (v) { r.sellingPrice = double.tryParse(v) ?? 0; widget.onChanged(); },
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return 'Required';
+                    if ((double.tryParse(v) ?? 0) < 0) return 'Invalid';
+                    return null;
+                  },
                 ),
               )),
               const SizedBox(width: 10),

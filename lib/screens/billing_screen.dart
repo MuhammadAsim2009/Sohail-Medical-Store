@@ -1777,6 +1777,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   final TextEditingController _receivedController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController(text: '1');
 
+  String? _validationError;
+  String? _stagedError;
+
   double get _total => _cart.fold(0, (s, i) => s + i.total);
   double get _stagedPricePerUnit {
     if (_stagedProduct == null || _stagedUnit == null) return 0;
@@ -1844,11 +1847,14 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
         .fold(0, (sum, c) => sum + c.baseUnits);
 
     if (currentCartBaseUnits + requestedBaseUnits > p.stock) {
-      AppFeedback.show(context, 'Not enough stock! Available: ${p.formattedStock}', type: AppFeedbackType.error);
+      setState(() {
+        _stagedError = 'Not enough stock! Available: ${p.formattedStock}';
+      });
       return;
     }
 
     setState(() {
+      _stagedError = null;
       final index = _cart.indexWhere(
         (c) => c.product.id == p.id && c.unit == unit,
       );
@@ -1868,6 +1874,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       _stagedUnit = null;
       _stagedQty = 1;
       _qtyController.text = '1';
+      _stagedError = null;
     });
   }
 
@@ -1998,9 +2005,15 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     if (_paymentMethod == 'Cash' &&
         received < _total &&
         _selectedCustomer == null) {
-      AppFeedback.show(context, 'Cannot have pending balance for walk-in customer', type: AppFeedbackType.warning);
+      setState(() {
+        _validationError = 'Cannot have pending balance for walk-in customer';
+      });
       return;
     }
+
+    setState(() {
+      _validationError = null;
+    });
 
     if (_paymentMethod != 'Cash') {
       received = _total;
@@ -2137,7 +2150,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                               ),
                             ],
                             onChanged: (val) =>
-                                setState(() => _selectedCustomer = val),
+                                setState(() {
+                                  _selectedCustomer = val;
+                                  _validationError = null;
+                                }),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -2181,8 +2197,11 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
+                            onChanged: (_) => setState(() => _validationError = null),
                             decoration: InputDecoration(
                               labelText: 'Amount Received (Rs)',
+                              errorText: _validationError,
+                              errorMaxLines: 2,
                               prefixIcon: Icon(
                                 Icons.money,
                                 size: 17,
@@ -2258,8 +2277,11 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: const Color(0xFFBFDBFE)),
                         ),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            Row(
+                              children: [
                             Expanded(
                               flex: 3,
                               child: Column(
@@ -2396,6 +2418,23 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                   setState(() => _stagedProduct = null),
                               tooltip: 'Cancel',
                             ),
+                              ],
+                            ),
+                            if (_stagedError != null) ...[
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  const Icon(Icons.error_outline, color: Colors.red, size: 14),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      _stagedError!,
+                                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),

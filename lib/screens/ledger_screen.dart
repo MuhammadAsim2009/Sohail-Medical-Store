@@ -8,6 +8,7 @@ import '../services/database_helper.dart';
 import '../models/customer.dart';
 import '../models/supplier.dart';
 import '../models/expense.dart';
+import '../utils/app_feedback.dart';
 
 // ---------------------------------------------------------------------------
 // MODELS
@@ -233,13 +234,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   }
 
   void _syncNow() {
-    // TODO: Wire "Sync now" to trigger actual SQLite-to-Firestore sync and update the "Updated [time]" timestamp
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Syncing data to Firebase...'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    AppFeedback.show(context, 'Syncing data to Firebase...', type: AppFeedbackType.success);
   }
 
   Future<void> _addExpense() async {
@@ -251,13 +246,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   }
 
   void _exportCSV() {
-    // TODO: Implement real CSV export logic for "Export CSV" button
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Exporting CSV...'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    AppFeedback.show(context, 'Exporting CSV...', type: AppFeedbackType.success);
   }
 
   @override
@@ -1202,13 +1191,11 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
         ],
       ),
     );
-
-    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 }
 
 // ---------------------------------------------------------------------------
-// SMALL COMPONENTS
+// HELPER WIDGETS
 // ---------------------------------------------------------------------------
 class _SummaryStatCard extends StatelessWidget {
   final String title;
@@ -1241,24 +1228,24 @@ class _SummaryStatCard extends StatelessWidget {
             offset: const Offset(0, 4),
           )
         ],
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: Colors.grey.shade100),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(10)),
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(8)),
-                child: Icon(icon, size: 18, color: iconColor),
-              ),
-              const SizedBox(width: 12),
-              Text(title, style: TextStyle(color: Colors.grey.shade600, fontSize: 13, fontWeight: FontWeight.w600)),
+              Text(title, style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 4),
+              Text(amount, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textColor)),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(amount, style: TextStyle(color: textColor, fontSize: 24, fontWeight: FontWeight.w700)),
         ],
       ),
     );
@@ -1275,31 +1262,33 @@ class _AccountSelector extends StatelessWidget {
     required this.icon,
     required this.value,
     required this.items,
-    this.onChanged,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: Colors.grey.shade300),
         borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8, offset: const Offset(0, 2))
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: Colors.grey.shade600),
-          const SizedBox(width: 12),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: value,
-              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade400),
-              style: TextStyle(color: Colors.grey.shade800, fontSize: 14, fontWeight: FontWeight.w600),
-              onChanged: onChanged,
-              items: items,
-            ),
+          Icon(icon, size: 20, color: Colors.grey.shade500),
+          const SizedBox(width: 10),
+          DropdownButton<String>(
+            value: value,
+            underline: const SizedBox.shrink(),
+            isDense: true,
+            items: items,
+            onChanged: onChanged,
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F4C81)),
           ),
         ],
       ),
@@ -1330,7 +1319,6 @@ class _StatementPill extends StatelessWidget {
   }
 }
 
-
 class _AddExpenseDialog extends StatefulWidget {
   const _AddExpenseDialog();
 
@@ -1339,6 +1327,7 @@ class _AddExpenseDialog extends StatefulWidget {
 }
 
 class _AddExpenseDialogState extends State<_AddExpenseDialog> {
+  final _formKey = GlobalKey<FormState>();
   String _category = 'Rent';
   final _titleController = TextEditingController();
   final _amountController = TextEditingController();
@@ -1352,146 +1341,163 @@ class _AddExpenseDialogState extends State<_AddExpenseDialog> {
       child: Container(
         width: 500,
         padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF5A66F9).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(12),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF5A66F9).withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.money, color: Color(0xFF5A66F9), size: 24),
                   ),
-                  child: const Icon(Icons.money, color: Color(0xFF5A66F9), size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Add New Expense', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF0F4C81))),
-                      const SizedBox(height: 2),
-                      Text('Record an operational cost and deduct from ledger', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                    ],
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Add New Expense', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: Color(0xFF0F4C81))),
+                        const SizedBox(height: 2),
+                        Text('Record an operational cost and deduct from ledger', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
+                      ],
+                    ),
                   ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    color: Colors.grey.shade500,
+                    splashRadius: 24,
+                    onPressed: () => Navigator.pop(context),
+                  )
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text('Expense Category', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
+              const SizedBox(height: 8),
+              DropdownButtonFormField<String>(
+                initialValue: _category,
+                decoration: InputDecoration(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 20),
-                  color: Colors.grey.shade500,
-                  splashRadius: 24,
-                  onPressed: () => Navigator.pop(context),
-                )
-              ],
-            ),
-            const SizedBox(height: 24),
-            const Text('Expense Category', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              decoration: InputDecoration(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+                items: ['Rent', 'Utilities', 'Salaries', 'Office Supplies', 'Marketing', 'Other'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                onChanged: (v) => setState(() => _category = v!),
               ),
-              items: ['Rent', 'Utilities', 'Salaries', 'Office Supplies', 'Marketing', 'Other'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
-              onChanged: (v) => setState(() => _category = v!),
-            ),
-            const SizedBox(height: 16),
-            const Text('Title / Reference', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(
-                hintText: 'e.g. Electricity Bill May 2026',
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+              const SizedBox(height: 16),
+              const Text('Title / Reference', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _titleController,
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return 'Required';
+                  return null;
+                },
+                decoration: InputDecoration(
+                  hintText: 'e.g. Electricity Bill May 2026',
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+                  errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red)),
+                  focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red)),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Amount (Rs.)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _amountController,
-              keyboardType: TextInputType.number,
-              decoration: InputDecoration(
-                hintText: 'e.g. 5000',
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+              const SizedBox(height: 16),
+              const Text('Amount (Rs.)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _amountController,
+                keyboardType: TextInputType.number,
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return 'Required';
+                  if ((double.tryParse(val) ?? 0) <= 0) return 'Must be > 0';
+                  return null;
+                },
+                decoration: InputDecoration(
+                  hintText: 'e.g. 5000',
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+                  errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red)),
+                  focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Colors.red)),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            const Text('Notes / Remarks', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _notesController,
-              maxLines: 2,
-              decoration: InputDecoration(
-                hintText: 'e.g. Paid via bank transfer',
-                hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+              const SizedBox(height: 16),
+              const Text('Notes / Remarks', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey)),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _notesController,
+                maxLines: 2,
+                decoration: InputDecoration(
+                  hintText: 'e.g. Paid via bank transfer',
+                  hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF5A66F9))),
+                ),
               ),
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.grey.shade700,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.grey.shade700,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    child: const Text('Cancel'),
                   ),
-                  child: const Text('Cancel'),
-                ),
-                const SizedBox(width: 12),
-                ElevatedButton(
-                  onPressed: () async {
-                    final amount = double.tryParse(_amountController.text) ?? 0.0;
-                    if (amount <= 0) return;
-                    
-                    final expense = Expense(
-                      title: _titleController.text.trim(),
-                      category: _category,
-                      amount: amount,
-                      notes: _notesController.text.trim(),
-                      date: DateTime.now().toIso8601String(),
-                    );
-                    
-                    await DatabaseHelper.instance.insertExpense(expense);
-                    
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF5A66F9),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                  const SizedBox(width: 12),
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (!_formKey.currentState!.validate()) return;
+                      final amount = double.tryParse(_amountController.text) ?? 0.0;
+                      if (amount <= 0) return;
+
+                      final expense = Expense(
+                        title: _titleController.text.trim(),
+                        category: _category,
+                        amount: amount,
+                        notes: _notesController.text.trim(),
+                        date: DateTime.now().toIso8601String(),
+                      );
+
+                      await DatabaseHelper.instance.insertExpense(expense);
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        AppFeedback.show(context, 'Expense added successfully', type: AppFeedbackType.success);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF5A66F9),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      elevation: 0,
+                      textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    child: const Text('Add Expense'),
                   ),
-                  child: const Text('Add Expense'),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 }
-

@@ -3,6 +3,7 @@ import '../widgets/executive_header.dart';
 import 'package:intl/intl.dart';
 
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 import '../models/customer.dart';
 import '../models/customer_payment.dart';
 import '../models/sale.dart';
@@ -54,48 +55,21 @@ class _CustomersScreenState extends State<CustomersScreen> {
   Future<void> _addCustomer(Customer c) async {
     await DatabaseHelper.instance.insertCustomer(c);
     await _loadCustomers();
+    if (mounted) AppFeedback.show(context, 'Customer "${c.name}" added successfully', type: AppFeedbackType.success);
   }
 
   Future<void> _updateCustomer(Customer c) async {
     await DatabaseHelper.instance.updateCustomer(c);
     await _loadCustomers();
+    if (mounted) AppFeedback.show(context, 'Customer "${c.name}" updated successfully', type: AppFeedbackType.success);
   }
 
   Future<void> _deleteCustomer(Customer c) async {
     if (c.id != null) {
       await DatabaseHelper.instance.deleteCustomer(c.id!);
       await _loadCustomers();
+      if (mounted) AppFeedback.show(context, '${c.name} deleted successfully', type: AppFeedbackType.success);
     }
-    
-    // Calculate margin for bottom right positioning
-    final screenWidth = MediaQuery.of(context).size.width;
-    const snackBarWidth = 380.0;
-    final leftMargin = screenWidth > snackBarWidth + 48 
-        ? screenWidth - snackBarWidth - 24 
-        : 24.0;
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.check_circle, color: Colors.white, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                '${c.name} deleted successfully',
-                style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14),
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.red.shade400,
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        elevation: 8,
-      ),
-    );
   }
 
   void _showCustomerDialog({Customer? existingCustomer}) {
@@ -1213,6 +1187,7 @@ class _RecordPaymentDialog extends StatefulWidget {
 }
 
 class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
+  final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController(text: '0');
   final _receiptController = TextEditingController();
   final _notesController = TextEditingController();
@@ -1283,10 +1258,12 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
         width: 650,
         padding: const EdgeInsets.all(32),
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               // Header
               Row(
                 children: [
@@ -1456,6 +1433,11 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                             label: 'Amount received',
                             controller: _amountController,
                             keyboardType: TextInputType.number,
+                            validator: (val) {
+                              if (val == null || val.isEmpty) return 'Required';
+                              if ((double.tryParse(val) ?? 0) <= 0) return 'Must be > 0';
+                              return null;
+                            },
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -1533,6 +1515,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                     onPressed: _isSaving
                         ? null
                         : () async {
+                            if (!_formKey.currentState!.validate()) return;
                             final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
                             if (amount <= 0) return;
 
@@ -1553,12 +1536,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
 
                             if (!mounted) return;
                             Navigator.of(context).pop(true);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Payment recorded for ${invoiceNumber ?? 'general receipt'}'),
-                                backgroundColor: Colors.green.shade600,
-                              ),
-                            );
+                            AppFeedback.show(context, 'Payment recorded for ${invoiceNumber ?? 'general receipt'}', type: AppFeedbackType.success);
                           },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF5D5FEF),
@@ -1575,6 +1553,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -1584,16 +1563,18 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
     required TextEditingController controller,
     TextInputType keyboardType = TextInputType.text,
     int maxLines = 1,
+    String? Function(String?)? validator,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
         const SizedBox(height: 8),
-        TextField(
+        TextFormField(
           controller: controller,
           keyboardType: keyboardType,
           maxLines: maxLines,
+          validator: validator,
           decoration: InputDecoration(
             filled: true,
             fillColor: Colors.white,
@@ -1605,6 +1586,14 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: Color(0xFF5D5FEF), width: 1.5),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
+            ),
+            focusedErrorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.red, width: 1.5),
             ),
           ),
         ),

@@ -5,6 +5,7 @@ import '../models/supplier.dart';
 import '../models/purchase_order.dart';
 import '../models/supplier_payment.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 
 class _ActionButton extends StatefulWidget {
   final IconData icon;
@@ -1145,6 +1146,7 @@ class _RecordPaymentDialog extends StatefulWidget {
 }
 
 class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
+  final _formKey = GlobalKey<FormState>();
   final _amountController = TextEditingController(text: '0');
   final _receiptController = TextEditingController();
   final _notesController = TextEditingController();
@@ -1215,353 +1217,256 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
         width: 650,
         padding: const EdgeInsets.all(32),
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF3E5F5), // Light purple
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.payment, color: Color(0xFF7E57C2), size: 24),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Receive Supplier Payment', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
-                        const SizedBox(height: 4),
-                        Text('Record payment from ${widget.supplier.companyName}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    color: Colors.grey.shade500,
-                    onPressed: () => Navigator.of(context).pop(),
-                    splashRadius: 24,
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Status Box (Advance/Pending)
-              if (netBalance != 0)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 24),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: isAdvance ? Colors.green.shade200 : Colors.red.shade200),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(isAdvance ? Icons.check_circle_outline : Icons.info_outline, color: isAdvance ? Colors.green.shade600 : Colors.red.shade600, size: 28),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              netBalance == 0
-                                  ? 'Cleared'
-                                  : (isAdvance ? 'Advance credit' : 'Pending balance'),
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Rs. ${NumberFormat('#,##0').format(netBalance.abs())}',
-                              style: TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: netBalance == 0 ? Colors.grey.shade700 : (isAdvance ? Colors.green.shade700 : Colors.red.shade700),
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              netBalance == 0
-                                  ? 'This supplier ledger is fully cleared.'
-                                  : (isAdvance
-                                      ? 'This supplier already has advance credit available in the ledger.'
-                                      : 'This supplier has an outstanding balance.'),
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Invoice Selection Section
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header
+                Row(
                   children: [
-                    const Text('Invoice Selection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
-                    const SizedBox(height: 4),
-                    Text(
-                      _availableInvoices.isEmpty
-                          ? 'No open purchase orders found for this supplier. You can still record a general receipt.'
-                          : 'Select an open purchase order or record a general receipt.',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF3E5F5), // Light purple
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(Icons.payment, color: Color(0xFF7E57C2), size: 24),
                     ),
-                    const SizedBox(height: 16),
-                    if (_availableInvoices.isNotEmpty)
-                      DropdownButtonFormField<String>(
-                        initialValue: _selectedInvoiceNumber,
-                        isExpanded: true,
-                        decoration: InputDecoration(
-                          labelText: 'Apply to purchase order',
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        items: _availableInvoices
-                            .map((order) => DropdownMenuItem<String>(
-                                  value: order.poNumber,
-                                  child: Text('${order.poNumber}  •  Rs. ${order.balanceDue.toStringAsFixed(0)} due', overflow: TextOverflow.ellipsis),
-                                ))
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            _syncSelectedInvoice(value);
-                            setState(() => _isGeneralReceipt = false);
-                          }
-                        },
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Receive Supplier Payment', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                          const SizedBox(height: 4),
+                          Text('Record payment from ${widget.supplier.companyName}', style: TextStyle(fontSize: 14, color: Colors.grey.shade600)),
+                        ],
                       ),
-                    if (_availableInvoices.isNotEmpty) const SizedBox(height: 12),
-                    InkWell(
-                      onTap: () => setState(() => _isGeneralReceipt = true),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade200, width: _isGeneralReceipt ? 2 : 1),
-                          borderRadius: BorderRadius.circular(12),
-                          color: _isGeneralReceipt ? const Color(0xFFF3F3FF) : Colors.white,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: _isGeneralReceipt ? const Color(0xFFE0E0FF) : Colors.grey.shade100,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(Icons.account_balance_wallet_outlined, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade600),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('General receipt', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: _isGeneralReceipt ? const Color(0xFF5D5FEF) : Colors.grey.shade800)),
-                                  const SizedBox(height: 4),
-                                  Text('Record payment without linking it to a specific invoice.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                                ],
-                              ),
-                            ),
-                            if (_isGeneralReceipt)
-                              const Icon(Icons.check_circle, color: Color(0xFF5D5FEF)),
-                          ],
-                        ),
-                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      color: Colors.grey.shade500,
+                      onPressed: () => Navigator.of(context).pop(),
+                      splashRadius: 24,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 24),
 
-              // Payment Details Section
-              Container(
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.grey.shade200),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Payment Details', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
-                    const SizedBox(height: 4),
-                    Text('Capture the receipt amount, method, and reference number.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                    const SizedBox(height: 24),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                // Status Box (Advance/Pending)
+                if (netBalance != 0)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: isAdvance ? const Color(0xFFE8F5E9) : const Color(0xFFFFEBEE),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: isAdvance ? Colors.green.shade200 : Colors.red.shade200),
+                    ),
+                    child: Row(
                       children: [
-                        Expanded(
-                          child: _buildField(
-                            label: 'Amount received',
-                            controller: _amountController,
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
+                        Icon(isAdvance ? Icons.check_circle_outline : Icons.info_outline, color: isAdvance ? Colors.green.shade600 : Colors.red.shade600, size: 28),
                         const SizedBox(width: 16),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Payment method', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                              const SizedBox(height: 8),
-                              Container(
-                                height: 52, // Match TextField height approximately
-                                padding: const EdgeInsets.symmetric(horizontal: 16),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.grey.shade200),
+                              Text(
+                                netBalance == 0
+                                    ? 'Cleared'
+                                    : (isAdvance ? 'Advance credit' : 'Pending balance'),
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Rs. ${NumberFormat('#,##0').format(netBalance.abs())}',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: netBalance == 0 ? Colors.grey.shade700 : (isAdvance ? Colors.green.shade700 : Colors.red.shade700),
                                 ),
-                                child: DropdownButtonHideUnderline(
-                                  child: DropdownButton<String>(
-                                    isExpanded: true,
-                                    value: _paymentMethod,
-                                    icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                                    items: ['Cash', 'Bank Transfer', 'Credit Card'].map((String value) {
-                                      return DropdownMenuItem<String>(
-                                        value: value,
-                                        child: Text(value, style: const TextStyle(fontSize: 14)),
-                                      );
-                                    }).toList(),
-                                    onChanged: (newValue) {
-                                      setState(() {
-                                        _paymentMethod = newValue!;
-                                      });
-                                    },
-                                  ),
-                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                netBalance == 0
+                                    ? 'This supplier ledger is fully cleared.'
+                                    : (isAdvance
+                                        ? 'This supplier already has advance credit available in the ledger.'
+                                        : 'This supplier has an outstanding balance.'),
+                                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                               ),
                             ],
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    _buildField(
-                      label: 'Receipt / reference no.',
-                      controller: _receiptController,
+                  ),
+
+                // Invoice Selection Section
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Invoice Selection', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                      const SizedBox(height: 4),
+                      Text(
+                        _availableInvoices.isEmpty
+                            ? 'No open purchase orders found for this supplier. You can still record a general receipt.'
+                            : 'Select an open purchase order or record a general receipt.',
+                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                      ),
+                      const SizedBox(height: 16),
+                      if (_availableInvoices.isNotEmpty)
+                        DropdownButtonFormField<String>(
+                          value: _selectedInvoiceNumber,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: 'Apply to purchase order',
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          items: _availableInvoices
+                              .map((order) => DropdownMenuItem<String>(
+                                    value: order.poNumber,
+                                    child: Text('${order.poNumber}  •  Rs. ${order.balanceDue.toStringAsFixed(0)} due', overflow: TextOverflow.ellipsis),
+                                  ))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              _syncSelectedInvoice(value);
+                              setState(() => _isGeneralReceipt = false);
+                            }
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Amount Section
+                Container(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey.shade200),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Payment Amount', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A2E2B))),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _amountController,
+                        keyboardType: TextInputType.number,
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Amount is required';
+                          if ((double.tryParse(val) ?? 0) <= 0) return 'Amount must be greater than 0';
+                          return null;
+                        },
+                        decoration: InputDecoration(
+                          labelText: 'Amount (Rs.)',
+                          prefixText: 'Rs. ',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF7E57C2), width: 1.5)),
+                          errorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red)),
+                          focusedErrorBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Colors.red)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _receiptController,
+                        decoration: InputDecoration(
+                          labelText: 'Receipt / Reference Number',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF7E57C2), width: 1.5)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: _notesController,
+                        maxLines: 2,
+                        decoration: InputDecoration(
+                          labelText: 'Notes (optional)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
+                          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF7E57C2), width: 1.5)),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Action Buttons
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey.shade700,
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      child: const Text('Cancel'),
                     ),
-                    const SizedBox(height: 16),
-                    _buildField(
-                      label: 'Notes',
-                      controller: _notesController,
-                      maxLines: 3,
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () async {
+                        if (!_formKey.currentState!.validate()) return;
+                        final amount = double.tryParse(_amountController.text) ?? 0;
+                        if (amount <= 0) return;
+
+                        final payment = SupplierPayment(
+                          supplierId: widget.supplier.id!,
+                          amount: amount,
+                          reference: _receiptController.text.trim(),
+                          notes: _notesController.text.trim(),
+                          date: DateTime.now().toIso8601String(),
+                          invoiceNumber: _isGeneralReceipt ? null : _selectedInvoiceNumber,
+                        );
+                        await DatabaseHelper.instance.insertSupplierPayment(payment);
+
+                        // Update supplier advance/pending
+                        final updatedSupplier = widget.supplier.copyWith(
+                          advanceAmount: widget.supplier.advanceAmount + amount,
+                        );
+                        await DatabaseHelper.instance.updateSupplier(updatedSupplier);
+
+                        if (context.mounted) {
+                          Navigator.of(context).pop(true);
+                          AppFeedback.show(context, 'Payment of Rs. ${amount.toStringAsFixed(0)} recorded', type: AppFeedbackType.success);
+                        }
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF7E57C2),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                      ),
+                      child: const Text('Record Payment'),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 32),
-              
-              // Actions
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: TextButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: Colors.grey.shade300),
-                      ),
-                    ),
-                    child: Text('Cancel', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-                  ),
-                  const SizedBox(width: 12),
-                  ElevatedButton(
-                    onPressed: _isSaving
-                        ? null
-                        : () async {
-                            final amount = double.tryParse(_amountController.text.trim()) ?? 0.0;
-                            if (amount <= 0) return;
-
-                            setState(() => _isSaving = true);
-                            final invoiceNumber = _isGeneralReceipt ? null : _selectedInvoiceNumber;
-                            final reference = invoiceNumber ?? _receiptController.text.trim();
-
-                            await DatabaseHelper.instance.insertSupplierPayment(
-                              SupplierPayment(
-                                supplierId: widget.supplier.id,
-                                date: DateTime.now().toIso8601String(),
-                                amount: amount,
-                                reference: reference,
-                                invoiceNumber: invoiceNumber,
-                                notes: _notesController.text.trim(),
-                              ),
-                            );
-
-                            if (!mounted) return;
-                            Navigator.of(context).pop(true);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Payment recorded for ${invoiceNumber ?? 'general receipt'}'),
-                                backgroundColor: Colors.green.shade600,
-                              ),
-                            );
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF5D5FEF),
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(_isSaving ? 'Saving...' : 'Record payment', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
-
-  Widget _buildField({
-    required String label,
-    required TextEditingController controller,
-    TextInputType keyboardType = TextInputType.text,
-    int maxLines = 1,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700)),
-        const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          maxLines: maxLines,
-          decoration: InputDecoration(
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide(color: Colors.grey.shade200),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: const BorderSide(color: Color(0xFF5D5FEF), width: 1.5),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
-
-
