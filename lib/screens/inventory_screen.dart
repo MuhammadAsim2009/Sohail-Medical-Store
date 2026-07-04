@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 import '../widgets/executive_header.dart';
 
 // ---------------------------------------------------------------------------
@@ -540,31 +541,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         }
                         if (mounted) {
                           Navigator.pop(context);
-                          final screenWidth = MediaQuery.of(context).size.width;
-                          const snackBarWidth = 420.0;
-                          final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Row(
-                                children: [
-                                  const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      '"${p.name}" deleted successfully',
-                                      style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: Colors.white),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              backgroundColor: const Color(0xFFDC2626), // Red for deletion
-                              behavior: SnackBarBehavior.floating,
-                              margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              elevation: 8,
-                              duration: const Duration(seconds: 3),
-                            ),
+                          AppFeedback.show(
+                            context,
+                            '"${p.name}" deleted successfully',
+                            type: AppFeedbackType.error,
                           );
                         }
                       },
@@ -986,28 +966,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         final msg = e.toString().contains('UNIQUE constraint failed')
             ? 'Medicine Code "${_skuCtrl.text.trim().toUpperCase()}" already exists.'
             : 'An error occurred while saving the product.';
-        final screenWidth = MediaQuery.of(context).size.width;
-        final leftMargin = screenWidth > 420.0 + 48 ? screenWidth - 420.0 - 24 : 24.0;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(msg, style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14, color: Colors.white)),
-                ),
-              ],
-            ),
-            backgroundColor: const Color(0xFFDC2626), // Red for error
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(bottom: 24, right: 24, left: leftMargin),
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            elevation: 8,
-            duration: const Duration(seconds: 4),
-          ),
-        );
+        AppFeedback.show(context, msg, type: AppFeedbackType.error);
       }
     }
   }
@@ -1652,3 +1611,6 @@ class _PurchaseStockDialogState extends State<_PurchaseStockDialog> {
     );
   }
 }
+
+
+

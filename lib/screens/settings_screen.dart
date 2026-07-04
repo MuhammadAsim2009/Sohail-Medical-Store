@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
 import '../widgets/executive_header.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 
 // ---------------------------------------------------------------------------
 // THEME TOKENS
@@ -149,7 +150,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
     await DatabaseHelper.instance.setSetting('tax_rate', _taxRateController.text);
     
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Settings saved successfully.')));
+      AppFeedback.show(context, 'Settings saved successfully.', type: AppFeedbackType.success);
     }
   }
 
@@ -254,7 +255,7 @@ class _BackupRestoreContent extends StatelessWidget {
   const _BackupRestoreContent();
 
   Future<void> _backup(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
+
     try {
       final dbPath = await getDatabasesPath();
       final path = p.join(dbPath, 'pharmacy.db');
@@ -265,17 +266,17 @@ class _BackupRestoreContent extends StatelessWidget {
       
       if (await file.exists()) {
         await file.copy(backupPath);
-        messenger.showSnackBar(SnackBar(content: Text('Backup saved to: $backupPath')));
+        AppFeedback.show(context, 'Backup saved to: $backupPath', type: AppFeedbackType.success);
       } else {
-        messenger.showSnackBar(const SnackBar(content: Text('Database not found.')));
+        AppFeedback.show(context, 'Database not found.', type: AppFeedbackType.warning);
       }
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+      AppFeedback.show(context, 'Error: $e', type: AppFeedbackType.error);
     }
   }
 
   Future<void> _restore(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
+
     String? selectedPath;
     final restored = await showDialog<bool>(
       context: context,
@@ -330,7 +331,7 @@ class _BackupRestoreContent extends StatelessWidget {
     try {
       final source = File(selectedPath!);
       if (!await source.exists()) {
-        messenger.showSnackBar(const SnackBar(content: Text('Backup file not found.')));
+        AppFeedback.show(context, 'Backup file not found.', type: AppFeedbackType.warning);
         return;
       }
 
@@ -341,14 +342,14 @@ class _BackupRestoreContent extends StatelessWidget {
       await source.copy(target.path);
       await DatabaseHelper.instance.database;
 
-      messenger.showSnackBar(const SnackBar(content: Text('Database restored successfully. Restart the app if needed.')));
+      AppFeedback.show(context, 'Database restored successfully. Restart the app if needed.', type: AppFeedbackType.success);
     } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Restore failed: $e')));
+      AppFeedback.show(context, 'Restore failed: $e', type: AppFeedbackType.error);
     }
   }
 
   Future<void> _clearAllData(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -371,9 +372,9 @@ class _BackupRestoreContent extends StatelessWidget {
     if (confirm == true) {
       try {
         await DatabaseHelper.instance.clearAllData();
-        messenger.showSnackBar(const SnackBar(content: Text('All data cleared successfully.')));
+        AppFeedback.show(context, 'All data cleared successfully.', type: AppFeedbackType.success);
       } catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text('Error clearing data: $e')));
+        AppFeedback.show(context, 'Error clearing data: $e', type: AppFeedbackType.error);
       }
     }
   }
@@ -444,29 +445,29 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
   final _confirmController = TextEditingController();
 
   Future<void> _changePassword() async {
-    final messenger = ScaffoldMessenger.of(context);
+
     final currentInput = _currentController.text;
     final newPass = _newController.text;
     final confirmPass = _confirmController.text;
 
     if (newPass.isEmpty || confirmPass.isEmpty) {
-      messenger.showSnackBar(const SnackBar(content: Text('Please fill all fields.')));
+      AppFeedback.show(context, 'Please fill all fields.', type: AppFeedbackType.warning);
       return;
     }
 
     if (newPass != confirmPass) {
-      messenger.showSnackBar(const SnackBar(content: Text('New passwords do not match.')));
+      AppFeedback.show(context, 'New passwords do not match.', type: AppFeedbackType.warning);
       return;
     }
 
     final currentPass = await DatabaseHelper.instance.getSetting('admin_password') ?? 'admin123';
     if (currentInput != currentPass) {
-      messenger.showSnackBar(const SnackBar(content: Text('Current password is incorrect.')));
+      AppFeedback.show(context, 'Current password is incorrect.', type: AppFeedbackType.error);
       return;
     }
 
     await DatabaseHelper.instance.setSetting('admin_password', newPass);
-    messenger.showSnackBar(const SnackBar(content: Text('Password changed successfully.')));
+    AppFeedback.show(context, 'Password changed successfully.', type: AppFeedbackType.success);
     _currentController.clear();
     _newController.clear();
     _confirmController.clear();
@@ -528,3 +529,10 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
     );
   }
 }
+
+
+
+
+
+
+

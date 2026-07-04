@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum AppFeedbackType { success, error, warning }
+enum AppFeedbackType { info, success, error, warning }
 
 class AppFeedback {
   static void show(
@@ -12,6 +12,7 @@ class AppFeedback {
     const snackBarWidth = 420.0;
     final leftMargin = screenWidth > snackBarWidth + 48 ? screenWidth - snackBarWidth - 24 : 24.0;
     final colors = switch (type) {
+      AppFeedbackType.info => (background: const Color(0xFF0F4C81), icon: Icons.info_outline_rounded),
       AppFeedbackType.success => (background: const Color(0xFF2E7D32), icon: Icons.check_circle_rounded),
       AppFeedbackType.error => (background: const Color(0xFFC62828), icon: Icons.error_outline_rounded),
       AppFeedbackType.warning => (background: const Color(0xFFEF6C00), icon: Icons.warning_amber_rounded),
@@ -43,3 +44,4 @@ class AppFeedback {
       );
   }
 }
+

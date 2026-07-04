@@ -1494,3 +1494,4 @@ class _AddExpenseDialogState extends State<_AddExpenseDialog> {
     );
   }
 }
+

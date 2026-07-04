@@ -1746,10 +1746,10 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: _total > 0
-                          ? LinearGradient(colors: [Colors.green.shade700, Colors.green.shade500])
+                          ? LinearGradient(colors: [Colors.blue.shade700, Colors.blue.shade500])
                           : LinearGradient(colors: [Colors.grey.shade300, Colors.grey.shade300]),
                       borderRadius: BorderRadius.circular(10),
-                      boxShadow: _total > 0 ? [BoxShadow(color: Colors.green.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))] : [],
+                      boxShadow: _total > 0 ? [BoxShadow(color: Colors.blue.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 4))] : [],
                     ),
                     child: ElevatedButton.icon(
                       onPressed: _isProcessing || _total <= 0 ? null : _process,
@@ -2323,7 +2323,8 @@ class _EditReturnDialogState extends State<_EditReturnDialog> {
           borderRadius: BorderRadius.circular(24),
           boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.13), blurRadius: 40, offset: const Offset(0, 16))],
         ),
-        child: Form(
+        child: SingleChildScrollView(
+          child: Form(
           key: _formKey,
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2495,6 +2496,7 @@ class _EditReturnDialogState extends State<_EditReturnDialog> {
             ],
           ),
         ),
+        ),
       ),
     );
   }
@@ -2563,3 +2565,6 @@ class _SummaryTile extends StatelessWidget {
     );
   }
 }
+
+
+

@@ -6,6 +6,7 @@ import '../models/sale.dart';
 import '../models/product.dart';
 import '../models/customer.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -605,9 +606,7 @@ class _BillingScreenState extends State<BillingScreen> {
                                   _loadData();
                                 } catch (e) {
                                   if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade700),
-                                    );
+                                    AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
                                   }
                                 }
                               },
@@ -759,9 +758,7 @@ class _BillingScreenState extends State<BillingScreen> {
                                   _loadData();
                                 } catch (e) {
                                   if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text(e.toString()), backgroundColor: Colors.red.shade700),
-                                    );
+                                    AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
                                   }
                                 }
                               },
@@ -1847,12 +1844,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
         .fold(0, (sum, c) => sum + c.baseUnits);
 
     if (currentCartBaseUnits + requestedBaseUnits > p.stock) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Not enough stock! Available: ${p.formattedStock}'),
-          backgroundColor: Colors.red.shade600,
-        ),
-      );
+      AppFeedback.show(context, 'Not enough stock! Available: ${p.formattedStock}', type: AppFeedbackType.error);
       return;
     }
 
@@ -1966,8 +1958,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                   onPressed: () {
                     final qty = int.tryParse(qtyController.text.trim()) ?? 0;
                     if (qty <= 0 || qty > maxQty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Enter a valid quantity within stock limits.')),
+                      AppFeedback.show(
+                        context,
+                        'Enter a valid quantity within stock limits.',
+                        type: AppFeedbackType.warning,
                       );
                       return;
                     }
@@ -2004,11 +1998,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     if (_paymentMethod == 'Cash' &&
         received < _total &&
         _selectedCustomer == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Cannot have pending balance for walk-in customer'),
-        ),
-      );
+      AppFeedback.show(context, 'Cannot have pending balance for walk-in customer', type: AppFeedbackType.warning);
       return;
     }
 
@@ -2054,9 +2044,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
         setState(() => _isSaving = false);
       }
     }
@@ -2626,12 +2614,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                                       final extraBaseUnits = p.getMultiplier(item.unit);
                                                       
                                                       if (currentBaseUnits + extraBaseUnits > p.stock) {
-                                                        ScaffoldMessenger.of(context).showSnackBar(
-                                                          SnackBar(
-                                                            content: Text('Not enough stock! Available: ${p.formattedStock}'),
-                                                            backgroundColor: Colors.red.shade600,
-                                                          ),
-                                                        );
+                                                        AppFeedback.show(context, 'Not enough stock! Available: ${p.formattedStock}', type: AppFeedbackType.error);
                                                         return;
                                                       }
                                                       
@@ -2821,9 +2804,7 @@ class _OpenDSSDialogState extends State<_OpenDSSDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
         setState(() => _isSaving = false);
       }
     }
@@ -2945,9 +2926,7 @@ class _CloseDSSDialogState extends State<_CloseDSSDialog> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
+        AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
         setState(() => _isSaving = false);
       }
     }
@@ -3043,3 +3022,9 @@ class _CloseDSSDialogState extends State<_CloseDSSDialog> {
     );
   }
 }
+
+
+
+
+
+
