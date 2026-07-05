@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
+import 'dashboard_screen.dart';
 
 // ---------------------------------------------------------------------------
 // ENTRY POINT
@@ -108,22 +111,51 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
     _progressCtrl.forward();
 
-    // TODO: Replace this delay with a Firebase Auth current-user check.
-    // e.g. final user = FirebaseAuth.instance.currentUser;
-    // Navigate to Dashboard if user != null, otherwise stay on Login.
-    await Future.delayed(const Duration(milliseconds: 2600));
+    // Check Firebase Auth and auto-logout after 7 days
+    bool shouldGoToDashboard = false;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        final prefs = await SharedPreferences.getInstance();
+        final lastActivityStr = prefs.getString('last_activity');
+        final rememberMe = prefs.getBool('remember_me') ?? false;
+
+        if (!rememberMe) {
+          // If not remembered, log out immediately
+          await FirebaseAuth.instance.signOut();
+        } else if (lastActivityStr != null) {
+          final lastActivity = DateTime.tryParse(lastActivityStr);
+          if (lastActivity != null && DateTime.now().difference(lastActivity).inDays >= 7) {
+            // Auto logout after 7 days of inactivity
+            await FirebaseAuth.instance.signOut();
+            await prefs.remove('last_activity');
+          } else {
+            // Update last activity
+            await prefs.setString('last_activity', DateTime.now().toIso8601String());
+            shouldGoToDashboard = true;
+          }
+        } else {
+          // No activity logged, just update and proceed
+          await prefs.setString('last_activity', DateTime.now().toIso8601String());
+          shouldGoToDashboard = true;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error checking auth state: $e');
+    }
+
+    // Give animation some time
+    await Future.delayed(const Duration(milliseconds: 1400));
     if (!mounted) return;
 
     Navigator.of(context).pushReplacement(PageRouteBuilder(
       transitionDuration: const Duration(milliseconds: 800),
-      pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+      pageBuilder: (context, animation, secondaryAnimation) => 
+          shouldGoToDashboard ? const DashboardScreen() : const LoginScreen(),
       transitionsBuilder: (context, animation, secondaryAnimation, child) {
-        final fade =
-            CurvedAnimation(parent: animation, curve: Curves.easeIn);
-        final slide =
-            Tween<Offset>(begin: const Offset(0.04, 0), end: Offset.zero)
-                .animate(CurvedAnimation(
-                    parent: animation, curve: Curves.easeOutCubic));
+        final fade = CurvedAnimation(parent: animation, curve: Curves.easeIn);
+        final slide = Tween<Offset>(begin: const Offset(0.04, 0), end: Offset.zero)
+                .animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic));
         return FadeTransition(
             opacity: fade,
             child: SlideTransition(position: slide, child: child));

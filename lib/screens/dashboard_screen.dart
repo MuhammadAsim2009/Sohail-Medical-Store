@@ -65,12 +65,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Expanded(
               child: Column(
                 children: [
-                  // Top bar (BillingScreen has its own matching top bar built-in)
-                  if (_selectedIndex != 1)
-                    _TopBar(
-                      pageTitle: _navItems[_selectedIndex].label,
-                      pageIcon: _navItems[_selectedIndex].icon,
-                    ),
 
                   // Scrollable body
                   Expanded(
@@ -132,7 +126,7 @@ class _NavItem {
 // ---------------------------------------------------------------------------
 // SIDEBAR
 // ---------------------------------------------------------------------------
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends StatefulWidget {
   final List<_NavItem> navItems;
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
@@ -146,11 +140,16 @@ class _Sidebar extends StatelessWidget {
   });
 
   @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  @override
   Widget build(BuildContext context) {
     return Container(
       width: 250,
       decoration: const BoxDecoration(
-        color: Color(0xFF0B1120), // Darker navy background matching the image
+        color: Color(0xFF0B1120),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -163,7 +162,7 @@ class _Sidebar extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF5A66F9), // Purple blue icon bg
+                    color: const Color(0xFF5A66F9),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(Icons.local_pharmacy_rounded, color: Colors.white, size: 22),
@@ -205,9 +204,9 @@ class _Sidebar extends StatelessWidget {
             child: Text(
               'OPERATIONS',
               style: TextStyle(
-                color: Color(0xFF8F9BB3), 
-                fontSize: 11, 
-                fontWeight: FontWeight.w700, 
+                color: Color(0xFF8F9BB3),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
                 letterSpacing: 0.8,
               ),
             ),
@@ -217,18 +216,19 @@ class _Sidebar extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: navItems.length,
+              itemCount: widget.navItems.length,
               itemBuilder: (_, i) => _SidebarNavItem(
-                item: navItems[i],
-                isSelected: selectedIndex == i,
-                onTap: () => onItemSelected(i),
+                item: widget.navItems[i],
+                isSelected: widget.selectedIndex == i,
+                onTap: () => widget.onItemSelected(i),
               ),
             ),
           ),
 
+
           // -- Footer Profile ---------------------------------------------
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
@@ -258,7 +258,7 @@ class _Sidebar extends StatelessWidget {
                     ),
                   ),
                   InkWell(
-                    onTap: onLogout,
+                    onTap: widget.onLogout,
                     child: const Icon(Icons.logout, color: Color(0xFF8F9BB3), size: 18),
                   ),
                 ],
@@ -347,178 +347,6 @@ class _SidebarNavItem extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// TOP BAR
-// ---------------------------------------------------------------------------
-class _TopBar extends StatelessWidget {
-  final String pageTitle;
-  final IconData pageIcon;
-
-  const _TopBar({required this.pageTitle, required this.pageIcon});
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          height: 64, // Sleeker height
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.95),
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.black.withValues(alpha: 0.05),
-                width: 1,
-              ),
-            ),
-          ),
-      child: Row(
-        children: [
-          // Page title / Breadcrumb
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    'Operations',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, size: 14, color: Colors.grey.shade400),
-                  const SizedBox(width: 4),
-                  Text(
-                    pageTitle,
-                    style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Saturday, 27 Jun - Desktop workspace', // Ideally dynamic
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 11),
-              ),
-            ],
-          ),
-          const Spacer(),
-
-          // Search field
-          Container(
-            width: 280,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            padding: const EdgeInsets.only(left: 12, right: 4),
-            child: Row(
-              children: [
-                Icon(Icons.search, color: Colors.grey.shade400, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search products, invoices, ledgers...',
-                      hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                      border: InputBorder.none,
-                      isDense: true,
-                      contentPadding: EdgeInsets.zero,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text('Open', style: TextStyle(fontSize: 11, color: Colors.grey.shade600)),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Notification bell
-          Container(
-            height: 38,
-            width: 38,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey.shade200),
-              color: Colors.white,
-            ),
-            child: IconButton(
-              padding: EdgeInsets.zero,
-              icon: Icon(Icons.notifications_none, size: 20, color: Colors.grey.shade600),
-              onPressed: () {},
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Data synced pill
-          Container(
-            height: 38,
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.green.shade100),
-              color: Colors.white,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 6, height: 6,
-                  decoration: const BoxDecoration(color: Colors.green, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 6),
-                const Text('Data synced', style: TextStyle(color: Colors.green, fontSize: 12, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-
-          // Avatar + name
-          Container(
-            height: 42,
-            padding: const EdgeInsets.fromLTRB(4, 4, 12, 4),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.grey.shade200),
-              color: Colors.white,
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 32, height: 32,
-                  decoration: const BoxDecoration(color: Color(0xFFE8EAF6), shape: BoxShape.circle),
-                  alignment: Alignment.center,
-                  child: const Text('A', style: TextStyle(color: Color(0xFF5C6BC0), fontWeight: FontWeight.bold, fontSize: 13)),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Admin', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, height: 1.1)),
-                    Text('Admin', style: TextStyle(fontSize: 10, color: Colors.grey.shade500, height: 1.1)),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade400),
-              ],
-            ),
-          ),
-        ],
-      ),
-        ),
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // DASHBOARD BODY (stats + tables)

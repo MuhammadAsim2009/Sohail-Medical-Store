@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../utils/app_feedback.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -33,23 +36,97 @@ class _LoginScreenState extends State<LoginScreen> {
       _isLoading = true;
     });
 
-    // TODO: Integrate Firebase Auth here
-    // Example: await FirebaseAuth.instance.signInWithEmailAndPassword(
-    //   email: _emailController.text.trim(),
-    //   password: _passwordController.text,
-    // );
-    await Future.delayed(const Duration(seconds: 2));
+    try {
+      final email = _emailController.text.trim();
+      final password = _passwordController.text;
+      
+      try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+          if (email == 'admin@gmail.com' && password == 'Admin@123') {
+            // Auto create admin account if it doesn't exist
+            await FirebaseAuth.instance.createUserWithEmailAndPassword(
+              email: email,
+              password: password,
+            );
+          } else {
+            rethrow;
+          }
+        } else {
+          rethrow;
+        }
+      }
 
-    if (!mounted) return;
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('remember_me', _rememberMe);
+      if (_rememberMe) {
+        await prefs.setString('last_activity', DateTime.now().toIso8601String());
+      } else {
+        await prefs.remove('last_activity');
+      }
 
+      if (!mounted) return;
+      
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const DashboardScreen()),
+      );
+    } on FirebaseAuthException catch (e) {
+      if (!mounted) return;
+      String message = 'Authentication failed';
+      if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
+        message = 'Invalid email or password';
+      } else if (e.code == 'invalid-email') {
+        message = 'The email address is badly formatted';
+      } else {
+        message = e.message ?? message;
+      }
+      AppFeedback.show(context, message, type: AppFeedbackType.error);
+    } catch (e) {
+      if (!mounted) return;
+      AppFeedback.show(context, 'An unexpected error occurred', type: AppFeedbackType.error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _seedAdmin() async {
     setState(() {
-      _isLoading = false;
+      _isLoading = true;
     });
-    
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const DashboardScreen()),
-    );
+    try {
+      try {
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
+          email: 'admin@gmail.com',
+          password: 'Admin@123',
+        );
+      } catch (e) {
+        debugPrint('Sign in failed, attempting to create account. Error was: $e');
+        await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: 'admin@gmail.com',
+          password: 'Admin@123',
+        );
+      }
+      if (!mounted) return;
+      AppFeedback.show(context, 'Admin account seeded successfully!', type: AppFeedbackType.success);
+    } catch (e) {
+      if (!mounted) return;
+      AppFeedback.show(context, 'Failed to seed admin: $e', type: AppFeedbackType.error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
@@ -208,7 +285,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 16),
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: _isLoading ? null : _seedAdmin,
+                                icon: const Icon(Icons.admin_panel_settings),
+                                label: const Text('Seed Admin Account'),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: _primaryColor,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                             Center(
                               child: Text(
                                 "Don't have an account? Contact admin",
