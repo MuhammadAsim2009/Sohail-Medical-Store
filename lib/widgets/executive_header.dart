@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
+import '../services/firebase_sync_service.dart';
+import '../services/database_helper.dart';
 
-class ExecutiveHeader extends StatelessWidget {
+class ExecutiveHeader extends StatefulWidget {
   final String title;
   final String subtitle;
 
@@ -11,7 +14,78 @@ class ExecutiveHeader extends StatelessWidget {
   });
 
   @override
+  State<ExecutiveHeader> createState() => _ExecutiveHeaderState();
+}
+
+class _ExecutiveHeaderState extends State<ExecutiveHeader> {
+  bool _isSyncing = false;
+  DateTime? _lastSyncTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLastSyncTime();
+  }
+
+  Future<void> _loadLastSyncTime() async {
+    final raw = await DatabaseHelper.instance.getSetting('last_sync_timestamp');
+    if (raw != null) {
+      final ts = int.tryParse(raw);
+      if (ts != null && ts > 0) {
+        if (mounted) {
+          setState(() {
+            _lastSyncTime = DateTime.fromMillisecondsSinceEpoch(ts);
+          });
+        }
+      }
+    }
+  }
+
+  Future<void> _syncNow() async {
+    if (_isSyncing) return;
+    
+    setState(() {
+      _isSyncing = true;
+    });
+
+    try {
+      await FirebaseSyncService.instance.sync(forcePull: true);
+      await _loadLastSyncTime();
+    } catch (e) {
+      debugPrint('Sync failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final today = DateFormat('EEE, d MMM yyyy').format(DateTime.now());
+    
+    String syncText = 'Pending';
+    String syncSubText = 'Not synced yet';
+    Color syncColor = Colors.orange.shade600;
+    Color syncBgColor = Colors.orange.shade50;
+    IconData syncIcon = Icons.cloud_off_outlined;
+
+    if (_isSyncing) {
+      syncText = 'Syncing...';
+      syncSubText = 'Please wait';
+      syncColor = Colors.blue.shade600;
+      syncBgColor = Colors.blue.shade50;
+      syncIcon = Icons.cloud_sync_outlined;
+    } else if (_lastSyncTime != null) {
+      syncText = 'Data synced';
+      syncSubText = 'Updated ${DateFormat('h:mm a').format(_lastSyncTime!)}';
+      syncColor = Colors.green.shade600;
+      syncBgColor = Colors.green.shade50;
+      syncIcon = Icons.cloud_done_outlined;
+    }
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -21,7 +95,7 @@ class ExecutiveHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                title,
+                widget.title,
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
@@ -31,7 +105,7 @@ class ExecutiveHeader extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                subtitle,
+                widget.subtitle,
                 style: TextStyle(
                   fontSize: 14,
                   color: Colors.grey.shade500,
@@ -63,7 +137,7 @@ class ExecutiveHeader extends StatelessWidget {
                     children: [
                       Text('Reporting date', style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
                       const SizedBox(height: 2),
-                      const Text('Sat, 27 Jun 2026', style: TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w600)),
+                      Text(today, style: const TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ],
@@ -84,18 +158,24 @@ class ExecutiveHeader extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.green.shade50,
+                      color: syncBgColor,
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.cloud_done_outlined, size: 16, color: Colors.green.shade600),
+                    child: _isSyncing 
+                        ? SizedBox(
+                            width: 16, 
+                            height: 16, 
+                            child: CircularProgressIndicator(strokeWidth: 2, color: syncColor)
+                          )
+                        : Icon(syncIcon, size: 16, color: syncColor),
                   ),
                   const SizedBox(width: 12),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Firebase sync', style: TextStyle(fontSize: 11, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
-                      const Text('Data synced', style: TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w600)),
-                      Text('Updated 4:10 PM', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                      Text(syncText, style: const TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w600)),
+                      Text(syncSubText, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                     ],
                   ),
                 ],
@@ -105,7 +185,7 @@ class ExecutiveHeader extends StatelessWidget {
             
             // Sync Now Button
             InkWell(
-              onTap: () {},
+              onTap: _isSyncing ? null : _syncNow,
               borderRadius: BorderRadius.circular(8),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
@@ -116,9 +196,9 @@ class ExecutiveHeader extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.sync, size: 18, color: Colors.grey.shade700),
+                    Icon(Icons.sync, size: 18, color: _isSyncing ? Colors.grey.shade400 : Colors.grey.shade700),
                     const SizedBox(width: 8),
-                    const Text('Sync now', style: TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w600)),
+                    Text('Sync now', style: TextStyle(fontSize: 13, color: _isSyncing ? Colors.grey.shade400 : const Color(0xFF1A2E2B), fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
