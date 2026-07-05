@@ -1,5 +1,6 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:uuid/uuid.dart';
 import '../models/product.dart';
 import '../models/purchase_order.dart';
 import '../models/supplier.dart';
@@ -17,6 +18,16 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
+  static const _uuid = Uuid();
+
+  /// Stamps [map] with a new [sync_id] (if absent) and the current
+  /// [updated_at] Unix timestamp (ms). Returns the mutated map.
+  static Map<String, dynamic> _stamp(Map<String, dynamic> map, {bool isUpdate = false}) {
+    if (!isUpdate) { map['sync_id'] ??= _uuid.v4(); }
+    map['updated_at'] = DateTime.now().millisecondsSinceEpoch;
+    return map;
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('pharmacy.db');
@@ -28,7 +39,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 12,
+      version: 13,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -232,12 +243,36 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         await db.execute("ALTER TABLE sales_returns ADD COLUMN return_number TEXT");
       }
     }
+    if (oldVersion < 13) {
+      const tables = [
+        'products', 'purchase_history', 'purchase_orders', 'purchase_order_items',
+        'suppliers', 'customers', 'daily_sales_sheets', 'sales', 'sale_items',
+        'sales_returns', 'sales_return_items', 'expenses', 'customer_payments',
+        'supplier_payments',
+      ];
+      for (final table in tables) {
+        final cols = await db.rawQuery('PRAGMA table_info($table)');
+        final colNames = cols.map((c) => c['name'] as String).toSet();
+        if (!colNames.contains('sync_id')) {
+          await db.execute('ALTER TABLE $table ADD COLUMN sync_id TEXT UNIQUE');
+        }
+        if (!colNames.contains('updated_at')) {
+          await db.execute('ALTER TABLE $table ADD COLUMN updated_at INTEGER');
+        }
+        if (!colNames.contains('is_deleted')) {
+          await db.execute('ALTER TABLE $table ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0');
+        }
+      }
+    }
   }
 
   Future _createDB(Database db, int version) async {
     await db.execute("""
 CREATE TABLE IF NOT EXISTS products (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id    TEXT UNIQUE,
+  updated_at INTEGER,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
   sku        TEXT UNIQUE NOT NULL,
   name       TEXT NOT NULL,
   category   TEXT NOT NULL,
@@ -251,6 +286,9 @@ CREATE TABLE IF NOT EXISTS products (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS purchase_history (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id        TEXT UNIQUE,
+  updated_at     INTEGER,
+  is_deleted     INTEGER NOT NULL DEFAULT 0,
   product_id     INTEGER NOT NULL,
   purchase_date  TEXT NOT NULL,
   unit_purchased TEXT NOT NULL,
@@ -263,6 +301,9 @@ CREATE TABLE IF NOT EXISTS purchase_history (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS purchase_orders (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id     TEXT UNIQUE,
+  updated_at  INTEGER,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
   po_number   TEXT UNIQUE NOT NULL,
   supplier    TEXT NOT NULL,
   order_date  TEXT NOT NULL,
@@ -275,6 +316,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS purchase_order_items (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id        TEXT UNIQUE,
+  updated_at     INTEGER,
+  is_deleted     INTEGER NOT NULL DEFAULT 0,
   order_id       INTEGER NOT NULL,
   product_id     INTEGER,
   product_name   TEXT NOT NULL,
@@ -290,6 +334,9 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS suppliers (
   id                 TEXT PRIMARY KEY,
+  sync_id            TEXT UNIQUE,
+  updated_at         INTEGER,
+  is_deleted         INTEGER NOT NULL DEFAULT 0,
   companyName        TEXT NOT NULL,
   contactPerson      TEXT NOT NULL,
   phone              TEXT NOT NULL,
@@ -304,6 +351,9 @@ CREATE TABLE IF NOT EXISTS suppliers (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS customers (
   id                 TEXT PRIMARY KEY,
+  sync_id            TEXT UNIQUE,
+  updated_at         INTEGER,
+  is_deleted         INTEGER NOT NULL DEFAULT 0,
   name               TEXT NOT NULL,
   phone              TEXT NOT NULL,
   email              TEXT,
@@ -317,6 +367,9 @@ CREATE TABLE IF NOT EXISTS customers (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS daily_sales_sheets (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id         TEXT UNIQUE,
+  updated_at      INTEGER,
+  is_deleted      INTEGER NOT NULL DEFAULT 0,
   date            TEXT NOT NULL,
   opening_balance REAL NOT NULL,
   expected_cash   REAL NOT NULL,
@@ -327,6 +380,9 @@ CREATE TABLE IF NOT EXISTS daily_sales_sheets (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS sales (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id         TEXT UNIQUE,
+  updated_at      INTEGER,
+  is_deleted      INTEGER NOT NULL DEFAULT 0,
   dss_id          INTEGER NOT NULL,
   invoice_number  TEXT NOT NULL,
   date            TEXT NOT NULL,
@@ -343,6 +399,9 @@ CREATE TABLE IF NOT EXISTS sales (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS sale_items (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id         TEXT UNIQUE,
+  updated_at      INTEGER,
+  is_deleted      INTEGER NOT NULL DEFAULT 0,
   sale_id         INTEGER NOT NULL,
   product_id      INTEGER NOT NULL,
   product_name    TEXT NOT NULL,
@@ -355,6 +414,9 @@ CREATE TABLE IF NOT EXISTS sale_items (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS sales_returns (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id         TEXT UNIQUE,
+  updated_at      INTEGER,
+  is_deleted      INTEGER NOT NULL DEFAULT 0,
   dss_id          INTEGER NOT NULL,
   date            TEXT NOT NULL,
   invoice_number  TEXT NOT NULL,
@@ -371,6 +433,9 @@ CREATE TABLE IF NOT EXISTS sales_returns (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS sales_return_items (
   id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id           TEXT UNIQUE,
+  updated_at        INTEGER,
+  is_deleted        INTEGER NOT NULL DEFAULT 0,
   sales_return_id   INTEGER NOT NULL,
   product_id        INTEGER NOT NULL,
   product_name      TEXT NOT NULL,
@@ -384,6 +449,9 @@ CREATE TABLE IF NOT EXISTS sales_return_items (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS expenses (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id     TEXT UNIQUE,
+  updated_at  INTEGER,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
   date        TEXT NOT NULL,
   category    TEXT NOT NULL,
   title       TEXT NOT NULL,
@@ -394,6 +462,9 @@ CREATE TABLE IF NOT EXISTS expenses (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS customer_payments (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id     TEXT UNIQUE,
+  updated_at  INTEGER,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
   customer_id TEXT NOT NULL,
   date        TEXT NOT NULL,
   amount      REAL NOT NULL,
@@ -406,6 +477,9 @@ CREATE TABLE IF NOT EXISTS customer_payments (
     await db.execute("""
 CREATE TABLE IF NOT EXISTS supplier_payments (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id     TEXT UNIQUE,
+  updated_at  INTEGER,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
   supplier_id TEXT NOT NULL,
   date        TEXT NOT NULL,
   amount      REAL NOT NULL,
@@ -452,7 +526,8 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<Product> insertProduct(Product product) async {
     final db = await instance.database;
-    final id = await db.insert('products', product.toMap());
+    final map = _stamp(product.toMap());
+    final id = await db.insert('products', map);
     product.id = id;
     return product;
   }
@@ -465,7 +540,8 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<int> updateProduct(Product product) async {
     final db = await instance.database;
-    return db.update('products', product.toMap(),
+    final map = _stamp(product.toMap());
+    return db.update('products', _stamp(map, isUpdate: true),
         where: 'id = ?', whereArgs: [product.id]);
   }
 
@@ -484,7 +560,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     await db.transaction((txn) async {
       final multiplier = product.getMultiplier(unitPurchased);
       final newStock = product.stock + qtyPurchased * multiplier;
-      await txn.update('products', {'stock': newStock},
+      await txn.update('products', {'stock': newStock, 'updated_at': DateTime.now().millisecondsSinceEpoch},
           where: 'id = ?', whereArgs: [product.id]);
       await txn.insert('purchase_history', {
         'product_id': product.id,
@@ -511,7 +587,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     late PurchaseOrder saved;
     await db.transaction((txn) async {
       final poNumber = await _nextPoNumber(txn);
-      final orderId = await txn.insert('purchase_orders', {
+      final orderId = await txn.insert('purchase_orders', _stamp({
         'po_number': poNumber,
         'supplier': order.supplier,
         'order_date': order.orderDate.toIso8601String(),
@@ -519,10 +595,10 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         'notes': order.notes,
         'tax_rate': order.taxRate,
         'paid_amount': order.paidAmount,
-      });
+      }));
       final savedItems = <PurchaseOrderItem>[];
       for (final item in order.items) {
-        final itemId = await txn.insert('purchase_order_items', {
+        final itemId = await txn.insert('purchase_order_items', _stamp({
           'order_id': orderId,
           'product_id': item.productId,
           'product_name': item.productName,
@@ -532,7 +608,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           'selling_price': item.sellingPrice,
           'discount': item.discount,
           'expiry_date': item.expiryDate?.toIso8601String(),
-        });
+        }));
         savedItems.add(item.copyWith(id: itemId));
       }
       saved = order.copyWith(id: orderId, poNumber: poNumber, items: savedItems);
@@ -556,7 +632,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<void> updateOrderStatus(int orderId, String status) async {
     final db = await instance.database;
-    await db.update('purchase_orders', {'status': status},
+    await db.update('purchase_orders', {'status': status, 'updated_at': DateTime.now().millisecondsSinceEpoch},
         where: 'id = ?', whereArgs: [orderId]);
   }
 
@@ -565,20 +641,20 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     await db.transaction((txn) async {
       await txn.update(
         'purchase_orders',
-        {
+        _stamp({
           'supplier': order.supplier,
           'notes': order.notes,
           'tax_rate': order.taxRate,
           'paid_amount': order.paidAmount,
           'status': order.status,
-        },
+        }),
         where: 'id = ?',
         whereArgs: [order.id],
       );
       await txn.delete('purchase_order_items',
           where: 'order_id = ?', whereArgs: [order.id]);
       for (final item in order.items) {
-        await txn.insert('purchase_order_items', {
+        await txn.insert('purchase_order_items', _stamp({
           'order_id': order.id,
           'product_id': item.productId,
           'product_name': item.productName,
@@ -588,7 +664,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           'selling_price': item.sellingPrice,
           'discount': item.discount,
           'expiry_date': item.expiryDate?.toIso8601String(),
-        });
+        }));
       }
     });
   }
@@ -597,7 +673,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   Future<void> receivePurchaseOrder(PurchaseOrder order) async {
     final db = await instance.database;
     await db.transaction((txn) async {
-      await txn.update('purchase_orders', {'status': 'Received'},
+      await txn.update('purchase_orders', {'status': 'Received', 'updated_at': DateTime.now().millisecondsSinceEpoch},
           where: 'id = ?', whereArgs: [order.id]);
       for (final item in order.items) {
         if (item.productId == null) continue;
@@ -612,6 +688,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         if (item.purchasePrice > 0) updateMap['cost_price'] = item.purchasePrice;
         if (item.sellingPrice > 0)  updateMap['sell_price'] = item.sellingPrice;
 
+        updateMap['updated_at'] = DateTime.now().millisecondsSinceEpoch;
         await txn.update('products', updateMap,
             where: 'id = ?', whereArgs: [item.productId]);
         await txn.insert('purchase_history', {
@@ -647,6 +724,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           if (advanceAmount > 0) {
             updates['advanceAmount'] = existingAdvance + advanceAmount;
           }
+          updates['updated_at'] = DateTime.now().millisecondsSinceEpoch;
           await txn.update('suppliers', updates, where: 'id = ?', whereArgs: [supplierId]);
         }
       }
@@ -659,7 +737,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     await db.insert(
       'suppliers',
-      supplier.toMap(),
+      _stamp(supplier.toMap(), isUpdate: true),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -674,7 +752,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     return db.update(
       'suppliers',
-      supplier.toMap(),
+      _stamp(supplier.toMap(), isUpdate: true),
       where: 'id = ?',
       whereArgs: [supplier.id],
     );
@@ -703,7 +781,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<int> insertCustomer(Customer customer) async {
     final db = await instance.database;
-    return await db.insert('customers', customer.toMap());
+    return await db.insert('customers', _stamp(customer.toMap(), isUpdate: true));
   }
 
   Future<List<Customer>> getCustomers() async {
@@ -714,7 +792,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<int> updateCustomer(Customer customer) async {
     final db = await instance.database;
-    return await db.update('customers', customer.toMap(),
+    return await db.update('customers', _stamp(customer.toMap(), isUpdate: true),
         where: 'id = ?', whereArgs: [customer.id]);
   }
 
@@ -752,7 +830,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       actualCash: 0.0,
       status: 'OPEN',
     );
-    return await db.insert('daily_sales_sheets', dss.toMap());
+    return await db.insert('daily_sales_sheets', _stamp(dss.toMap()));
   }
 
   Future<int> closeDSS(int dssId, double actualCash) async {
@@ -770,12 +848,12 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final dss = DailySalesSheet.fromMap(dssMaps.first);
     final expectedCash = dss.openingBalance + totalCashSales;
     return await db.update(
-      'daily_sales_sheets',
-      {
-        'status': 'CLOSED',
-        'expected_cash': expectedCash,
-        'actual_cash': actualCash,
-      },
+        'daily_sales_sheets',
+        _stamp({
+          'status': 'CLOSED',
+          'expected_cash': expectedCash,
+          'actual_cash': actualCash,
+        }, isUpdate: true),
       where: 'id = ?',
       whereArgs: [dssId],
     );
@@ -787,17 +865,17 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     int saleId = 0;
     await db.transaction((txn) async {
-      final saleMap = sale.toMap();
+      final saleMap = _stamp(sale.toMap());
       saleMap.remove('id');
       saleId = await txn.insert('sales', saleMap);
       for (var item in items) {
-        final itemMap = item.toMap();
+        final itemMap = _stamp(item.toMap());
         itemMap.remove('id');
         itemMap['sale_id'] = saleId;
         await txn.insert('sale_items', itemMap);
         await txn.rawUpdate(
-          'UPDATE products SET stock = stock - ? WHERE id = ?',
-          [item.quantity, item.productId]
+          'UPDATE products SET stock = stock - ?, updated_at = ? WHERE id = ?',
+            [item.quantity, DateTime.now().millisecondsSinceEpoch, item.productId]
         );
       }
       if (sale.customerId != null && sale.customerId!.isNotEmpty) {
@@ -821,7 +899,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   Future<int> insertCustomerPayment(CustomerPayment payment) async {
     final db = await instance.database;
     return await db.transaction((txn) async {
-      final paymentMap = payment.toMap();
+      final paymentMap = _stamp(payment.toMap());
       paymentMap.remove('id');
       final id = await txn.insert('customer_payments', paymentMap);
 
@@ -838,6 +916,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           {
             'pendingAmount': (existingPending - appliedToPending).clamp(0.0, double.infinity),
             'advanceAmount': existingAdvance + extraAdvance,
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
           },
           where: 'id = ?',
           whereArgs: [payment.customerId],
@@ -850,7 +929,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   Future<int> insertSupplierPayment(SupplierPayment payment) async {
     final db = await instance.database;
     return await db.transaction((txn) async {
-      final paymentMap = payment.toMap();
+      final paymentMap = _stamp(payment.toMap());
       paymentMap.remove('id');
       final id = await txn.insert('supplier_payments', paymentMap);
 
@@ -867,6 +946,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           {
             'pendingAmount': (existingPending - appliedToPending).clamp(0.0, double.infinity),
             'advanceAmount': existingAdvance + extraAdvance,
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
           },
           where: 'id = ?',
           whereArgs: [payment.supplierId],
@@ -1007,7 +1087,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     return await db.rawQuery('''
       SELECT date, category, title, amount, notes
       FROM expenses
-      WHERE date(date) BETWEEN date(?) AND date(?)
+      WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       ORDER BY date DESC
     ''', [fromDate, toDate]);
   }
@@ -1131,13 +1211,13 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT date, 'Sale' AS type, invoice_number AS description, total AS debit, 0 AS credit FROM sales
-        WHERE date(date) BETWEEN date(?) AND date(?)
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, 'Return' AS type, invoice_number AS description, 0 AS debit, total_refund AS credit FROM sales_returns
-        WHERE date(date) BETWEEN date(?) AND date(?)
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, 'Expense' AS type, title AS description, 0 AS debit, amount AS credit FROM expenses
-        WHERE date(date) BETWEEN date(?) AND date(?)
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       ORDER BY date DESC
     ''', [fromDate, toDate, fromDate, toDate, fromDate, toDate]);
   }
@@ -1150,22 +1230,22 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
     return await db.rawQuery('''
       SELECT date, invoice_number AS title, customer_name AS description, 'Sales' AS category, 'Sale' AS type, received AS debit, 0.0 AS credit, received AS amount FROM sales
-        WHERE received > 0 AND date(date) BETWEEN date(?) AND date(?)
+        WHERE received > 0 AND date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, return_number AS title, customer_name AS description, 'Sales Return' AS category, 'Return' AS type, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
-        WHERE total_refund > 0 AND date(date) BETWEEN date(?) AND date(?)
+        WHERE total_refund > 0 AND date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, title AS title, notes AS description, category AS category, 'Expense' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
-        WHERE date(date) BETWEEN date(?) AND date(?)
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, COALESCE(invoice_number, reference) AS title, reference AS description, 'Customer Receipt' AS category, 'Receipt' AS type, amount AS debit, 0.0 AS credit, amount AS amount FROM customer_payments
-        WHERE date(date) BETWEEN date(?) AND date(?)
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, COALESCE(invoice_number, reference) AS title, reference AS description, 'Supplier Payment' AS category, 'Payment' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM supplier_payments
-        WHERE date(date) BETWEEN date(?) AND date(?)
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT order_date AS date, po_number AS title, supplier AS description, 'Purchase' AS category, 'Purchase' AS type, 0.0 AS debit, paid_amount AS credit, -paid_amount AS amount FROM purchase_orders
-        WHERE paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?)
+        WHERE paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       ORDER BY date DESC
     ''', [f, t, f, t, f, t, f, t, f, t, f, t]);
   }
@@ -1283,7 +1363,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<int> insertExpense(Expense expense) async {
     final db = await instance.database;
-    final map = expense.toMap();
+    final map = _stamp(expense.toMap());
     map.remove('id');
     return await db.insert('expenses', map);
   }
@@ -1327,9 +1407,9 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         final count = (nextRows.first['cnt'] as int?) ?? 0;
         returnMap['return_number'] = 'SR-${(count + 1).toString().padLeft(3, '0')}';
       }
-      returnId = await txn.insert('sales_returns', returnMap);
+      returnId = await txn.insert('sales_returns', _stamp(returnMap));
       for (final item in items) {
-        final itemMap = item.toMap();
+        final itemMap = _stamp(item.toMap());
         itemMap.remove('id');
         itemMap['sales_return_id'] = returnId;
         await txn.insert('sales_return_items', itemMap);
