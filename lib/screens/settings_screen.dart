@@ -124,6 +124,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
   final _shopAddressController = TextEditingController();
   final _shopPhoneController = TextEditingController();
   final _taxRateController = TextEditingController();
+  bool _showTaxInReceipt = false;
 
   bool _isLoading = true;
 
@@ -141,6 +142,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
       _shopAddressController.text = settings['shop_address'] ?? '';
       _shopPhoneController.text = settings['shop_phone'] ?? '';
       _taxRateController.text = settings['tax_rate'] ?? '0';
+      _showTaxInReceipt = (settings['show_tax_in_receipt'] ?? 'true') == 'true';
       _isLoading = false;
     });
   }
@@ -151,6 +153,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
     await DatabaseHelper.instance.setSetting('shop_address', _shopAddressController.text);
     await DatabaseHelper.instance.setSetting('shop_phone', _shopPhoneController.text);
     await DatabaseHelper.instance.setSetting('tax_rate', _taxRateController.text);
+    await DatabaseHelper.instance.setSetting('show_tax_in_receipt', _showTaxInReceipt.toString());
     
     if (mounted) {
       AppFeedback.show(context, 'Settings saved successfully.', type: AppFeedbackType.success);
@@ -208,6 +211,25 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
           label: 'Tax Rate',
           hint: '0',
           prefixText: '%   ',
+        ),
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Show Tax in Receipt', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey.shade800)),
+                const SizedBox(height: 4),
+                Text('Display tax amount on printed receipts', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+              ],
+            ),
+            Switch(
+              value: _showTaxInReceipt,
+              activeColor: _kPrimary,
+              onChanged: (val) => setState(() => _showTaxInReceipt = val),
+            ),
+          ],
         ),
         const SizedBox(height: 24),
         Align(

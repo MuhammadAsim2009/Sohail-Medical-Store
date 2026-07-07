@@ -611,7 +611,6 @@ class _BillingScreenState extends State<BillingScreen> {
                 _th('INVOICE', flex: 3),
                 _th('DATE', flex: 3),
                 _th('CUSTOMER', flex: 4),
-                _th('WAREHOUSE', flex: 3),
                 _th('TOTAL', flex: 2),
                 _th('RECEIVED', flex: 2),
                 _th('BALANCE', flex: 2),
@@ -944,13 +943,6 @@ class _SaleRowState extends State<_SaleRow> {
                   fontWeight: FontWeight.w600,
                   color: Color(0xFF1A2E2B),
                 ),
-              ),
-            ),
-            Expanded(
-              flex: 3,
-              child: Text(
-                'Main',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
             ),
             Expanded(
@@ -1410,6 +1402,7 @@ class _SaleRowState extends State<_SaleRow> {
     final shopName = settingsData['shop_name']?.isNotEmpty == true ? settingsData['shop_name']! : 'PHARMACY RECEIPT';
     final phone = settingsData['shop_phone'] ?? '';
     final address = settingsData['shop_address'] ?? '';
+    final showTax = (settingsData['show_tax_in_receipt'] ?? 'true') == 'true';
     
     // Process items for parent unit display
     final processedItems = <Map<String, dynamic>>[];
@@ -1438,6 +1431,16 @@ class _SaleRowState extends State<_SaleRow> {
     }
     
     // Parse date and time if possible
+    pw.Widget divider() {
+      return pw.Padding(
+        padding: const pw.EdgeInsets.symmetric(vertical: 4),
+        child: pw.Text(
+          ':::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::',
+          maxLines: 1,
+          style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+        ),
+      );
+    }
     String dateStr = widget.sale.date;
     String timeStr = '';
     try {
@@ -1454,16 +1457,6 @@ class _SaleRowState extends State<_SaleRow> {
     }
     
     final pdf = pw.Document();
-      
-    pw.Widget divider() => pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1),
-      child: pw.Text('------------------------------', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-    );
-    
-    pw.Widget doubleDivider() => pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 1),
-      child: pw.Text('==============================', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
-    );
 
     pdf.addPage(
       pw.Page(
@@ -1526,10 +1519,10 @@ class _SaleRowState extends State<_SaleRow> {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text('Subtotal', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text((widget.sale.total - widget.sale.taxAmount).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text((widget.sale.total + widget.sale.discount - (showTax ? widget.sale.taxAmount : 0)).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
                 ],
               ),
-              if (widget.sale.taxAmount > 0)
+              if (showTax && widget.sale.taxAmount > 0)
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
@@ -1537,7 +1530,15 @@ class _SaleRowState extends State<_SaleRow> {
                     pw.Text(widget.sale.taxAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
                   ],
                 ),
-              doubleDivider(),
+              if (widget.sale.discount > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Discount', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text('-${widget.sale.discount.toStringAsFixed(2)}', style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+              divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
@@ -1545,7 +1546,7 @@ class _SaleRowState extends State<_SaleRow> {
                   pw.Text(widget.sale.total.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
                 ],
               ),
-              doubleDivider(),
+              divider(),
               pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
               divider(),
               
@@ -1572,9 +1573,9 @@ class _SaleRowState extends State<_SaleRow> {
                   pw.Text(widget.sale.balance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
                 ],
               ),
-              doubleDivider(),
+              divider(),
               pw.Text(widget.sale.balance <= 0 ? 'PAID' : 'PENDING', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-              doubleDivider(),
+              divider(),
               
               pw.Container(
                 alignment: pw.Alignment.centerLeft,
@@ -1677,14 +1678,22 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
 
   final TextEditingController _receivedController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController(text: '1');
+  final TextEditingController _discountController = TextEditingController(text: '0');
+  String _discountType = 'Rupees';
   String? _validationError;
   String? _stagedError;
-
-  final TextEditingController _taxController = TextEditingController(text: '0');
+  double _taxRate = 0.0;
 
   double get _subtotal => _cart.fold(0, (s, i) => s + i.total);
-  double get _taxAmount => _subtotal * (double.tryParse(_taxController.text) ?? 0) / 100;
-  double get _total => _subtotal + _taxAmount;
+  double get _discountAmount {
+    final val = double.tryParse(_discountController.text) ?? 0.0;
+    if (_discountType == 'Percentage') {
+      return _subtotal * (val / 100);
+    }
+    return val;
+  }
+  double get _taxAmount => (_subtotal - _discountAmount) * (_taxRate / 100);
+  double get _total => _subtotal - _discountAmount + _taxAmount;
   double get _stagedPricePerUnit {
     if (_stagedProduct == null || _stagedUnit == null) return 0;
     final p = _stagedProduct!;
@@ -1709,7 +1718,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     final settings = await DatabaseHelper.instance.getAllSettings();
     if (mounted) {
       setState(() {
-        _taxController.text = settings['tax_rate'] ?? '0';
+        _paymentMethod = settings['default_payment_method'] ?? 'Cash';
+        _taxRate = double.tryParse(settings['tax_rate'] ?? '0') ?? 0.0;
       });
     }
   }
@@ -1719,6 +1729,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   void dispose() {
     _receivedController.dispose();
     _qtyController.dispose();
+    _discountController.dispose();
     super.dispose();
   }
 
@@ -1955,8 +1966,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
         balance: balance,
         paymentMethod: _paymentMethod,
           status: balance > 0 ? 'Partial' : 'Paid',
-          taxRate: double.tryParse(_taxController.text) ?? 0,
+          taxRate: _taxRate,
           taxAmount: _taxAmount,
+          discount: _discountAmount,
         );
 
       final items = _cart
@@ -2140,6 +2152,51 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                 borderSide: BorderSide.none,
                               ),
                             ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Discount Row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: DropdownButtonFormField<String>(
+                            decoration: InputDecoration(
+                              labelText: 'Discount Type',
+                              prefixIcon: Icon(
+                                Icons.local_offer_outlined,
+                                size: 17,
+                                color: Colors.grey.shade400,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF9FAFB),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: BorderSide.none),
+                            ),
+                            value: _discountType,
+                            items: ['Rupees', 'Percentage'].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
+                            onChanged: (val) => setState(() => _discountType = val!),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: TextFormField(
+                            controller: _discountController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: InputDecoration(
+                              labelText: 'Discount Value',
+                              prefixIcon: Icon(
+                                _discountType == 'Percentage' ? Icons.percent : Icons.money,
+                                size: 17,
+                                color: Colors.grey.shade400,
+                              ),
+                              filled: true,
+                              fillColor: const Color(0xFFF9FAFB),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: BorderSide.none),
+                            ),
+                            onChanged: (_) => setState(() {}),
                           ),
                         ),
                       ],
@@ -2665,32 +2722,17 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Tax (%): ', style: TextStyle(color: Colors.grey.shade600)),
-                          SizedBox(
-                            width: 60,
-                            height: 30,
-                            child: TextFormField(
-                              controller: _taxController,
-                              style: const TextStyle(fontSize: 13),
-                              textAlign: TextAlign.right,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: InputDecoration(
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-                                isDense: true,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
-                              ),
-                              onChanged: (val) => setState((){}),
-                            ),
-                          ),
+                          Text('Discount: ', style: TextStyle(color: Colors.grey.shade600)),
+                          Text('- Rs. ${_discountAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
                         ],
                       ),
-                      if ((double.tryParse(_taxController.text) ?? 0) > 0) ...[
+                      if (_taxAmount > 0) ...[
                         const SizedBox(height: 4),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            Text('Tax Amount: ', style: TextStyle(color: Colors.grey.shade600)),
-                            Text('Rs. ${_taxAmount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                            Text('Tax (${_taxRate.toStringAsFixed(1)}%): ', style: TextStyle(color: Colors.grey.shade600)),
+                            Text('+ Rs. ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.orange)),
                           ],
                         ),
                       ],

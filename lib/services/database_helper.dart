@@ -39,7 +39,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 19,
+      version: 20,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS sales (
   status          TEXT NOT NULL,
     tax_rate        REAL NOT NULL DEFAULT 0.0,
     tax_amount      REAL NOT NULL DEFAULT 0.0,
+    discount        REAL NOT NULL DEFAULT 0.0,
   FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
 )""");
       await db.execute("""
@@ -213,6 +214,9 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       // Add missing tax columns to sales for legacy DBs
       try { await db.execute("ALTER TABLE sales ADD COLUMN tax_rate REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
       try { await db.execute("ALTER TABLE sales ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
+    }
+    if (oldVersion < 20) {
+      try { await db.execute("ALTER TABLE sales ADD COLUMN discount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
     }
   }
 
