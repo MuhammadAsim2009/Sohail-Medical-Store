@@ -1411,62 +1411,196 @@ class _SaleRowState extends State<_SaleRow> {
     final phone = settingsData['shop_phone'] ?? '';
     final address = settingsData['shop_address'] ?? '';
     
+    // Process items for parent unit display
+    final processedItems = <Map<String, dynamic>>[];
+    for (var item in items) {
+      final product = await DatabaseHelper.instance.getProduct(item.productId);
+      int multiplier = 1;
+      if (product != null) {
+        final match = RegExp(r'\((.*?)\)$').firstMatch(item.productName);
+        if (match != null) {
+          final unitName = match.group(1)!;
+          multiplier = product.getMultiplier(unitName);
+        }
+      }
+      if (multiplier < 1) multiplier = 1;
+      
+      final displayQty = item.quantity / multiplier;
+      final displayPrice = item.price * multiplier;
+      final displayAmount = displayPrice * displayQty;
+      
+      processedItems.add({
+        'name': item.productName,
+        'qty': displayQty.toInt().toString(),
+        'price': displayPrice,
+        'amount': displayAmount,
+      });
+    }
+    
+    // Parse date and time if possible
+    String dateStr = widget.sale.date;
+    String timeStr = '';
+    try {
+      final dt = DateTime.parse(widget.sale.date);
+      dateStr = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+      timeStr = "${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}";
+    } catch (e) {
+      // Fallback if not parseable
+      final parts = widget.sale.date.split(' ');
+      if (parts.length > 1) {
+        dateStr = parts[0];
+        timeStr = parts[1];
+      }
+    }
+    
     final pdf = pw.Document();
       
+    pw.Widget divider() => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1),
+      child: pw.Text('------------------------------', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+    );
+    
+    pw.Widget doubleDivider() => pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1),
+      child: pw.Text('==============================', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey700)),
+    );
+
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.roll80,
+        pageFormat: const PdfPageFormat(68 * PdfPageFormat.mm, double.infinity, marginAll: 2 * PdfPageFormat.mm),
         build: (pw.Context context) {
           return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              pw.Center(
-                child: pw.Text(shopName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
-              ),
-              if (address.isNotEmpty) pw.Center(child: pw.Text(address, style: const pw.TextStyle(fontSize: 10))),
-              if (phone.isNotEmpty) pw.Center(child: pw.Text('Ph: $phone', style: const pw.TextStyle(fontSize: 10))),
-              pw.SizedBox(height: 10),
-              pw.Text('Invoice: ${widget.sale.invoiceNumber}'),
-
-              pw.Text('Date: ${widget.sale.date}'),
-              pw.Text('Customer: ${widget.sale.customerName ?? 'Walk-in'}'),
-              pw.Divider(),
-              ...items.map((item) {
-                return pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              pw.Text(shopName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14), textAlign: pw.TextAlign.center),
+              if (address.isNotEmpty) pw.Text(address, style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center),
+              if (phone.isNotEmpty) pw.Text('Contact: $phone', style: const pw.TextStyle(fontSize: 8)),
+              divider(),
+              pw.Text('INVOICE INFORMATION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              divider(),
+              
+              pw.Container(
+                alignment: pw.Alignment.centerLeft,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Expanded(child: pw.Text('${item.productName} (${item.quantity})')),
-                    pw.Text('Rs. ${(item.price * item.quantity).toStringAsFixed(2)}'),
-                  ],
+                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Invoice #', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': ${widget.sale.invoiceNumber}', style: const pw.TextStyle(fontSize: 8)))]),
+                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Date', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': $dateStr', style: const pw.TextStyle(fontSize: 8)))]),
+                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Time', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': $timeStr', style: const pw.TextStyle(fontSize: 8)))]),
+                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Customer', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': ${widget.sale.customerName ?? 'Walk-in'}', style: const pw.TextStyle(fontSize: 8)))]),
+                  ]
+                ),
+              ),
+              
+              divider(),
+              pw.Text('PRODUCT DETAILS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              divider(),
+              
+              pw.Row(
+                children: [
+                  pw.Expanded(flex: 3, child: pw.Text('Item', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold))),
+                  pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
+                  pw.Expanded(flex: 2, child: pw.Text('Price', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 2, child: pw.Text('Amount', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                ],
+              ),
+              divider(),
+              
+              ...processedItems.map((item) {
+                return pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 2),
+                  child: pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Expanded(flex: 3, child: pw.Text(item['name'], style: const pw.TextStyle(fontSize: 8))),
+                      pw.Expanded(flex: 1, child: pw.Text(item['qty'], style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.center)),
+                      pw.Expanded(flex: 2, child: pw.Text((item['price'] as double).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                      pw.Expanded(flex: 2, child: pw.Text((item['amount'] as double).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8), textAlign: pw.TextAlign.right)),
+                    ],
+                  ),
                 );
               }),
-              pw.Divider(),
+              
+              divider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Total:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
-                  pw.Text('Rs. ${widget.sale.total.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)),
+                  pw.Text('Subtotal', style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text((widget.sale.total - widget.sale.taxAmount).toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
                 ],
               ),
-              pw.SizedBox(height: 5),
+              if (widget.sale.taxAmount > 0)
+                pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Text('Tax (${widget.sale.taxRate}%)', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text(widget.sale.taxAmount.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
+                  ],
+                ),
+              doubleDivider(),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Received:'),
-                  pw.Text('Rs. ${widget.sale.received.toStringAsFixed(2)}'),
+                  pw.Text('GRAND TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                  pw.Text(widget.sale.total.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                ],
+              ),
+              doubleDivider(),
+              pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              divider(),
+              
+              pw.Container(
+                alignment: pw.Alignment.centerLeft,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Row(children: [pw.SizedBox(width: 50, child: pw.Text('Method', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': ${widget.sale.paymentMethod}', style: const pw.TextStyle(fontSize: 8)))]),
+                  ]
+                ),
+              ),
+              pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Paid Amount', style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text(widget.sale.received.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
                 ],
               ),
               pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
-                  pw.Text('Balance:'),
-                  pw.Text('Rs. ${widget.sale.balance.toStringAsFixed(2)}'),
+                  pw.Text('Remaining', style: const pw.TextStyle(fontSize: 8)),
+                  pw.Text(widget.sale.balance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
                 ],
               ),
-              pw.SizedBox(height: 10),
-              pw.Center(
-                child: pw.Text('Thank you for your purchase!', style: const pw.TextStyle(fontSize: 10)),
+              doubleDivider(),
+              pw.Text(widget.sale.balance <= 0 ? 'PAID' : 'PENDING', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+              doubleDivider(),
+              
+              pw.Container(
+                alignment: pw.Alignment.centerLeft,
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.SizedBox(height: 2),
+                    pw.Text('NOTES:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
+                    pw.Text('1. Products cannot be returned without a receipt.', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text('2. No returns accepted after 7 days.', style: const pw.TextStyle(fontSize: 8)),
+                    pw.Text('3. Please check your receipt and cash before leaving.', style: const pw.TextStyle(fontSize: 8)),
+                    pw.SizedBox(height: 2),
+                  ]
+                ),
               ),
+              divider(),
+              
+              pw.Text('THANK YOU', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+              pw.Text('Thank you for shopping with us', style: const pw.TextStyle(fontSize: 8)),
+              pw.Text('Goods once sold are not returnable', style: const pw.TextStyle(fontSize: 8)),
+              divider(),
+              
+              pw.Text('Powered By TryUnity Solutions', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
+              pw.Text('Contact: +92 302 3476605', style: const pw.TextStyle(fontSize: 8)),
+              pw.Text('Email: dev-alee@outlook.com', style: const pw.TextStyle(fontSize: 8)),
+              pw.SizedBox(height: 4),
             ],
           );
         },

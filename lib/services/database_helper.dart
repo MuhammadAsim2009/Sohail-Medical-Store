@@ -502,6 +502,15 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     return result.map((json) => Product.fromMap(json)).toList();
   }
 
+  Future<Product?> getProduct(int id) async {
+    final db = await instance.database;
+    final result = await db.query('products', where: 'id = ?', whereArgs: [id]);
+    if (result.isNotEmpty) {
+      return Product.fromMap(result.first);
+    }
+    return null;
+  }
+
   Future<int> updateProduct(Product product) async {
     final db = await instance.database;
     final map = _stamp(product.toMap());
