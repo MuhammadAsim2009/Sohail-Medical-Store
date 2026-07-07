@@ -1,4 +1,4 @@
-﻿class PurchaseOrderItem {
+class PurchaseOrderItem {
   final int? id;
   final int? productId;       // null for free-text items
   final String productName;
@@ -86,6 +86,7 @@ class PurchaseOrder {
   final String status;
   final String? notes;
   final double taxRate;
+  final double taxAmount;
   final double paidAmount;
 
   const PurchaseOrder({
@@ -97,13 +98,14 @@ class PurchaseOrder {
     required this.status,
     this.notes,
     this.taxRate = 0.0,
+    this.taxAmount = 0.0,
     this.paidAmount = 0.0,
   });
 
-  double get subtotal    => items.fold(0, (s, i) => s + i.subtotal);
-  double get taxAmount   => subtotal * taxRate / 100;
-  double get totalAmount => subtotal + taxAmount;
-  double get balanceDue  => totalAmount - paidAmount;
+  double get subtotal => items.fold(0, (s, i) => s + i.subtotal);
+  double get totalTax => taxAmount > 0 ? taxAmount : (subtotal * taxRate / 100);
+  double get totalAmount => subtotal + totalTax;
+  double get balance => totalAmount - paidAmount;
 
   PurchaseOrder copyWith({
     int? id,
@@ -114,6 +116,7 @@ class PurchaseOrder {
     String? status,
     String? notes,
     double? taxRate,
+    double? taxAmount,
     double? paidAmount,
   }) {
     return PurchaseOrder(
@@ -125,6 +128,7 @@ class PurchaseOrder {
       status: status ?? this.status,
       notes: notes ?? this.notes,
       taxRate: taxRate ?? this.taxRate,
+      taxAmount: taxAmount ?? this.taxAmount,
       paidAmount: paidAmount ?? this.paidAmount,
     );
   }
@@ -140,6 +144,7 @@ class PurchaseOrder {
       status: map['status'] as String,
       notes: map['notes'] as String?,
       taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0.0,
+      taxAmount: (map['tax_amount'] as num?)?.toDouble() ?? 0.0,
       paidAmount: (map['paid_amount'] as num?)?.toDouble() ?? 0.0,
     );
   }

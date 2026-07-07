@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -9,6 +11,7 @@ import '../models/customer.dart';
 import '../models/supplier.dart';
 import '../models/expense.dart';
 import '../utils/app_feedback.dart';
+import '../widgets/executive_header.dart';
 
 // ---------------------------------------------------------------------------
 // MODELS
@@ -119,7 +122,6 @@ class LedgerScreen extends StatefulWidget {
 class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderStateMixin {
   // Theme Tokens
   static const Color _primary = Color(0xFF0F4C81);
-  static const Color _accent = Color(0xFF1976D2);
   static const Color _bg = Color(0xFFF4F7F6);
   static const Color _cardBg = Colors.white;
 
@@ -233,9 +235,6 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     }
   }
 
-  void _syncNow() {
-    AppFeedback.show(context, 'Syncing data to Firebase...', type: AppFeedbackType.success);
-  }
 
   Future<void> _addExpense() async {
     await showDialog(
@@ -245,8 +244,50 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     _loadDataForCurrentTab();
   }
 
-  void _exportCSV() {
-    AppFeedback.show(context, 'Exporting CSV...', type: AppFeedbackType.success);
+  Future<void> _exportCSV() async {
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export CSV',
+      fileName: 'ledger_export.csv',
+      type: FileType.custom,
+      allowedExtensions: ['csv'],
+    );
+    if (path == null) return;
+
+    try {
+      final file = File(path);
+      final sink = file.openWrite();
+
+      switch (_tabController.index) {
+        case 0:
+          sink.writeln('Date,Reference,Description,Category,Type,Amount');
+          for (var e in _generalLedger) {
+            sink.writeln('${DateFormat('yyyy-MM-dd').format(e.date)},"${e.title}","${e.description}","${e.category}","${e.type}",${e.amount}');
+          }
+          break;
+        case 1:
+          sink.writeln('Date,Reference,Description,Debit,Credit,Balance');
+          for (var e in _customerStatements) {
+            sink.writeln('${DateFormat('yyyy-MM-dd').format(e.date)},"${e.reference}","${e.description}",${e.debit},${e.credit},${e.balance}');
+          }
+          break;
+        case 2:
+          sink.writeln('Date,Reference,Description,Debit,Credit,Balance');
+          for (var e in _supplierStatements) {
+            sink.writeln('${DateFormat('yyyy-MM-dd').format(e.date)},"${e.reference}","${e.description}",${e.debit},${e.credit},${e.balance}');
+          }
+          break;
+      }
+
+      await sink.flush();
+      await sink.close();
+      if (mounted) {
+        AppFeedback.show(context, 'Exported successfully to $path', type: AppFeedbackType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.show(context, 'Export failed: $e', type: AppFeedbackType.error);
+      }
+    }
   }
 
   @override
@@ -256,8 +297,14 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. PAGE HEADER ROW
-          _buildHeaderRow(),
+          // 1. PAGE HEADER
+          Padding(
+            padding: const EdgeInsets.fromLTRB(32, 24, 32, 0),
+            child: const ExecutiveHeader(
+              title: 'Ledger Workspace',
+              subtitle: 'Track cash movement, customer receivables, and supplier liabilities in one accounting-grade surface.',
+            ),
+          ),
           
           Expanded(
             child: SingleChildScrollView(
@@ -302,112 +349,6 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 1. HEADER ROW
-  // ---------------------------------------------------------------------------
-  Widget _buildHeaderRow() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 24.0),
-      decoration: const BoxDecoration(
-        color: _bg,
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left: Title & Subtitle
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Ledger Workspace',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w700,
-                    color: _primary,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Track cash movement, customer receivables, and supplier liabilities in one accounting-grade surface.',
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Right: Status Elements
-          Row(
-            children: [
-              _buildStatusCard(
-                icon: Icons.calendar_today_outlined,
-                title: 'Reporting date',
-                subtitle: DateFormat('dd MMM yyyy').format(DateTime.now()),
-                iconColor: _accent,
-              ),
-              const SizedBox(width: 16),
-              _buildStatusCard(
-                icon: Icons.cloud_done_outlined,
-                title: 'Data synced',
-                subtitle: 'Updated just now',
-                iconColor: Colors.green,
-              ),
-              const SizedBox(width: 16),
-              OutlinedButton.icon(
-                onPressed: _syncNow,
-                icon: const Icon(Icons.sync, size: 18),
-                label: const Text('Sync now'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: _primary,
-                  side: const BorderSide(color: _primary),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  textStyle: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusCard({required IconData icon, required String title, required String subtitle, required Color iconColor}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: _cardBg,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-        border: Border.all(color: Colors.grey.shade200),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, size: 20, color: iconColor),
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _primary)),
-              const SizedBox(height: 2),
-              Text(subtitle, style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // 2 & 3. FILTER / ACTION / TABS BAR
@@ -999,6 +940,10 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   // ---------------------------------------------------------------------------
   Future<void> _printCustomerStatement(Customer customer) async {
     final entries = _customerStatements;
+    final settings = await DatabaseHelper.instance.getAllSettings();
+    final shopName = settings['shop_name'] ?? 'Pharmacy';
+    final shopAddress = settings['shop_address'] ?? '';
+    final shopPhone = settings['shop_phone'] ?? '';
     final pdf = pw.Document();
     final dateRange = _selectedDateRange == null
         ? 'All Time'
@@ -1022,8 +967,17 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                   pw.Text('Period: $dateRange', style: const pw.TextStyle(fontSize: 10)),
                 ],
               ),
-              pw.Text('Sohail Medical Store',
-                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(shopName,
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  if (shopAddress.isNotEmpty)
+                    pw.Text(shopAddress, style: const pw.TextStyle(fontSize: 10)),
+                  if (shopPhone.isNotEmpty)
+                    pw.Text('Phone: $shopPhone', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
             ],
           ),
           pw.Divider(thickness: 1),
@@ -1098,6 +1052,10 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
 
   Future<void> _printSupplierStatement(Supplier supplier) async {
     final entries = _supplierStatements;
+    final settings = await DatabaseHelper.instance.getAllSettings();
+    final shopName = settings['shop_name'] ?? 'Pharmacy';
+    final shopAddress = settings['shop_address'] ?? '';
+    final shopPhone = settings['shop_phone'] ?? '';
     final pdf = pw.Document();
     final dateRange = _selectedDateRange == null
         ? 'All Time'
@@ -1121,8 +1079,17 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                   pw.Text('Period: $dateRange', style: const pw.TextStyle(fontSize: 10)),
                 ],
               ),
-              pw.Text('Sohail Medical Store',
-                  style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text(shopName,
+                      style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+                  if (shopAddress.isNotEmpty)
+                    pw.Text(shopAddress, style: const pw.TextStyle(fontSize: 10)),
+                  if (shopPhone.isNotEmpty)
+                    pw.Text('Phone: $shopPhone', style: const pw.TextStyle(fontSize: 10)),
+                ],
+              ),
             ],
           ),
           pw.Divider(thickness: 1),
@@ -1191,6 +1158,8 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
         ],
       ),
     );
+
+    await Printing.layoutPdf(onLayout: (PdfPageFormat format) async => pdf.save());
   }
 }
 

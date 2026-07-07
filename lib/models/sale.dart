@@ -10,6 +10,8 @@ class Sale {
   final double balance;
   final String paymentMethod;
   final String status;
+  final double taxRate;
+  final double taxAmount;
 
   Sale({
     this.id,
@@ -23,6 +25,8 @@ class Sale {
     required this.balance,
     required this.paymentMethod,
     required this.status,
+    this.taxRate = 0.0,
+    this.taxAmount = 0.0,
   });
 
   Map<String, dynamic> toMap() {
@@ -38,6 +42,8 @@ class Sale {
       'balance': balance,
       'payment_method': paymentMethod,
       'status': status,
+      'tax_rate': taxRate,
+      'tax_amount': taxAmount,
     };
   }
 
@@ -54,6 +60,8 @@ class Sale {
       balance: map['balance'],
       paymentMethod: map['payment_method'],
       status: map['status'],
+      taxRate: map['tax_rate'] ?? 0.0,
+      taxAmount: map['tax_amount'] ?? 0.0,
     );
   }
 }

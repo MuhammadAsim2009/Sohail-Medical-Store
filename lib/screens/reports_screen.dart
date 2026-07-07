@@ -982,16 +982,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   // ── Ledger Report  (0=Cash Book  1=Customer Statement  2=Supplier Statement)
   Widget _buildLedgerReport(Map<String, dynamic> d, NumberFormat fmt, int sub) {
     final entries      = (d['entries'] as List? ?? []).cast<Map<String, dynamic>>();
-    final custEntries  = entries.where((e) => e['category'] == 'Sale' || e['category'] == 'Customer Payment').toList();
-    final suppEntries  = entries.where((e) => e['category'] == 'Purchase' || e['category'] == 'Supplier Payment').toList();
-
-    final summaryCards = Row(children: [
-      _statCard('Total Inflow',  'Rs. ${fmt.format(d['inflow'] ?? 0)}',  Icons.call_received, Colors.green.shade700),
-      const SizedBox(width: 12),
-      _statCard('Total Outflow', 'Rs. ${fmt.format(d['outflow'] ?? 0)}', Icons.call_made, Colors.red.shade700),
-      const SizedBox(width: 12),
-      _statCard('Net Balance',   'Rs. ${fmt.format(d['net'] ?? 0)}',     Icons.account_balance_wallet_outlined, const Color(0xFF0F4C81)),
-    ]);
+    final custEntries  = entries.where((e) => ['Sales', 'Open Return', 'Sales Return', 'Customer Receipt'].contains(e['category'])).toList();
+    final suppEntries  = entries.where((e) => ['Purchase', 'Supplier Payment'].contains(e['category'])).toList();
 
     List<Map<String, dynamic>> displayEntries;
     String sectionTitle;
@@ -1008,6 +1000,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
         displayEntries = entries;
         sectionTitle = 'Cash Book';
     }
+
+    double inf = 0;
+    double outf = 0;
+    for (var r in displayEntries) {
+      double amt = ((r['debit'] ?? 0) as num).toDouble() - ((r['credit'] ?? 0) as num).toDouble();
+      if (amt > 0) inf += amt; else outf += amt.abs();
+    }
+    double net = inf - outf;
+
+    final summaryCards = Row(children: [
+      _statCard('Total Inflow',  'Rs. ${fmt.format(inf)}',  Icons.call_received, Colors.green.shade700),
+      const SizedBox(width: 12),
+      _statCard('Total Outflow', 'Rs. ${fmt.format(outf)}', Icons.call_made, Colors.red.shade700),
+      const SizedBox(width: 12),
+      _statCard('Net Balance',   'Rs. ${fmt.format(net)}',     Icons.account_balance_wallet_outlined, const Color(0xFF0F4C81)),
+    ]);
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       summaryCards, const SizedBox(height: 16),
@@ -1151,6 +1159,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   // PDF EXPORT
   // ---------------------------------------------------------------------------
   Future<void> _exportPdf(_ReportType report, Map<String, dynamic> data, String period) async {
+    final settings = await DatabaseHelper.instance.getAllSettings();
+    final shopName = settings['shop_name'] ?? 'Pharmacy';
     final pdf = pw.Document();
     final fmt = NumberFormat('#,##0.00', 'en_US');
 
@@ -1163,7 +1173,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             pw.Text(report.label, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
             pw.Text('Period: $period', style: const pw.TextStyle(fontSize: 10)),
           ]),
-          pw.Text('Sohail Medical Store', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.Text(shopName, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
         ]),
         pw.Divider(),
         pw.SizedBox(height: 8),
@@ -1180,9 +1190,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final rows = data['rows'] as List? ?? [];
         return [
           pw.Row(children: [
-            _pdfStat('Revenue', 'Rs. ${fmt.format(data['totalRevenue'])}'),
-            _pdfStat('Invoices', data['totalSales'].toString()),
-            _pdfStat('Outstanding', 'Rs. ${fmt.format(data['outstanding'])}'),
+            _pdfStat('Revenue', 'Rs. '),
+            _pdfStat('Invoices', (data['totalSales'] ?? 0).toString()),
+            _pdfStat('Outstanding', 'Rs. '),
           ]),
           pw.SizedBox(height: 12),
           pw.Text('Transactions', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
@@ -1197,9 +1207,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_fmtDate(r['date']), style: const pw.TextStyle(fontSize: 8))),
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(r['invoice_number'] ?? '', style: const pw.TextStyle(fontSize: 8))),
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(r['customer_name'] ?? 'Walk-in', style: const pw.TextStyle(fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${fmt.format(r['total'])}', style: const pw.TextStyle(fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${fmt.format(r['received'])}', style: const pw.TextStyle(fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${fmt.format(r['balance'])}', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
               ]),
           ]),
         ];
@@ -1209,8 +1219,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
         final byCategory = data['byCategory'] as List? ?? [];
         return [
           pw.Row(children: [
-            _pdfStat('Total', 'Rs. ${fmt.format(data['total'])}'),
-            _pdfStat('Count', data['count'].toString()),
+            _pdfStat('Total', 'Rs. '),
+            _pdfStat('Count', (data['count'] ?? 0).toString()),
           ]),
           pw.SizedBox(height: 12),
           pw.Text('By Category', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
@@ -1223,8 +1233,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             for (final c in byCategory)
               pw.TableRow(children: [
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(c['category'] ?? '', style: const pw.TextStyle(fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(c['count'].toString(), style: const pw.TextStyle(fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${fmt.format(c['total'])}', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text((c['count'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
               ]),
           ]),
           pw.SizedBox(height: 12),
@@ -1240,7 +1250,120 @@ class _ReportsScreenState extends State<ReportsScreen> {
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_fmtDate(e['date']), style: const pw.TextStyle(fontSize: 8))),
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(e['category'] ?? '', style: const pw.TextStyle(fontSize: 8))),
                 pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(e['title'] ?? '', style: const pw.TextStyle(fontSize: 8))),
-                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ${fmt.format(e['amount'])}', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+              ]),
+          ]),
+        ];
+
+      case 'ledger':
+        final entries = data['entries'] as List? ?? [];
+        double inf = 0.0;
+        double outf = 0.0;
+        for (final e in entries) {
+          if ((e['amount'] as num? ?? 0) > 0) {
+            inf += (e['amount'] as num? ?? 0);
+          } else {
+            outf += (e['amount'] as num? ?? 0).abs();
+          }
+        }
+        final net = inf - outf;
+        return [
+          pw.Row(children: [
+            _pdfStat('Inflow', 'Rs. '),
+            _pdfStat('Outflow', 'Rs. '),
+            _pdfStat('Net', 'Rs. '),
+          ]),
+          pw.SizedBox(height: 12),
+          pw.Text('Ledger Entries', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+          pw.SizedBox(height: 6),
+          pw.Table(border: pw.TableBorder.all(color: PdfColors.grey300), children: [
+            pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey200), children: [
+              for (final h in ['Date', 'Ref', 'Description', 'Category', 'Amount'])
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+            ]),
+            for (final e in entries)
+              pw.TableRow(children: [
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(_fmtDate(e['date']), style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(e['reference'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(e['description'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(e['category'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+              ]),
+          ]),
+        ];
+
+      case 'product':
+        final rows = data['rows'] as List? ?? [];
+        return [
+          pw.Row(children: [
+            _pdfStat('Products', (data['totalProducts'] ?? 0).toString()),
+            _pdfStat('Low Stock', (data['lowStockCount'] ?? 0).toString()),
+            _pdfStat('Out of Stock', (data['outOfStock'] ?? 0).toString()),
+          ]),
+          pw.SizedBox(height: 12),
+          pw.Text('Inventory Report', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+          pw.SizedBox(height: 6),
+          pw.Table(border: pw.TableBorder.all(color: PdfColors.grey300), children: [
+            pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey200), children: [
+              for (final h in ['Product', 'Category', 'Stock', 'Price'])
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+            ]),
+            for (final r in rows)
+              pw.TableRow(children: [
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(r['name'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(r['category'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text((r['stock'] ?? 0).toString(), style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+              ]),
+          ]),
+        ];
+
+      case 'customer':
+        final customers = data['customers'] as List? ?? [];
+        return [
+          pw.Row(children: [
+            _pdfStat('Purchases', 'Rs. '),
+            _pdfStat('Outstanding', 'Rs. '),
+          ]),
+          pw.SizedBox(height: 12),
+          pw.Text('Customer Balances', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+          pw.SizedBox(height: 6),
+          pw.Table(border: pw.TableBorder.all(color: PdfColors.grey300), children: [
+            pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey200), children: [
+              for (final h in ['Name', 'Phone', 'Total', 'Pending'])
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+            ]),
+            for (final c in customers)
+              pw.TableRow(children: [
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(c['name'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(c['phone'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+              ]),
+          ]),
+        ];
+
+      case 'supplier':
+        final suppliers = data['suppliers'] as List? ?? [];
+        return [
+          pw.Row(children: [
+            _pdfStat('Pending', 'Rs. '),
+            _pdfStat('Advance', 'Rs. '),
+          ]),
+          pw.SizedBox(height: 12),
+          pw.Text('Supplier Balances', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 12)),
+          pw.SizedBox(height: 6),
+          pw.Table(border: pw.TableBorder.all(color: PdfColors.grey300), children: [
+            pw.TableRow(decoration: const pw.BoxDecoration(color: PdfColors.grey200), children: [
+              for (final h in ['Company', 'Contact', 'Pending', 'Advance'])
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(h, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+            ]),
+            for (final s in suppliers)
+              pw.TableRow(children: [
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(s['company_name'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text(s['contact_person'] ?? '', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
+                pw.Padding(padding: const pw.EdgeInsets.all(5), child: pw.Text('Rs. ', style: const pw.TextStyle(fontSize: 8))),
               ]),
           ]),
         ];
@@ -1249,7 +1372,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
         return [pw.Text('Report data available. Please use on-screen view for details.', style: const pw.TextStyle(fontSize: 11))];
     }
   }
-
   pw.Widget _pdfStat(String label, String value) {
     return pw.Expanded(
       child: pw.Container(

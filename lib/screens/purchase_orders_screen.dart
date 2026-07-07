@@ -215,7 +215,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
               spacing: 10,
               children: [
                 _Pill('Pending: ${_count("Pending")}', Colors.grey.shade700, Colors.grey.shade100),
-                _Pill('Ordered: ${_count("Ordered")}', _accent, _accent.withOpacity(0.1)),
+                _Pill('Ordered: ${_count("Ordered")}', _accent, _accent.withValues(alpha: 0.1)),
                 _Pill('Partially Rcvd: ${_count("Partially Received")}', Colors.orange.shade800, Colors.orange.shade50),
                 _Pill('Received: ${_count("Received")}', Colors.green.shade700, Colors.green.shade50),
                 _Pill('Cancelled: ${_count("Cancelled")}', Colors.red.shade700, Colors.red.shade50),
@@ -229,7 +229,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.grey.shade100),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 10, offset: const Offset(0, 4))],
               ),
               child: _loading
                   ? const Padding(padding: EdgeInsets.all(64), child: Center(child: CircularProgressIndicator()))
@@ -481,7 +481,7 @@ class _OrderDetailDialog extends StatelessWidget {
             child: Row(children: [
               Container(
                 padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(10)),
+                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
                 child: const Icon(Icons.receipt_long_rounded, color: Colors.white, size: 22),
               ),
               const SizedBox(width: 14),
@@ -491,7 +491,7 @@ class _OrderDetailDialog extends StatelessWidget {
                       style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white)),
                   const SizedBox(height: 2),
                   Text(order.supplier,
-                      style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.75))),
+                      style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.75))),
                 ]),
               ),
               _StatusBadge(status: order.status),
@@ -513,9 +513,9 @@ class _OrderDetailDialog extends StatelessWidget {
                   _Meta('Items', '${order.items.length}'),
                   const SizedBox(width: 24),
                   _Meta('Total', currency.format(order.totalAmount)),
-                  if (order.balanceDue > 0) ...[
+                  if (order.balance > 0) ...[
                     const SizedBox(width: 24),
-                    _Meta('Balance Due', currency.format(order.balanceDue), color: Colors.red.shade600),
+                    _Meta('Balance Due', currency.format(order.balance), color: Colors.red.shade600),
                   ],
                 ]),
                 const SizedBox(height: 20),
@@ -572,11 +572,11 @@ class _OrderDetailDialog extends StatelessWidget {
                   ),
                   child: Column(children: [
                     _TotalRow('Subtotal', currency.format(order.subtotal)),
-                    if (order.taxRate > 0) _TotalRow('Tax (${order.taxRate}%)', currency.format(order.taxAmount)),
+                    if (order.taxRate > 0) _TotalRow('Tax (${order.taxRate}%)', currency.format(order.totalTax)),
                     const Divider(height: 16),
                     _TotalRow('Total', currency.format(order.totalAmount), bold: true),
                     if (order.paidAmount > 0) _TotalRow('Paid', currency.format(order.paidAmount)),
-                    if (order.balanceDue > 0) _TotalRow('Balance Due', currency.format(order.balanceDue), color: Colors.red.shade600),
+                    if (order.balance > 0) _TotalRow('Balance Due', currency.format(order.balance), color: Colors.red.shade600),
                   ]),
                 ),
 
@@ -696,32 +696,43 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
   @override
   void initState() {
     super.initState();
-    if (widget.existing != null) {
-      final o = widget.existing!;
-      _selectedSupplier = o.supplier;
-      _taxCtrl.text = o.taxRate.toString();
-      _paidCtrl.text = o.paidAmount.toString();
-      _items = o.items.map((i) {
-        final prod = widget.products.firstWhere(
-          (p) => p.id == i.productId,
-          orElse: () => widget.products.first,
-        );
-        double dPct = 0.0;
-        if (i.quantity > 0 && i.purchasePrice > 0) {
-          dPct = (i.discount / (i.quantity * i.purchasePrice)) * 100;
+    _initData();
+  }
+
+  Future<void> _initData() async {
+    final settings = await DatabaseHelper.instance.getAllSettings();
+    if (mounted) {
+      if (widget.existing != null) {
+        final o = widget.existing!;
+        _selectedSupplier = o.supplier;
+        _taxCtrl.text = o.taxRate.toString();
+        _paidCtrl.text = o.paidAmount.toString();
+        _items = o.items.map((i) {
+          final prod = widget.products.firstWhere(
+            (p) => p.id == i.productId,
+            orElse: () => widget.products.first,
+          );
+          double dPct = 0.0;
+          if (i.quantity > 0 && i.purchasePrice > 0) {
+            dPct = (i.discount / (i.quantity * i.purchasePrice)) * 100;
+          }
+          return _ItemRow(
+            product: prod,
+            unitPurchased: i.unitPurchased,
+            quantity: i.quantity,
+            purchasePrice: i.purchasePrice,
+            sellingPrice: i.sellingPrice,
+            discount: i.discount,
+            discountPercent: dPct,
+          );
+        }).toList();
+      } else {
+        _taxCtrl.text = settings['tax_rate'] ?? '0';
+        if (widget.products.isNotEmpty) {
+          _addItem();
         }
-        return _ItemRow(
-          product: prod,
-          unitPurchased: i.unitPurchased,
-          quantity: i.quantity,
-          purchasePrice: i.purchasePrice,
-          sellingPrice: i.sellingPrice,
-          discount: i.discount,
-          discountPercent: dPct,
-        );
-      }).toList();
-    } else if (widget.products.isNotEmpty) {
-      _addItem();
+      }
+      setState(() {});
     }
     _loadSuppliers();
   }
@@ -774,6 +785,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
       status: widget.existing?.status ?? 'Pending',
       notes: null,
       taxRate: double.tryParse(_taxCtrl.text) ?? 0,
+      taxAmount: _tax,
       paidAmount: double.tryParse(_paidCtrl.text) ?? 0,
       items: _items.map((r) => PurchaseOrderItem(
         productId: r.product.id,
@@ -812,7 +824,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF0F4C81).withOpacity(0.1),
+                  color: const Color(0xFF0F4C81).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.shopping_cart_outlined, color: Color(0xFF0F4C81), size: 22),

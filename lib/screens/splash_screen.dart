@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
+import '../services/database_helper.dart';
 
 // ---------------------------------------------------------------------------
 // ENTRY POINT
@@ -43,6 +44,7 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _particleCtrl;
 
   static const Color _accent = Color(0xFF1976D2);
+  String _shopName = 'Pharmacy';
 
   @override
   void initState() {
@@ -100,6 +102,17 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _runSequence() async {
+    // Load shop name early so it shows during animation
+    try {
+      final settings = await DatabaseHelper.instance.getAllSettings();
+      if (mounted) {
+        setState(() {
+          _shopName = settings['shop_name']?.isNotEmpty == true
+              ? settings['shop_name']!
+              : 'Pharmacy';
+        });
+      }
+    } catch (_) {}
     _bgCtrl.forward();
     await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
@@ -350,10 +363,10 @@ class _SplashScreenState extends State<SplashScreen>
                     position: _titleSlide,
                     child: FadeTransition(
                       opacity: _titleFade,
-                      child: const Text(
-                        'New Sohail Medical Store',
+                      child: Text(
+                        _shopName,
                         textAlign: TextAlign.center,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 36,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,

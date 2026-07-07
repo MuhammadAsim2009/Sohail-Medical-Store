@@ -307,7 +307,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
               onEdit: () => _showProductDialog(product: p),
               onDelete: () => _confirmDelete(p),
               onView: () => _viewProduct(p),
-              onPurchase: () => _purchaseStock(p),
             );
           }),
         ],
@@ -466,33 +465,6 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  void _purchaseStock(Product p) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withOpacity(0.4),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, anim1, anim2) => const SizedBox(),
-      transitionBuilder: (context, anim1, anim2, child) {
-        final curvedValue = Curves.easeOutBack.transform(anim1.value);
-        return Transform.scale(
-          scale: 0.85 + (0.15 * curvedValue),
-          child: Opacity(
-            opacity: anim1.value.clamp(0.0, 1.0),
-            child: _PurchaseStockDialog(
-              product: p,
-              onPurchase: (unitName, qty, costPerUnit) async {
-                await DatabaseHelper.instance.purchaseStock(p, unitName, qty, costPerUnit);
-                _loadProducts();
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   void _confirmDelete(Product p) {
     showDialog(
       context: context,
@@ -577,7 +549,6 @@ class _ProductRow extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onView;
-  final VoidCallback onPurchase;
 
   const _ProductRow({
     required this.product,
@@ -585,7 +556,6 @@ class _ProductRow extends StatelessWidget {
     required this.onEdit,
     required this.onDelete,
     required this.onView,
-    required this.onPurchase,
   });
 
   @override
@@ -673,37 +643,32 @@ class _ProductRow extends StatelessWidget {
 
           // Actions
           Expanded(
-            flex: 3,
+            flex: 2,
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.add_shopping_cart_rounded, size: 18, color: Color(0xFF0F4C81)),
-                  onPressed: onPurchase,
-                  tooltip: 'Purchase Stock',
-                  constraints: const BoxConstraints(),
-                  padding: const EdgeInsets.all(4),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  icon: Icon(Icons.open_in_new_rounded, size: 18, color: Colors.grey.shade500),
                   onPressed: onView,
+                  icon: Icon(Icons.visibility_outlined, size: 18, color: Colors.grey.shade500),
                   tooltip: 'View',
+                  splashRadius: 18,
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(4),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: Icon(Icons.edit_outlined, size: 18, color: Colors.grey.shade500),
                   onPressed: onEdit,
+                  icon: Icon(Icons.edit_outlined, size: 18, color: Colors.grey.shade500),
                   tooltip: 'Edit',
+                  splashRadius: 18,
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(4),
                 ),
                 const SizedBox(width: 4),
                 IconButton(
-                  icon: Icon(Icons.delete_outline, size: 18, color: Colors.red.shade300),
                   onPressed: onDelete,
+                  icon: const Icon(Icons.delete_outline_rounded, size: 18, color: Color(0xFFDC2626)),
                   tooltip: 'Delete',
+                  splashRadius: 18,
                   constraints: const BoxConstraints(),
                   padding: const EdgeInsets.all(4),
                 ),
@@ -716,9 +681,9 @@ class _ProductRow extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// STATUS BADGE
-// ---------------------------------------------------------------------------
+
+
+
 class _StatusBadge extends StatelessWidget {
   final String status;
   const _StatusBadge({required this.status});
@@ -1291,326 +1256,3 @@ class _Field extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // PURCHASE STOCK DIALOG
 // ---------------------------------------------------------------------------
-class _PurchaseStockDialog extends StatefulWidget {
-  final Product product;
-  final Future<void> Function(String unitName, double qty, double costPerUnit) onPurchase;
-
-  const _PurchaseStockDialog({required this.product, required this.onPurchase});
-
-  @override
-  State<_PurchaseStockDialog> createState() => _PurchaseStockDialogState();
-}
-
-class _PurchaseStockDialogState extends State<_PurchaseStockDialog> {
-  late String _selectedUnit;
-  final _qtyCtrl = TextEditingController();
-  final _costCtrl = TextEditingController();
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // Default to the largest (top-level) unit
-    _selectedUnit = widget.product.packaging.isNotEmpty
-        ? widget.product.packaging.first.name
-        : 'Unit';
-    _costCtrl.text = widget.product.costPrice.toStringAsFixed(0);
-  }
-
-  @override
-  void dispose() {
-    _qtyCtrl.dispose();
-    _costCtrl.dispose();
-    super.dispose();
-  }
-
-  double get _baseUnitQty {
-    final qty = double.tryParse(_qtyCtrl.text.trim()) ?? 0;
-    final multiplier = widget.product.getMultiplier(_selectedUnit);
-    return qty * multiplier;
-  }
-
-  double get _totalCost {
-    final qty = double.tryParse(_qtyCtrl.text.trim()) ?? 0;
-    final cost = double.tryParse(_costCtrl.text.trim()) ?? 0;
-    return qty * cost;
-  }
-
-  Future<void> _save() async {
-    final qty = double.tryParse(_qtyCtrl.text.trim());
-    if (qty == null || qty <= 0) return;
-    final cost = double.tryParse(_costCtrl.text.trim()) ?? 0;
-    setState(() => _saving = true);
-    try {
-      await widget.onPurchase(_selectedUnit, qty, cost);
-      if (mounted) Navigator.pop(context);
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.product;
-    final units = p.packaging.map((u) => u.name).toList();
-    final baseUnit = p.packaging.isNotEmpty ? p.packaging.last.name : 'Unit';
-    final currentStock = p.formattedStock;
-    final previewBase = _baseUnitQty;
-
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      insetPadding: const EdgeInsets.all(24),
-      child: Container(
-        width: 480,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.12), blurRadius: 40, offset: const Offset(0, 20)),
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // ─── Header band ────────────────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.fromLTRB(28, 24, 20, 24),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF0F4C81), Color(0xFF1976D2)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(Icons.add_shopping_cart_rounded, color: Colors.white, size: 22),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Purchase Stock', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white, letterSpacing: -0.4)),
-                        const SizedBox(height: 2),
-                        Text(p.name, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.75), fontWeight: FontWeight.w500)),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close_rounded, color: Colors.white70),
-                    splashRadius: 22,
-                  ),
-                ],
-              ),
-            ),
-
-            // ─── Body ───────────────────────────────────────────────────────
-            Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-
-                  // Current stock pill
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF0F9FF),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFFBAE6FD)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.inventory_2_outlined, size: 16, color: Color(0xFF0369A1)),
-                        const SizedBox(width: 8),
-                        Text('Current stock: ', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                        Text(currentStock, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF0369A1))),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Unit dropdown
-                  const Text('Purchasing Unit', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
-                  const SizedBox(height: 8),
-                  if (units.isEmpty)
-                    Text('No packaging defined. Please edit the product first.', style: TextStyle(color: Colors.red.shade400, fontSize: 13))
-                  else
-                    DropdownButtonFormField<String>(
-                      value: _selectedUnit,
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.grey.shade50,
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      ),
-                      items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-                      onChanged: (v) => setState(() => _selectedUnit = v!),
-                    ),
-                  const SizedBox(height: 20),
-
-                  // Qty + Cost row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Quantity', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _qtyCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              onChanged: (_) => setState((){}),
-                              style: const TextStyle(fontSize: 14),
-                              decoration: InputDecoration(
-                                hintText: 'e.g. 5',
-                                hintStyle: TextStyle(color: Colors.grey.shade400),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text('Cost per Unit (Rs.)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF1A2E2B))),
-                            const SizedBox(height: 8),
-                            TextFormField(
-                              controller: _costCtrl,
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              onChanged: (_) => setState((){}),
-                              style: const TextStyle(fontSize: 14),
-                              decoration: InputDecoration(
-                                hintText: 'e.g. 120',
-                                hintStyle: TextStyle(color: Colors.grey.shade400),
-                                filled: true,
-                                fillColor: Colors.grey.shade50,
-                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
-                                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Live preview card
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: previewBase > 0 ? const Color(0xFFF0FDF4) : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: previewBase > 0 ? const Color(0xFFBBF7D0) : Colors.grey.shade200,
-                      ),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Will add to stock:', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                            Text(
-                              previewBase > 0 ? '+${previewBase.toInt()} $baseUnit' : '—',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: previewBase > 0 ? const Color(0xFF16A34A) : Colors.grey.shade400,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('Total Cost:', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                            Text(
-                              _totalCost > 0 ? 'Rs. ${_totalCost.toStringAsFixed(0)}' : '—',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: _totalCost > 0 ? const Color(0xFF0F4C81) : Colors.grey.shade400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Action buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => Navigator.pop(context),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade300),
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: Text('Cancel', style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w600)),
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton.icon(
-                          onPressed: _saving || (_qtyCtrl.text.trim().isEmpty) ? null : _save,
-                          icon: _saving
-                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Icon(Icons.check_circle_outline_rounded, size: 20),
-                          label: Text(_saving ? 'Saving...' : 'Confirm Purchase',
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF0F4C81),
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 0,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-
-

@@ -122,8 +122,8 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         children: [
           Container(
             width: 40, height: 40,
-            decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(10)),
-            child: Icon(Icons.event_available_rounded, color: Colors.green.shade600, size: 22),
+            decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(10)),
+            child: Icon(Icons.event_available_rounded, color: Colors.blue.shade600, size: 22),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -169,7 +169,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
       children: [
         _FilterChip(label: '${_filtered.length} return records', icon: Icons.receipt_long_outlined, selected: false, onTap: () {}),
         const SizedBox(width: 8),
-        _FilterChip(label: 'All posted', icon: Icons.check_circle_outline, selected: _activeFilter == 'All posted', selectedColor: Colors.green, onTap: () => setState(() => _activeFilter = 'All posted')),
+        _FilterChip(label: 'All posted', icon: Icons.check_circle_outline, selected: _activeFilter == 'All posted', selectedColor: Colors.blue, onTap: () => setState(() => _activeFilter = 'All posted')),
         const Spacer(),
         ElevatedButton.icon(
           onPressed: _showNewReturnDialog,
@@ -278,7 +278,7 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
               ),
               child: Row(
                 children: [
-                  _Col(r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}', flex: 2, bold: true, color: _kPrimary),
+                  _Col(r.returnNumber.isNotEmpty ? r.returnNumber : 'OSR-${r.id}', flex: 2, bold: true, color: _kPrimary),
                   _Col(dateStr, flex: 2),
                   _Col(r.invoiceNumber, flex: 2),
                   _Col(r.customerName ?? 'Walk-in', flex: 3),
@@ -481,7 +481,7 @@ class _StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     Color bg, fg;
     switch (status) {
-      case 'Posted': bg = Colors.green.shade50; fg = Colors.green.shade700; break;
+      case 'Posted': bg = Colors.blue.shade50; fg = Colors.blue.shade700; break;
       case 'Draft': bg = Colors.orange.shade50; fg = Colors.orange.shade700; break;
       case 'Cancelled': bg = Colors.red.shade50; fg = Colors.red.shade700; break;
       default: bg = Colors.grey.shade100; fg = Colors.grey.shade600;
@@ -603,10 +603,11 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
     final cashRefund = _selectedMode == 'Cash Refund' ? _openTotal : 0.0;
     final credit = _selectedMode == 'Store Credit' ? _openTotal : 0.0;
 
+    final invoiceNumber = await DatabaseHelper.instance.getNextOpenReturnInvoiceNumber();
     final returnObj = SalesReturn(
       dssId: widget.dssId ?? 0,
       date: DateTime.now(),
-      invoiceNumber: 'OPEN-${DateTime.now().millisecondsSinceEpoch}',
+      invoiceNumber: invoiceNumber,
       customerName: _selectedCustomer?.name,
       mode: _selectedMode,
       reason: _selectedReason,
@@ -831,8 +832,8 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
                   )),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(color: Colors.green.shade50, borderRadius: BorderRadius.circular(20)),
-                    child: Text('Selected', style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w600)),
+                    decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(20)),
+                    child: Text('Selected', style: TextStyle(fontSize: 12, color: Colors.blue.shade700, fontWeight: FontWeight.w600)),
                   ),
                 ],
               ),
@@ -1193,7 +1194,14 @@ class _EditOpenReturnItemDialogState extends State<_EditOpenReturnItemDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        ElevatedButton(onPressed: _save, child: const Text('Save')),
+        ElevatedButton(
+          onPressed: _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0F4C81),
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Save'),
+        ),
       ],
     );
   }
@@ -1621,7 +1629,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [Colors.green.shade900, Colors.green.shade700, Colors.green.shade500],
+                  colors: [Colors.blue.shade900, Colors.blue.shade700, Colors.blue.shade500],
                 ),
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
@@ -1881,7 +1889,7 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}', style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                        Text(r.returnNumber.isNotEmpty ? r.returnNumber : 'OSR-${r.id}', style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                         const SizedBox(height: 3),
                         Text('${r.invoiceNumber}  •  $dateStr', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
                         const SizedBox(height: 10),
@@ -1920,11 +1928,11 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                       children: [
                         _SummaryTile(label: 'Total Refund', value: 'Rs. ${r.totalRefund.toStringAsFixed(0)}', color: const Color(0xFF0F4C81)),
                         const SizedBox(width: 12),
-                        _SummaryTile(label: 'Cash Refunded', value: 'Rs. ${r.cashRefunded.toStringAsFixed(0)}', color: Colors.green.shade700),
+                        _SummaryTile(label: 'Cash Refunded', value: 'Rs. ${r.cashRefunded.toStringAsFixed(0)}', color: Colors.blue.shade700),
                         const SizedBox(width: 12),
                         _SummaryTile(label: 'Store Credit', value: 'Rs. ${r.creditIssued.toStringAsFixed(0)}', color: Colors.orange.shade700),
                         const SizedBox(width: 12),
-                        _SummaryTile(label: 'Status', value: r.status, color: r.status == 'Posted' ? Colors.green.shade700 : Colors.orange.shade700, badge: true),
+                        _SummaryTile(label: 'Status', value: r.status, color: r.status == 'Posted' ? Colors.blue.shade700 : Colors.orange.shade700, badge: true),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -2099,7 +2107,7 @@ class _DeleteReturnDialogState extends State<_DeleteReturnDialog> {
                       children: [
                         const Text('Delete Return', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                         const SizedBox(height: 4),
-                        Text('${r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}'}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
+                        Text('${r.returnNumber.isNotEmpty ? r.returnNumber : 'OSR-${r.id}'}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
                       ],
                     ),
                   ),
@@ -2362,7 +2370,7 @@ class _EditReturnDialogState extends State<_EditReturnDialog> {
                         children: [
                           const Text('Edit Return', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
                           const SizedBox(height: 4),
-                          Text('${r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}'}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
+                          Text('${r.returnNumber.isNotEmpty ? r.returnNumber : 'OSR-${r.id}'}  •  ${r.invoiceNumber}', style: TextStyle(color: Colors.white.withValues(alpha: 0.72), fontSize: 13)),
                         ],
                       ),
                     ),
@@ -2382,7 +2390,7 @@ class _EditReturnDialogState extends State<_EditReturnDialog> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     TextFormField(
-                      initialValue: r.returnNumber.isNotEmpty ? r.returnNumber : 'SR-${r.id}',
+                      initialValue: r.returnNumber.isNotEmpty ? r.returnNumber : 'OSR-${r.id}',
                       readOnly: true,
                       decoration: InputDecoration(
                         labelText: 'Return Number',

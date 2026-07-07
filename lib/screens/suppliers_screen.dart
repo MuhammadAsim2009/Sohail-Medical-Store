@@ -1150,10 +1150,8 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
   final _amountController = TextEditingController(text: '0');
   final _receiptController = TextEditingController();
   final _notesController = TextEditingController();
-  String _paymentMethod = 'Cash';
-  bool _isGeneralReceipt = true;
-  bool _isSaving = false;
-  List<PurchaseOrder> _availableInvoices = [];
+    bool _isGeneralReceipt = true;
+    List<PurchaseOrder> _availableInvoices = [];
   String? _selectedInvoiceNumber;
 
   @override
@@ -1174,7 +1172,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
   Future<void> _loadInvoices() async {
     final orders = await DatabaseHelper.instance.getAllPurchaseOrders();
     final invoices = orders
-        .where((order) => order.supplier == widget.supplier.companyName && order.balanceDue > 0)
+        .where((order) => order.supplier == widget.supplier.companyName && order.balance > 0)
         .toList()
       ..sort((a, b) => b.orderDate.compareTo(a.orderDate));
     if (!mounted) return;
@@ -1183,7 +1181,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
       if (_availableInvoices.isNotEmpty) {
         _isGeneralReceipt = false;
         _selectedInvoiceNumber = _availableInvoices.first.poNumber;
-        _amountController.text = _availableInvoices.first.balanceDue.toStringAsFixed(0);
+        _amountController.text = _availableInvoices.first.balance.toStringAsFixed(0);
       }
     });
   }
@@ -1199,7 +1197,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
         }
       }
       if (selected != null) {
-        _amountController.text = selected.balanceDue.toStringAsFixed(0);
+        _amountController.text = selected.balance.toStringAsFixed(0);
       }
     });
   }
@@ -1336,7 +1334,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                           items: _availableInvoices
                               .map((order) => DropdownMenuItem<String>(
                                     value: order.poNumber,
-                                    child: Text('${order.poNumber}  •  Rs. ${order.balanceDue.toStringAsFixed(0)} due', overflow: TextOverflow.ellipsis),
+                                    child: Text('${order.poNumber}  •  Rs. ${order.balance.toStringAsFixed(0)} due', overflow: TextOverflow.ellipsis),
                                   ))
                               .toList(),
                           onChanged: (value) {
@@ -1430,7 +1428,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                         if (amount <= 0) return;
 
                         final payment = SupplierPayment(
-                          supplierId: widget.supplier.id!,
+                          supplierId: widget.supplier.id,
                           amount: amount,
                           reference: _receiptController.text.trim(),
                           notes: _notesController.text.trim(),

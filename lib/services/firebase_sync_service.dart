@@ -24,6 +24,7 @@ class FirebaseSyncService {
     'purchase_order_items',
     'suppliers',
     'customers',
+    'settings',
     'daily_sales_sheets',
     'sales',
     'sale_items',
@@ -69,14 +70,19 @@ class FirebaseSyncService {
   Future<int> _push(dynamic db, String table, int lastSync) async {
     // Fetch rows modified after the last sync (or all if first sync)
     List<Map<String, dynamic>> rows;
-    if (lastSync == 0) {
+    try {
+      if (lastSync == 0) {
+        rows = await db.query(table);
+      } else {
+        rows = await db.query(
+          table,
+          where: 'updated_at > ? OR sync_id IS NULL',
+          whereArgs: [lastSync],
+        );
+      }
+    } catch (_) {
+      // Fallback: column may not exist yet — push everything
       rows = await db.query(table);
-    } else {
-      rows = await db.query(
-        table,
-        where: 'updated_at > ? OR sync_id IS NULL',
-        whereArgs: [lastSync],
-      );
     }
 
     if (rows.isEmpty) return 0;
@@ -90,11 +96,13 @@ class FirebaseSyncService {
       // Assign a sync_id if the record doesn't have one yet
       if (row['sync_id'] == null) {
         row['sync_id'] = _uuid.v4();
+        // settings table uses 'key' as PK; all others use 'id'
+        final pkCol = (table == 'settings') ? 'key' : 'id';
         await db.update(
           table,
           {'sync_id': row['sync_id'], 'updated_at': DateTime.now().millisecondsSinceEpoch},
-          where: 'id = ?',
-          whereArgs: [row['id']],
+          where: '$pkCol = ?',
+          whereArgs: [row[pkCol]],
         );
       }
 
@@ -149,12 +157,24 @@ class FirebaseSyncService {
         final localRow = existing.first;
         final localUpdatedAt = (localRow['updated_at'] as int?) ?? 0;
         final remoteUpdatedAt = (data['updated_at'] as int?) ?? 0;
+        final isDirty = (localRow['is_dirty'] as int?) == 1;
 
-        // Last-Write-Wins: only update local if Firebase has a newer version
-        if (forcePull || remoteUpdatedAt > localUpdatedAt) {
+        bool dataDiffers = false;
+        for (final key in data.keys) {
+          if (key == 'updated_at' || key == 'is_dirty' || key == 'id') continue;
+          if (data[key] != localRow[key]) {
+            dataDiffers = true;
+            break;
+          }
+        }
+
+        // Update local if Firebase is newer, OR if forced, OR if Firebase data was
+        // manually changed (differs) and local is not dirty.
+        if (forcePull || remoteUpdatedAt > localUpdatedAt || (!isDirty && dataDiffers)) {
+          final updateData = Map<String, dynamic>.from(data)..remove('id');
           await db.update(
             table,
-            data,
+            updateData,
             where: 'sync_id = ?',
             whereArgs: [doc.id],
           );

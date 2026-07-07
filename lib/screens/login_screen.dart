@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_feedback.dart';
+import '../services/database_helper.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -21,6 +22,26 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _rememberMe = false;
   bool _isLoading = false;
+  String _shopName = 'Pharmacy';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadShopName();
+  }
+
+  Future<void> _loadShopName() async {
+    try {
+      final settings = await DatabaseHelper.instance.getAllSettings();
+      if (mounted) {
+        setState(() {
+          _shopName = settings['shop_name']?.isNotEmpty == true
+              ? settings['shop_name']!
+              : 'Pharmacy';
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -144,9 +165,9 @@ class _LoginScreenState extends State<LoginScreen> {
           return Row(
             children: [
               if (isWide)
-                const Expanded(
+                Expanded(
                   flex: 5,
-                  child: _BrandingPanel(),
+                  child: _BrandingPanel(shopName: _shopName),
                 ),
               Expanded(
                 flex: 4,
@@ -322,7 +343,8 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _BrandingPanel extends StatelessWidget {
-  const _BrandingPanel();
+  final String shopName;
+  const _BrandingPanel({required this.shopName});
 
   @override
   Widget build(BuildContext context) {
@@ -384,9 +406,9 @@ class _BrandingPanel extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 32),
-                const Text(
-                  'New Sohail Medical Store',
-                  style: TextStyle(
+                Text(
+                  shopName,
+                  style: const TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,

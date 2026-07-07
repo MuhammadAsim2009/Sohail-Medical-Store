@@ -120,6 +120,7 @@ class _GeneralSettingsContent extends StatefulWidget {
 
 class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
   final _shopNameController = TextEditingController();
+  final _shopOwnerNameController = TextEditingController();
   final _shopAddressController = TextEditingController();
   final _shopPhoneController = TextEditingController();
   final _taxRateController = TextEditingController();
@@ -136,6 +137,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
     final settings = await DatabaseHelper.instance.getAllSettings();
     setState(() {
       _shopNameController.text = settings['shop_name'] ?? '';
+      _shopOwnerNameController.text = settings['shop_owner_name'] ?? '';
       _shopAddressController.text = settings['shop_address'] ?? '';
       _shopPhoneController.text = settings['shop_phone'] ?? '';
       _taxRateController.text = settings['tax_rate'] ?? '0';
@@ -145,6 +147,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
 
   Future<void> _saveSettings() async {
     await DatabaseHelper.instance.setSetting('shop_name', _shopNameController.text);
+    await DatabaseHelper.instance.setSetting('shop_owner_name', _shopOwnerNameController.text);
     await DatabaseHelper.instance.setSetting('shop_address', _shopAddressController.text);
     await DatabaseHelper.instance.setSetting('shop_phone', _shopPhoneController.text);
     await DatabaseHelper.instance.setSetting('tax_rate', _taxRateController.text);
@@ -157,6 +160,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
   @override
   void dispose() {
     _shopNameController.dispose();
+    _shopOwnerNameController.dispose();
     _shopAddressController.dispose();
     _shopPhoneController.dispose();
     _taxRateController.dispose();
@@ -176,6 +180,13 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
           label: 'Shop Name',
           hint: 'e.g. Sohail Medical Store',
           icon: Icons.store_mall_directory_outlined,
+        ),
+        const SizedBox(height: 20),
+        _buildField(
+          controller: _shopOwnerNameController,
+          label: 'Shop Owner Name',
+          hint: 'e.g. Muhammad Asim',
+          icon: Icons.person_outline,
         ),
         const SizedBox(height: 20),
         _buildField(

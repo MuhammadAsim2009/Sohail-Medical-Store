@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../widgets/executive_header.dart';
 
 import '../models/daily_sales_sheet.dart';
 import '../models/sale.dart';
@@ -7,6 +6,7 @@ import '../models/product.dart';
 import '../models/customer.dart';
 import '../services/database_helper.dart';
 import '../utils/app_feedback.dart';
+import '../widgets/executive_header.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
@@ -39,11 +39,13 @@ class _BillingScreenState extends State<BillingScreen> {
   double get _outstandingBalance => _sales.fold(0, (s, i) => s + i.balance);
   int get _partialCount => _sales.where((i) => i.balance > 0).length;
 
+
   @override
   void initState() {
     super.initState();
     _loadData();
   }
+
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
@@ -94,9 +96,12 @@ class _BillingScreenState extends State<BillingScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SizedBox(height: 20),
+                  const ExecutiveHeader(
+                    title: 'Sales',
+                    subtitle: 'Manage daily invoices, track collections, and monitor outstanding balances.',
+                  ),
                   const SizedBox(height: 20),
-                  const ExecutiveHeader(title: 'Sales (POS)'),
-                  const SizedBox(height: 24),
+                  
                   _buildSummaryCards(),
                   const SizedBox(height: 20),
                   _buildActionBar(),
@@ -1401,9 +1406,13 @@ class _SaleRowState extends State<_SaleRow> {
 
   Future<void> _printReceipt(BuildContext context) async {
     final items = await DatabaseHelper.instance.getSaleItems(widget.sale.id!);
+    final settingsData = await DatabaseHelper.instance.getAllSettings();
+    final shopName = settingsData['shop_name']?.isNotEmpty == true ? settingsData['shop_name']! : 'PHARMACY RECEIPT';
+    final phone = settingsData['shop_phone'] ?? '';
+    final address = settingsData['shop_address'] ?? '';
     
     final pdf = pw.Document();
-    
+      
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.roll80,
@@ -1412,10 +1421,13 @@ class _SaleRowState extends State<_SaleRow> {
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Center(
-                child: pw.Text('PHARMACY RECEIPT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
+                child: pw.Text(shopName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 16)),
               ),
+              if (address.isNotEmpty) pw.Center(child: pw.Text(address, style: const pw.TextStyle(fontSize: 10))),
+              if (phone.isNotEmpty) pw.Center(child: pw.Text('Ph: $phone', style: const pw.TextStyle(fontSize: 10))),
               pw.SizedBox(height: 10),
               pw.Text('Invoice: ${widget.sale.invoiceNumber}'),
+
               pw.Text('Date: ${widget.sale.date}'),
               pw.Text('Customer: ${widget.sale.customerName ?? 'Walk-in'}'),
               pw.Divider(),
@@ -1531,11 +1543,14 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
 
   final TextEditingController _receivedController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController(text: '1');
-
   String? _validationError;
   String? _stagedError;
 
-  double get _total => _cart.fold(0, (s, i) => s + i.total);
+  final TextEditingController _taxController = TextEditingController(text: '0');
+
+  double get _subtotal => _cart.fold(0, (s, i) => s + i.total);
+  double get _taxAmount => _subtotal * (double.tryParse(_taxController.text) ?? 0) / 100;
+  double get _total => _subtotal + _taxAmount;
   double get _stagedPricePerUnit {
     if (_stagedProduct == null || _stagedUnit == null) return 0;
     final p = _stagedProduct!;
@@ -1548,11 +1563,23 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
 
   double get _stagedLineTotal => _stagedPricePerUnit * _stagedQty;
 
+
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadSettings();
   }
+
+  Future<void> _loadSettings() async {
+    final settings = await DatabaseHelper.instance.getAllSettings();
+    if (mounted) {
+      setState(() {
+        _taxController.text = settings['tax_rate'] ?? '0';
+      });
+    }
+  }
+
 
   @override
   void dispose() {
@@ -1737,6 +1764,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       ),
                     );
                   },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F4C81),
+                    foregroundColor: Colors.white,
+                  ),
                   child: const Text('Save'),
                 ),
               ],
@@ -1789,8 +1820,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
         received: received,
         balance: balance,
         paymentMethod: _paymentMethod,
-        status: balance > 0 ? 'Partial' : 'Paid',
-      );
+          status: balance > 0 ? 'Partial' : 'Paid',
+          taxRate: double.tryParse(_taxController.text) ?? 0,
+          taxAmount: _taxAmount,
+        );
 
       final items = _cart
           .map(
@@ -2481,19 +2514,68 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                 border: Border(top: BorderSide(color: Color(0xFFE5E7EB))),
               ),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   const Spacer(),
-                  Text(
-                    'Total: ',
-                    style: TextStyle(fontSize: 15, color: Colors.grey.shade600),
-                  ),
-                  Text(
-                    'Rs. ${_total.toStringAsFixed(0)}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: _primary,
-                    ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text('Subtotal: ', style: TextStyle(color: Colors.grey.shade600)),
+                          Text('Rs. ${_subtotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text('Tax (%): ', style: TextStyle(color: Colors.grey.shade600)),
+                          SizedBox(
+                            width: 60,
+                            height: 30,
+                            child: TextFormField(
+                              controller: _taxController,
+                              style: const TextStyle(fontSize: 13),
+                              textAlign: TextAlign.right,
+                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: InputDecoration(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                isDense: true,
+                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(4)),
+                              ),
+                              onChanged: (val) => setState((){}),
+                            ),
+                          ),
+                        ],
+                      ),
+                      if ((double.tryParse(_taxController.text) ?? 0) > 0) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            Text('Tax Amount: ', style: TextStyle(color: Colors.grey.shade600)),
+                            Text('Rs. ${_taxAmount.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          const Text('Total: ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                          Text(
+                            'Rs. ${_total.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                   const SizedBox(width: 20),
                   OutlinedButton(

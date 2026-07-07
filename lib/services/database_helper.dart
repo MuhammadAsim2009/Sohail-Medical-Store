@@ -39,7 +39,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 13,
+      version: 19,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   status      TEXT NOT NULL,
   notes       TEXT,
   tax_rate    REAL NOT NULL DEFAULT 0.0,
-  paid_amount REAL NOT NULL DEFAULT 0.0
+    tax_amount  REAL NOT NULL DEFAULT 0.0,
+    paid_amount REAL NOT NULL DEFAULT 0.0
 )""");
       await db.execute("""
 CREATE TABLE IF NOT EXISTS purchase_order_items (
@@ -130,6 +131,8 @@ CREATE TABLE IF NOT EXISTS sales (
   balance         REAL NOT NULL,
   payment_method  TEXT NOT NULL,
   status          TEXT NOT NULL,
+    tax_rate        REAL NOT NULL DEFAULT 0.0,
+    tax_amount      REAL NOT NULL DEFAULT 0.0,
   FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
 )""");
       await db.execute("""
@@ -192,80 +195,28 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
 )""");
     }
-    if (oldVersion < 9) {
-      final cols = await db.rawQuery("PRAGMA table_info(suppliers)");
-      final colNames = cols.map((c) => c['name'] as String).toSet();
-      if (colNames.contains('company_name')) {
-        await db.execute('ALTER TABLE suppliers RENAME COLUMN company_name TO companyName');
-      }
-      if (colNames.contains('contact_person')) {
-        await db.execute('ALTER TABLE suppliers RENAME COLUMN contact_person TO contactPerson');
-      }
-      if (colNames.contains('categories_supplied')) {
-        await db.execute('ALTER TABLE suppliers RENAME COLUMN categories_supplied TO categoriesSupplied');
-      }
-      if (colNames.contains('last_order_date')) {
-        await db.execute('ALTER TABLE suppliers RENAME COLUMN last_order_date TO lastOrderDate');
-      }
-      if (colNames.contains('pending_amount')) {
-        await db.execute('ALTER TABLE suppliers RENAME COLUMN pending_amount TO pendingAmount');
-      }
-      if (colNames.contains('advance_amount')) {
-        await db.execute('ALTER TABLE suppliers RENAME COLUMN advance_amount TO advanceAmount');
-      }
+    if (oldVersion < 14) {
+      // version 14 updates (empty or logic from before)
     }
-    if (oldVersion < 10) {
-      await db.execute('CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    if (oldVersion < 15) {
+      // Add missing columns to settings table
+      try { await db.execute("ALTER TABLE settings ADD COLUMN sync_id TEXT"); } catch(_) {}
+      try { await db.execute("ALTER TABLE settings ADD COLUMN updated_at INTEGER DEFAULT 0"); } catch(_) {}
+      try { await db.execute("ALTER TABLE settings ADD COLUMN is_dirty INTEGER DEFAULT 0"); } catch(_) {}
+      try { await db.execute("ALTER TABLE settings ADD COLUMN is_deleted INTEGER DEFAULT 0"); } catch(_) {}
     }
-    if (oldVersion < 11) {
-      final cols = await db.rawQuery("PRAGMA table_info(sales_return_items)");
-      final colNames = cols.map((c) => c['name'] as String).toSet();
-      if (!colNames.contains('unit_name')) {
-        await db.execute("ALTER TABLE sales_return_items ADD COLUMN unit_name TEXT NOT NULL DEFAULT 'Base Unit'");
-      }
+    if (oldVersion < 18) {
+      // Add missing tax_amount to purchase_orders for legacy DBs
+      try { await db.execute("ALTER TABLE purchase_orders ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
     }
-    if (oldVersion < 12) {
-      final customerPaymentCols = await db.rawQuery("PRAGMA table_info(customer_payments)");
-      final customerPaymentNames = customerPaymentCols.map((c) => c['name'] as String).toSet();
-      if (!customerPaymentNames.contains('invoice_number')) {
-        await db.execute("ALTER TABLE customer_payments ADD COLUMN invoice_number TEXT");
-      }
-
-      final supplierPaymentCols = await db.rawQuery("PRAGMA table_info(supplier_payments)");
-      final supplierPaymentNames = supplierPaymentCols.map((c) => c['name'] as String).toSet();
-      if (!supplierPaymentNames.contains('invoice_number')) {
-        await db.execute("ALTER TABLE supplier_payments ADD COLUMN invoice_number TEXT");
-      }
-
-      final returnCols = await db.rawQuery("PRAGMA table_info(sales_returns)");
-      final returnNames = returnCols.map((c) => c['name'] as String).toSet();
-      if (!returnNames.contains('return_number')) {
-        await db.execute("ALTER TABLE sales_returns ADD COLUMN return_number TEXT");
-      }
-    }
-    if (oldVersion < 13) {
-      const tables = [
-        'products', 'purchase_history', 'purchase_orders', 'purchase_order_items',
-        'suppliers', 'customers', 'daily_sales_sheets', 'sales', 'sale_items',
-        'sales_returns', 'sales_return_items', 'expenses', 'customer_payments',
-        'supplier_payments',
-      ];
-      for (final table in tables) {
-        final cols = await db.rawQuery('PRAGMA table_info($table)');
-        final colNames = cols.map((c) => c['name'] as String).toSet();
-        if (!colNames.contains('sync_id')) {
-          await db.execute('ALTER TABLE $table ADD COLUMN sync_id TEXT UNIQUE');
-        }
-        if (!colNames.contains('updated_at')) {
-          await db.execute('ALTER TABLE $table ADD COLUMN updated_at INTEGER');
-        }
-        if (!colNames.contains('is_deleted')) {
-          await db.execute('ALTER TABLE $table ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0');
-        }
-      }
+    if (oldVersion < 19) {
+      // Add missing tax columns to sales for legacy DBs
+      try { await db.execute("ALTER TABLE sales ADD COLUMN tax_rate REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
+      try { await db.execute("ALTER TABLE sales ADD COLUMN tax_amount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
     }
   }
 
+  // ---------------------------------------------------------------------------
   Future _createDB(Database db, int version) async {
     await db.execute("""
 CREATE TABLE IF NOT EXISTS products (
@@ -393,6 +344,8 @@ CREATE TABLE IF NOT EXISTS sales (
   balance         REAL NOT NULL,
   payment_method  TEXT NOT NULL,
   status          TEXT NOT NULL,
+  tax_rate        REAL NOT NULL DEFAULT 0.0,
+  tax_amount      REAL NOT NULL DEFAULT 0.0,
   FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
 )""");
 
@@ -495,6 +448,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   }
 
   // ---------------------------------------------------------------------------
+
   // SETTINGS
   // ---------------------------------------------------------------------------
 
@@ -509,9 +463,19 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<void> setSetting(String key, String value) async {
     final db = await instance.database;
+    // Check if updated_at column exists (added in migration v15)
+    final cols = await db.rawQuery('PRAGMA table_info(settings)');
+    final colNames = cols.map((c) => c['name'] as String).toSet();
+    final hasUpdatedAt = colNames.contains('updated_at');
+
+    final data = <String, dynamic>{
+      'key': key,
+      'value': value,
+      if (hasUpdatedAt) 'updated_at': DateTime.now().millisecondsSinceEpoch,
+    };
     await db.insert(
       'settings',
-      {'key': key, 'value': value},
+      data,
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -594,6 +558,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         'status': order.status,
         'notes': order.notes,
         'tax_rate': order.taxRate,
+        'tax_amount': order.taxAmount,
         'paid_amount': order.paidAmount,
       }));
       final savedItems = <PurchaseOrderItem>[];
@@ -645,6 +610,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
           'supplier': order.supplier,
           'notes': order.notes,
           'tax_rate': order.taxRate,
+          'tax_amount': order.taxAmount,
           'paid_amount': order.paidAmount,
           'status': order.status,
         }),
@@ -1232,7 +1198,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       SELECT date, invoice_number AS title, customer_name AS description, 'Sales' AS category, 'Sale' AS type, received AS debit, 0.0 AS credit, received AS amount FROM sales
         WHERE received > 0 AND date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
-      SELECT date, return_number AS title, customer_name AS description, 'Sales Return' AS category, 'Return' AS type, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
+      SELECT date, return_number AS title, customer_name AS description, CASE WHEN invoice_number LIKE 'OSR-%' OR invoice_number LIKE 'OPEN-%' THEN 'Open Return' ELSE 'Sales Return' END AS category, 'Return' AS type, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
         WHERE total_refund > 0 AND date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
       SELECT date, title AS title, notes AS description, category AS category, 'Expense' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
@@ -1319,7 +1285,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     
     final transactions = await db.rawQuery('''
       SELECT order_date AS date, po_number AS reference, 'Purchase Order' AS description, 'Purchase' AS type,
-        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) AS debit, 0.0 AS credit, 2 AS sort_order
+        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) + tax_amount AS debit, 0.0 AS credit, 2 AS sort_order
       FROM purchase_orders WHERE supplier = ? AND date(order_date) BETWEEN date(?) AND date(?)
       UNION ALL
       SELECT order_date AS date, po_number AS reference, 'Payment at Purchase' AS description, 'Purchase Payment' AS type,
@@ -1434,6 +1400,13 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       }
     });
     return returnId;
+  }
+
+  Future<String> getNextOpenReturnInvoiceNumber() async {
+    final db = await instance.database;
+    final nextRows = await db.rawQuery("SELECT COUNT(*) AS cnt FROM sales_returns WHERE invoice_number LIKE 'OSR-%' OR invoice_number LIKE 'OPEN-%'");
+    final count = (nextRows.first['cnt'] as int?) ?? 0;
+    return 'OSR-${(count + 1).toString().padLeft(3, '0')}';
   }
 
   Future<List<SalesReturnItem>> getReturnItems(int returnId) async {

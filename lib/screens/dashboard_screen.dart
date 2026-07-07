@@ -71,8 +71,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: _selectedIndex == 0
                         ? SingleChildScrollView(
                             padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
-                            child: _DashboardBody(
-                              onNavigate: (index) => setState(() => _selectedIndex = index),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _DashboardBody(
+                                  onNavigate: (index) => setState(() => _selectedIndex = index),
+                                ),
+                              ],
                             ),
                           )
                         : _selectedIndex == 1
@@ -144,6 +149,33 @@ class _Sidebar extends StatefulWidget {
 }
 
 class _SidebarState extends State<_Sidebar> {
+  String _shopName = 'New Sohail Medical Store';
+  String _shopOwnerName = 'Admin';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadSettings();
+  }
+
+  @override
+  void didUpdateWidget(covariant _Sidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedIndex != widget.selectedIndex) {
+      _loadSettings();
+    }
+  }
+
+  Future<void> _loadSettings() async {
+    final settings = await DatabaseHelper.instance.getAllSettings();
+    if (mounted) {
+      setState(() {
+        _shopName = settings['shop_name']?.isNotEmpty == true ? settings['shop_name']! : 'New Sohail Medical Store';
+        _shopOwnerName = settings['shop_owner_name']?.isNotEmpty == true ? settings['shop_owner_name']! : 'Admin';
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -172,10 +204,10 @@ class _SidebarState extends State<_Sidebar> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'New Sohail Medical Store',
+                      Text(
+                        _shopName,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
+                        style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
                           fontSize: 14,
@@ -248,12 +280,12 @@ class _SidebarState extends State<_Sidebar> {
                     child: const Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Admin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                        Text('Admin', style: TextStyle(color: Color(0xFF8F9BB3), fontSize: 11)),
+                        Text(_shopOwnerName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                        Text(_shopName, style: const TextStyle(color: Color(0xFF8F9BB3), fontSize: 11)),
                       ],
                     ),
                   ),
