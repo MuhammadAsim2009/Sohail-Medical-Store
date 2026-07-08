@@ -70,7 +70,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  Future<void> _generateReport(_ReportType report) async {
+  Future<void> _generateReport(_ReportType report, [int? subFilterOverride]) async {
+    final subFilter = subFilterOverride ?? _selectedSubFilterIndex;
     setState(() { _isGenerating = true; _reportData = null; });
     String fmt(DateTime? d) => d?.toIso8601String().substring(0, 10) ?? '1970-01-01';
     try {
@@ -105,20 +106,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
           };
           break;
         case 'product':
-          final rows = await dbHelper.getProductReportData(fromDate: from, toDate: to);
-          double totalStock = 0;
+          // Always fetch summary counts (for stat cards)
+          final allRows = await dbHelper.getProductReportData(fromDate: from, toDate: to);
           int outOfStock = 0;
-          for (var r in rows) {
-            totalStock += (r['stock'] ?? 0);
-            if ((r['stock'] ?? 0) <= 0) outOfStock++;
-          }
-          final lowStock = await db.rawQuery("SELECT name, category, stock, sell_price FROM products WHERE stock <= threshold");
+          for (var r in allRows) { if ((r['stock'] ?? 0) <= 0) outOfStock++; }
+          final lowStockRows = await db.rawQuery(
+            "SELECT name, category, stock, sell_price, threshold FROM products WHERE stock <= threshold ORDER BY stock ASC");
+          // Rows shown in table depend on which sub-filter was selected
+          final productRows = subFilter == 1 ? lowStockRows : allRows;
           data = {
-            'rows': rows,
-            'totalProducts': rows.length,
-            'lowStockCount': lowStock.length,
+            'rows': productRows,
+            'allRows': allRows,
+            'totalProducts': allRows.length,
+            'lowStockCount': lowStockRows.length,
             'outOfStock': outOfStock,
-            'lowStockItems': lowStock,
+            'lowStockItems': lowStockRows,
+            'subFilter': subFilter,
           };
           break;
         case 'customer':
@@ -139,15 +142,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
         case 'supplier':
           final rows = await dbHelper.getSupplierReportData(fromDate: from, toDate: to);
           double pending = 0, advance = 0;
+          double orderTotal = 0;
           for (var r in rows) {
-            pending += (r['pendingAmount'] ?? 0);
-            advance += (r['advanceAmount'] ?? 0);
+            pending += ((r['pendingAmount'] ?? 0) as num).toDouble();
+            advance += ((r['advanceAmount'] ?? 0) as num).toDouble();
           }
           final orders = await db.rawQuery("SELECT po_number, supplier, order_date, status, (SELECT COALESCE(SUM(quantity * purchase_price), 0) FROM purchase_order_items WHERE order_id = purchase_orders.id) as order_total, paid_amount FROM purchase_orders WHERE date(order_date) BETWEEN date(?) AND date(?) ORDER BY order_date DESC", [from, to]);
+          for (var o in orders) { orderTotal += ((o['order_total'] ?? 0) as num).toDouble(); }
           data = {
             'suppliers': rows,
             'totalPending': pending,
             'totalAdvance': advance,
+            'totalSuppliers': rows.length,
+            'orderCount': orders.length,
+            'orderTotal': orderTotal,
             'orders': orders,
           };
           break;
@@ -174,12 +182,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
           double inf = 0, outf = 0;
           final mappedRows = rows.map((r) {
             double amt = ((r['debit'] ?? 0) as num).toDouble() - ((r['credit'] ?? 0) as num).toDouble();
-            if (amt > 0) inf += amt; else outf += amt.abs();
+            if (amt > 0) { inf += amt; } else { outf += amt.abs(); }
             return {
               'date': r['date'],
-              'reference': r['ref'],
-              'description': r['party'],
-              'category': r['type'],
+              'reference': r['title'],       // query aliases invoice/PO numbers as 'title'
+              'description': r['description'], // query aliases party names/notes as 'description'
+              'category': r['category'],
               'type': r['type'],
               'amount': amt,
             };
@@ -283,6 +291,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     isSelected: isSelected,
                     onTap: () => setState(() {
                       _selectedIndex = i;
+                      _selectedSubFilterIndex = 0; // reset sub-filter on report-type change
                       _reportData = null;
                     }),
                   ),
@@ -308,7 +317,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
       child: _selectedIndex == null
           ? _buildEmptyState()
           : _reportData != null
-              ? _buildGeneratedReport(_reportTypes[_selectedIndex!], _reportData!)
+              ? _buildGeneratedReport(_reportTypes[_selectedIndex!], _reportData!, _selectedSubFilterIndex)
               : _buildSelectedState(),
     );
   }
@@ -364,7 +373,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ),
             const SizedBox(width: 24),
             ElevatedButton.icon(
-              onPressed: _isGenerating ? null : () => _generateReport(report),
+              onPressed: _isGenerating ? null : () => _generateReport(report, _selectedSubFilterIndex),
               icon: _isGenerating ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Icon(Icons.flash_on_rounded, size: 20),
               label: Text(_isGenerating ? 'Generating...' : 'Generate Report'),
               style: ElevatedButton.styleFrom(
@@ -391,7 +400,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   onTap: () {
                     setState(() {
                       _selectedSubFilterIndex = index;
-                      _reportData = null; // Clear data when switching
+                      _reportData = null; // Clear data when switching — user must regenerate
                     });
                   },
                   borderRadius: BorderRadius.circular(24),
@@ -531,7 +540,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildGeneratedReport(_ReportType report, Map<String, dynamic> data, [int subFilter = 0]) {
-    final fmt = NumberFormat('#,##0.00', 'en_US');
+    final fmt = NumberFormat('#,##0', 'en_US');
     final fmtInt = NumberFormat('#,##0', 'en_US');
     final periodLabel = _selectedRange;
 
@@ -584,7 +593,59 @@ class _ReportsScreenState extends State<ReportsScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
+
+          // ── Sub-filter tabs (live switching) ─────────────────────────────────
+          if (report.subFilters.length > 1)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: List.generate(report.subFilters.length, (index) {
+                  final isActive = subFilter == index;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(24),
+                      onTap: isActive
+                          ? null // already selected
+                          : () {
+                              if (report.id == 'product') {
+                                // Product needs a fresh DB query per sub-filter
+                                setState(() {
+                                  _selectedSubFilterIndex = index;
+                                  _reportData = null;
+                                });
+                                _generateReport(report, index);
+                              } else {
+                                // All other reports: data covers every sub-view, just re-render
+                                setState(() => _selectedSubFilterIndex = index);
+                              }
+                            },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 9),
+                        decoration: BoxDecoration(
+                          color: isActive ? _kPrimary.withValues(alpha: 0.1) : Colors.white,
+                          border: Border.all(
+                            color: isActive ? _kPrimary : Colors.grey.shade300,
+                            width: 1.5,
+                          ),
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: Text(
+                          report.subFilters[index],
+                          style: TextStyle(
+                            color: isActive ? _kPrimary : Colors.grey.shade700,
+                            fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+          const SizedBox(height: 20),
 
           // Report-specific content dispatched by subFilter
           if (report.id == 'sales')    _buildSalesReport(data, fmt, fmtInt, subFilter)
@@ -713,8 +774,9 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   // ── Product Report  (0=Current Stock  1=Low Stock)
   Widget _buildProductReport(Map<String, dynamic> d, NumberFormat fmt, NumberFormat fmtInt, int sub) {
-    final allProducts = (d['rows'] as List? ?? []);
-    final lowStock    = (d['lowStockItems'] as List? ?? []);
+    final reportedSub = (d['subFilter'] as int?) ?? sub; // use the sub-filter that was used to generate
+    final displayRows = (d['rows'] as List? ?? []);
+
     final summaryCards = Row(children: [
       _statCard('Total Products', fmtInt.format(d['totalProducts'] ?? 0), Icons.inventory_2_outlined, const Color(0xFF0F4C81)),
       const SizedBox(width: 12),
@@ -723,37 +785,37 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _statCard('Out of Stock',   fmtInt.format(d['outOfStock'] ?? 0),    Icons.remove_shopping_cart_outlined, Colors.red.shade700),
     ]);
 
-    if (sub == 1) {
-      // Low Stock
+    if (reportedSub == 1) {
+      // Low Stock — only items at or below their reorder threshold
       return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         summaryCards, const SizedBox(height: 16),
-        _sectionHeader('Low Stock Items', '${lowStock.length} items at or below threshold'),
+        _sectionHeader('Low Stock Items', '${displayRows.length} items at or below threshold'),
         const SizedBox(height: 8),
-        lowStock.isEmpty
-          ? _emptySection('No low-stock items found for this period.')
+        displayRows.isEmpty
+          ? _emptySection('Great news — no products are below their reorder threshold!')
           : _buildTable(
-              headers: ['Product', 'Category', 'Stock', 'Sell Price'],
-              rows: lowStock.map<List<String>>((p) => [
+              headers: ['Product', 'Category', 'Current Stock', 'Threshold', 'Sell Price'],
+              rows: displayRows.map<List<String>>((p) => [
                 p['name'] ?? '', p['category'] ?? '',
                 (p['stock'] ?? 0).toString(),
+                (p['threshold'] ?? 0).toString(),
                 'Rs. ${fmt.format(p['sell_price'] ?? 0)}',
               ]).toList(),
-              colWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(2), 2: FlexColumnWidth(1.5), 3: FlexColumnWidth(2)},
+              colWidths: const {0: FlexColumnWidth(3), 1: FlexColumnWidth(2), 2: FlexColumnWidth(1.5), 3: FlexColumnWidth(1.5), 4: FlexColumnWidth(2)},
             ),
       ]);
     }
 
-    // Current Stock (sub == 0)
-    final displayList = allProducts.isEmpty ? lowStock : allProducts;
+    // Current Stock (sub == 0) — ALL products with their stock levels
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       summaryCards, const SizedBox(height: 16),
-      _sectionHeader('Current Stock', '${displayList.length} products'),
+      _sectionHeader('Current Stock', '${displayRows.length} products'),
       const SizedBox(height: 8),
-      displayList.isEmpty
+      displayRows.isEmpty
         ? _emptySection('No product data found.')
         : _buildTable(
             headers: ['Product', 'Category', 'Stock', 'Sell Price', 'Cost Price'],
-            rows: displayList.map<List<String>>((p) => [
+            rows: displayRows.map<List<String>>((p) => [
               p['name'] ?? p['product_name'] ?? '', p['category'] ?? '',
               (p['stock'] ?? p['qty_sold'] ?? 0).toString(),
               'Rs. ${fmt.format(p['sell_price'] ?? 0)}',
@@ -1005,7 +1067,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
     double outf = 0;
     for (var r in displayEntries) {
       double amt = ((r['debit'] ?? 0) as num).toDouble() - ((r['credit'] ?? 0) as num).toDouble();
-      if (amt > 0) inf += amt; else outf += amt.abs();
+      if (amt > 0) { inf += amt; } else { outf += amt.abs(); }
     }
     double net = inf - outf;
 
@@ -1266,7 +1328,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             outf += (e['amount'] as num? ?? 0).abs();
           }
         }
-        final net = inf - outf;
+        final _ = inf - outf; // net — kept for potential future PDF use
         return [
           pw.Row(children: [
             _pdfStat('Inflow', 'Rs. '),

@@ -65,7 +65,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Expanded(
               child: Column(
                 children: [
-
                   // Scrollable body
                   Expanded(
                     child: _selectedIndex == 0
@@ -75,30 +74,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 _DashboardBody(
-                                  onNavigate: (index) => setState(() => _selectedIndex = index),
+                                  onNavigate: (index) =>
+                                      setState(() => _selectedIndex = index),
                                 ),
                               ],
                             ),
                           )
                         : _selectedIndex == 1
-                            ? const BillingScreen()
-                            : _selectedIndex == 2
-                                ? const SalesReturnScreen()
-                                : _selectedIndex == 3
-                                    ? const InventoryScreen()
-                                    : _selectedIndex == 4
-                                        ? const PurchaseOrdersScreen()
-                                        : _selectedIndex == 5
-                                            ? const CustomersScreen()
-                                            : _selectedIndex == 6
-                                                ? const SuppliersScreen()
-                                                : _selectedIndex == 7
-                                                    ? const LedgerScreen()
-                                                    : _selectedIndex == 8
-                                                        ? const ReportsScreen()
-                                                        : _selectedIndex == 9
-                                                            ? const SettingsScreen()
-                                                            : const Center(child: Text('Coming Soon...')),
+                        ? const BillingScreen()
+                        : _selectedIndex == 2
+                        ? const SalesReturnScreen()
+                        : _selectedIndex == 3
+                        ? const InventoryScreen()
+                        : _selectedIndex == 4
+                        ? const PurchaseOrdersScreen()
+                        : _selectedIndex == 5
+                        ? const CustomersScreen()
+                        : _selectedIndex == 6
+                        ? const SuppliersScreen()
+                        : _selectedIndex == 7
+                        ? const LedgerScreen()
+                        : _selectedIndex == 8
+                        ? const ReportsScreen()
+                        : _selectedIndex == 9
+                        ? const SettingsScreen()
+                        : const Center(child: Text('Coming Soon...')),
                   ),
                 ],
               ),
@@ -170,8 +170,12 @@ class _SidebarState extends State<_Sidebar> {
     final settings = await DatabaseHelper.instance.getAllSettings();
     if (mounted) {
       setState(() {
-        _shopName = settings['shop_name']?.isNotEmpty == true ? settings['shop_name']! : 'New Sohail Medical Store';
-        _shopOwnerName = settings['shop_owner_name']?.isNotEmpty == true ? settings['shop_owner_name']! : 'Admin';
+        _shopName = settings['shop_name']?.isNotEmpty == true
+            ? settings['shop_name']!
+            : 'New Sohail Medical Store';
+        _shopOwnerName = settings['shop_owner_name']?.isNotEmpty == true
+            ? settings['shop_owner_name']!
+            : 'Admin';
       });
     }
   }
@@ -180,9 +184,7 @@ class _SidebarState extends State<_Sidebar> {
   Widget build(BuildContext context) {
     return Container(
       width: 250,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0B1120),
-      ),
+      decoration: const BoxDecoration(color: Color(0xFF0B1120)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -197,7 +199,11 @@ class _SidebarState extends State<_Sidebar> {
                     color: const Color(0xFF5A66F9),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.local_pharmacy_rounded, color: Colors.white, size: 22),
+                  child: const Icon(
+                    Icons.local_pharmacy_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -257,7 +263,6 @@ class _SidebarState extends State<_Sidebar> {
             ),
           ),
 
-
           // -- Footer Profile ---------------------------------------------
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -277,21 +282,45 @@ class _SidebarState extends State<_Sidebar> {
                       shape: BoxShape.circle,
                     ),
                     alignment: Alignment.center,
-                    child: const Text('A', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    child: const Text(
+                      'A',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(_shopOwnerName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                        Text(_shopName, style: const TextStyle(color: Color(0xFF8F9BB3), fontSize: 11)),
+                        Text(
+                          _shopOwnerName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                          ),
+                        ),
+                        Text(
+                          _shopName,
+                          style: const TextStyle(
+                            color: Color(0xFF8F9BB3),
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   InkWell(
                     onTap: widget.onLogout,
-                    child: const Icon(Icons.logout, color: Color(0xFF8F9BB3), size: 18),
+                    child: const Icon(
+                      Icons.logout,
+                      color: Color(0xFF8F9BB3),
+                      size: 18,
+                    ),
                   ),
                 ],
               ),
@@ -354,7 +383,10 @@ class _SidebarNavItem extends StatelessWidget {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   child: Row(
                     children: [
                       Icon(item.icon, color: iconColor, size: 20),
@@ -363,7 +395,9 @@ class _SidebarNavItem extends StatelessWidget {
                         item.label,
                         style: TextStyle(
                           color: labelColor,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
                           fontSize: 13,
                         ),
                       ),
@@ -378,7 +412,6 @@ class _SidebarNavItem extends StatelessWidget {
     );
   }
 }
-
 
 // ---------------------------------------------------------------------------
 // DASHBOARD BODY (stats + tables)
@@ -416,7 +449,8 @@ class _DashboardBodyState extends State<_DashboardBody> {
     }
   }
 
-  String _formatCurr(double val) => 'Rs. ${val.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
+  String _formatCurr(double val) =>
+      'Rs. ${val.toStringAsFixed(0).replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}';
 
   @override
   Widget build(BuildContext context) {
@@ -481,7 +515,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
         value: '$lowStockCount',
         icon: Icons.warning_amber_rounded,
         iconBg: const Color(0xFFEF6C00),
-        trendValue: '<= 10 Qty',
+        trendValue: '10 Qty',
         isTrendUp: false,
       ),
     ];
@@ -491,7 +525,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
       children: [
         // ── Executive Header ─────────────────────────────────────────────
         const ExecutiveHeader(),
-        
+
         const SizedBox(height: 32),
 
         // ── Stat cards ───────────────────────────────────────────────────
@@ -524,24 +558,32 @@ class _DashboardBodyState extends State<_DashboardBody> {
             _SalesTrendCard(trend: (d['trend'] as List<dynamic>?) ?? []),
           ],
         ),
-        
+
         const SizedBox(height: 24),
-        
+
         // ── Recent Purchase, Recent Activity, Watchlist ──────────────────
         Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _RecentPurchaseTable(purchases: (d['recentPurchases'] as List<dynamic>?) ?? []),
+            _RecentPurchaseTable(
+              purchases: (d['recentPurchases'] as List<dynamic>?) ?? [],
+            ),
             const SizedBox(height: 24),
-            _RecentActivityList(activities: (d['recentActivity'] as List<dynamic>?) ?? []),
+            _RecentActivityList(
+              activities: (d['recentActivity'] as List<dynamic>?) ?? [],
+            ),
             const SizedBox(height: 24),
-            _OperationalWatchlist(lowStockCount: lowStockCount, receivables: receivables),
+            _OperationalWatchlist(
+              lowStockCount: lowStockCount,
+              receivables: receivables,
+            ),
           ],
         ),
       ],
     );
   }
-}// ---------------------------------------------------------------------------
+} // ---------------------------------------------------------------------------
+
 // STAT DATA MODEL
 // ---------------------------------------------------------------------------
 class _StatData {
@@ -602,7 +644,7 @@ class _StatCard extends StatelessWidget {
                       color: data.iconBg.withValues(alpha: 0.2),
                       blurRadius: 12,
                       spreadRadius: 1,
-                    )
+                    ),
                   ],
                 ),
                 child: Icon(data.icon, color: data.iconBg, size: 24),
@@ -611,17 +653,21 @@ class _StatCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: data.isTrendUp 
-                      ? Colors.green.withValues(alpha: 0.1) 
+                  color: data.isTrendUp
+                      ? Colors.green.withValues(alpha: 0.1)
                       : Colors.red.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   children: [
                     Icon(
-                      data.isTrendUp ? Icons.arrow_upward_rounded : Icons.arrow_downward_rounded,
+                      data.isTrendUp
+                          ? Icons.arrow_upward_rounded
+                          : Icons.arrow_downward_rounded,
                       size: 14,
-                      color: data.isTrendUp ? Colors.green.shade700 : Colors.red.shade700,
+                      color: data.isTrendUp
+                          ? Colors.green.shade700
+                          : Colors.red.shade700,
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -629,7 +675,9 @@ class _StatCard extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: data.isTrendUp ? Colors.green.shade700 : Colors.red.shade700,
+                        color: data.isTrendUp
+                            ? Colors.green.shade700
+                            : Colors.red.shade700,
                       ),
                     ),
                   ],
@@ -701,10 +749,7 @@ class _DashboardCard extends StatelessWidget {
                     color: Color(0xFF1A2E2B),
                   ),
                 ),
-                if (action != null) ...[
-                  const Spacer(),
-                  action!,
-                ]
+                if (action != null) ...[const Spacer(), action!],
               ],
             ),
           ),
@@ -733,21 +778,63 @@ class _QuickActionsCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Expanded(child: _ActionBtn(icon: Icons.add_shopping_cart, label: 'New Sale', color: const Color(0xFF0F4C81), onTap: () => onNavigate?.call(2))),
+                Expanded(
+                  child: _ActionBtn(
+                    icon: Icons.add_shopping_cart,
+                    label: 'New Sale',
+                    color: const Color(0xFF0F4C81),
+                    onTap: () => onNavigate?.call(2),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _ActionBtn(icon: Icons.inventory_2_outlined, label: 'Add Stock', color: const Color(0xFF1565C0), onTap: () => onNavigate?.call(1))),
+                Expanded(
+                  child: _ActionBtn(
+                    icon: Icons.inventory_2_outlined,
+                    label: 'Add Stock',
+                    color: const Color(0xFF1565C0),
+                    onTap: () => onNavigate?.call(1),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _ActionBtn(icon: Icons.assignment_return_outlined, label: 'Return', color: const Color(0xFFE65100), onTap: () => onNavigate?.call(2))),
+                Expanded(
+                  child: _ActionBtn(
+                    icon: Icons.assignment_return_outlined,
+                    label: 'Return',
+                    color: const Color(0xFFE65100),
+                    onTap: () => onNavigate?.call(2),
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                Expanded(child: _ActionBtn(icon: Icons.person_add_alt_1_outlined, label: 'Add Customer', color: const Color(0xFF6A1B9A), onTap: () => onNavigate?.call(3))),
+                Expanded(
+                  child: _ActionBtn(
+                    icon: Icons.person_add_alt_1_outlined,
+                    label: 'Add Customer',
+                    color: const Color(0xFF6A1B9A),
+                    onTap: () => onNavigate?.call(3),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _ActionBtn(icon: Icons.local_shipping_outlined, label: 'Add Supplier', color: const Color(0xFF00695C), onTap: () => onNavigate?.call(4))),
+                Expanded(
+                  child: _ActionBtn(
+                    icon: Icons.local_shipping_outlined,
+                    label: 'Add Supplier',
+                    color: const Color(0xFF00695C),
+                    onTap: () => onNavigate?.call(4),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: _ActionBtn(icon: Icons.bar_chart_outlined, label: 'View Reports', color: const Color(0xFF455A64), onTap: () => onNavigate?.call(6))),
+                Expanded(
+                  child: _ActionBtn(
+                    icon: Icons.bar_chart_outlined,
+                    label: 'View Reports',
+                    color: const Color(0xFF455A64),
+                    onTap: () => onNavigate?.call(6),
+                  ),
+                ),
               ],
             ),
           ],
@@ -763,7 +850,12 @@ class _ActionBtn extends StatelessWidget {
   final Color color;
   final VoidCallback? onTap;
 
-  const _ActionBtn({required this.icon, required this.label, required this.color, this.onTap});
+  const _ActionBtn({
+    required this.icon,
+    required this.label,
+    required this.color,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -817,7 +909,11 @@ class _SalesTrendCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Generate simple bars to simulate a trend since fl_chart isn't imported
-    final maxTotal = trend.isEmpty ? 1.0 : trend.map((e) => (e['total'] as num).toDouble()).reduce((a, b) => a > b ? a : b);
+    final maxTotal = trend.isEmpty
+        ? 1.0
+        : trend
+              .map((e) => (e['total'] as num).toDouble())
+              .reduce((a, b) => a > b ? a : b);
     final maxVal = maxTotal == 0 ? 1.0 : maxTotal;
 
     return _DashboardCard(
@@ -827,41 +923,57 @@ class _SalesTrendCard extends StatelessWidget {
         height: 200,
         alignment: Alignment.center,
         padding: const EdgeInsets.all(20),
-        child: trend.isEmpty 
-          ? Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bar_chart_rounded, size: 48, color: Colors.grey.shade300),
-                const SizedBox(height: 8),
-                Text('No trend data available', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-              ],
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: trend.reversed.map((t) {
-                final date = t['date'] as String;
-                final dateStr = date.substring(8, 10) + '/' + date.substring(5, 7);
-                final total = (t['total'] as num).toDouble();
-                final heightRatio = total / maxVal;
-                
-                return Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 120 * heightRatio,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF5A66F9),
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+        child: trend.isEmpty
+            ? Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.bar_chart_rounded,
+                    size: 48,
+                    color: Colors.grey.shade300,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'No trend data available',
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: trend.reversed.map((t) {
+                  final date = t['date'] as String;
+                  final dateStr =
+                      date.substring(8, 10) + '/' + date.substring(5, 7);
+                  final total = (t['total'] as num).toDouble();
+                  final heightRatio = total / maxVal;
+
+                  return Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Container(
+                        width: 24,
+                        height: 120 * heightRatio,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF5A66F9),
+                          borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(dateStr, style: TextStyle(fontSize: 10, color: Colors.grey.shade600)),
-                  ],
-                );
-              }).toList(),
-            ),
+                      const SizedBox(height: 8),
+                      Text(
+                        dateStr,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  );
+                }).toList(),
+              ),
       ),
     );
   }
@@ -880,14 +992,25 @@ class _RecentPurchaseTable extends StatelessWidget {
       title: 'Recent Purchases',
       action: TextButton(
         onPressed: () {},
-        child: const Text('View All', style: TextStyle(color: Color(0xFF0F4C81), fontWeight: FontWeight.w600)),
+        child: const Text(
+          'View All',
+          style: TextStyle(
+            color: Color(0xFF0F4C81),
+            fontWeight: FontWeight.w600,
+          ),
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: purchases.isEmpty
             ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('No recent purchases', style: TextStyle(color: Colors.grey.shade400, fontSize: 13))),
+                child: Center(
+                  child: Text(
+                    'No recent purchases',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  ),
+                ),
               )
             : Column(
                 children: purchases.map((po) {
@@ -901,19 +1024,43 @@ class _RecentPurchaseTable extends StatelessWidget {
                             color: Colors.blueGrey.shade50,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.receipt_long_rounded, size: 20, color: Colors.blueGrey),
+                          child: const Icon(
+                            Icons.receipt_long_rounded,
+                            size: 20,
+                            color: Colors.blueGrey,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(po['supplier'].toString(), style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF1A2E2B))),
-                              Text('${po['po_number']} • ${po['order_date']}', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                              Text(
+                                po['supplier'].toString(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: Color(0xFF1A2E2B),
+                                ),
+                              ),
+                              Text(
+                                '${po['po_number']} • ${po['order_date']}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade500,
+                                ),
+                              ),
                             ],
                           ),
                         ),
-                        Text('Rs. ${(po['total'] as num).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF1A2E2B))),
+                        Text(
+                          'Rs. ${(po['total'] as num).toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: Color(0xFF1A2E2B),
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -940,12 +1087,21 @@ class _RecentActivityList extends StatelessWidget {
         child: activities.isEmpty
             ? Padding(
                 padding: const EdgeInsets.symmetric(vertical: 24),
-                child: Center(child: Text('No recent activity', style: TextStyle(color: Colors.grey.shade400, fontSize: 13))),
+                child: Center(
+                  child: Text(
+                    'No recent activity',
+                    style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                  ),
+                ),
               )
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: activities.map((act) {
-                  return _ActivityItem(time: act['date'].toString(), text: '${act['type']} - ${act['description']} (Rs. ${(act['amount'] as num).abs().toStringAsFixed(0)})');
+                  return _ActivityItem(
+                    time: act['date'].toString(),
+                    text:
+                        '${act['type']} - ${act['description']} (Rs. ${(act['amount'] as num).abs().toStringAsFixed(0)})',
+                  );
                 }).toList(),
               ),
       ),
@@ -980,9 +1136,19 @@ class _ActivityItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(text, style: const TextStyle(fontSize: 13, color: Color(0xFF1A2E2B), fontWeight: FontWeight.w500)),
+                Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF1A2E2B),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(time, style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                Text(
+                  time,
+                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                ),
               ],
             ),
           ),
@@ -998,8 +1164,11 @@ class _ActivityItem extends StatelessWidget {
 class _OperationalWatchlist extends StatelessWidget {
   final int lowStockCount;
   final double receivables;
-  
-  const _OperationalWatchlist({required this.lowStockCount, required this.receivables});
+
+  const _OperationalWatchlist({
+    required this.lowStockCount,
+    required this.receivables,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1009,22 +1178,40 @@ class _OperationalWatchlist extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            _WatchlistItem(label: 'Pending Receivables', value: 'Rs. ${receivables.toStringAsFixed(0)}', color: Colors.orange),
+            _WatchlistItem(
+              label: 'Pending Receivables',
+              value: 'Rs. ${receivables.toStringAsFixed(0)}',
+              color: Colors.orange,
+            ),
             const SizedBox(height: 12),
-            _WatchlistItem(label: 'Low Stock Items', value: '$lowStockCount', color: Colors.red),
+            _WatchlistItem(
+              label: 'Low Stock Items',
+              value: '$lowStockCount',
+              color: Colors.red,
+            ),
             const SizedBox(height: 12),
-            _WatchlistItem(label: 'Unpaid Purchases', value: 'Check Ledger', color: Colors.purple),
+            _WatchlistItem(
+              label: 'Unpaid Purchases',
+              value: 'Check Ledger',
+              color: Colors.purple,
+            ),
           ],
         ),
       ),
     );
   }
-}class _WatchlistItem extends StatelessWidget {
+}
+
+class _WatchlistItem extends StatelessWidget {
   final String label;
   final String value;
   final MaterialColor color;
 
-  const _WatchlistItem({required this.label, required this.value, required this.color});
+  const _WatchlistItem({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1035,7 +1222,10 @@ class _OperationalWatchlist extends StatelessWidget {
           children: [
             Icon(Icons.info_outline_rounded, size: 16, color: color.shade700),
             const SizedBox(width: 8),
-            Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+            Text(
+              label,
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
           ],
         ),
         Container(
@@ -1044,7 +1234,14 @@ class _OperationalWatchlist extends StatelessWidget {
             color: color.shade50,
             borderRadius: BorderRadius.circular(10),
           ),
-          child: Text(value, style: TextStyle(color: color.shade800, fontWeight: FontWeight.w700, fontSize: 13)),
+          child: Text(
+            value,
+            style: TextStyle(
+              color: color.shade800,
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
+          ),
         ),
       ],
     );

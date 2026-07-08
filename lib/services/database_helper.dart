@@ -473,15 +473,17 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final hasUpdatedAt = colNames.contains('updated_at');
 
     final data = <String, dynamic>{
-      'key': key,
       'value': value,
       if (hasUpdatedAt) 'updated_at': DateTime.now().millisecondsSinceEpoch,
     };
-    await db.insert(
-      'settings',
-      data,
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+
+    final existing = await db.query('settings', where: 'key = ?', whereArgs: [key]);
+    if (existing.isNotEmpty) {
+      await db.update('settings', data, where: 'key = ?', whereArgs: [key]);
+    } else {
+      data['key'] = key;
+      await db.insert('settings', data);
+    }
   }
 
   Future<Map<String, String>> getAllSettings() async {
@@ -1170,16 +1172,18 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     return await db.rawQuery('''
       SELECT
-        s.companyName AS supplier,
+        s.companyName,
+        s.contactPerson,
         s.phone,
-        s.pendingAmount,
+        COALESCE(s.pendingAmount, 0)  AS pendingAmount,
+        COALESCE(s.advanceAmount, 0)  AS advanceAmount,
         COALESCE(SUM(po.paid_amount), 0) AS paid,
         COUNT(po.id) AS order_count
       FROM suppliers s
       LEFT JOIN purchase_orders po ON po.supplier = s.companyName
         AND date(po.order_date) BETWEEN date(?) AND date(?)
       GROUP BY s.id
-      ORDER BY s.pendingAmount DESC
+      ORDER BY COALESCE(s.pendingAmount, 0) DESC
     ''', [fromDate, toDate]);
   }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
@@ -477,13 +478,17 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
   final _newController = TextEditingController();
   final _confirmController = TextEditingController();
 
+  bool _obscureCurrent = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+
   Future<void> _changePassword() async {
 
     final currentInput = _currentController.text;
     final newPass = _newController.text;
     final confirmPass = _confirmController.text;
 
-    if (newPass.isEmpty || confirmPass.isEmpty) {
+    if (newPass.isEmpty || confirmPass.isEmpty || currentInput.isEmpty) {
       AppFeedback.show(context, 'Please fill all fields.', type: AppFeedbackType.warning);
       return;
     }
@@ -493,17 +498,35 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
       return;
     }
 
-    final currentPass = await DatabaseHelper.instance.getSetting('admin_password') ?? 'admin123';
-    if (currentInput != currentPass) {
-      AppFeedback.show(context, 'Current password is incorrect.', type: AppFeedbackType.error);
-      return;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && user.email != null) {
+        AuthCredential credential = EmailAuthProvider.credential(
+          email: user.email!,
+          password: currentInput,
+        );
+        await user.reauthenticateWithCredential(credential);
+        await user.updatePassword(newPass);
+        await DatabaseHelper.instance.setSetting('admin_password', newPass);
+        
+        if (mounted) {
+          AppFeedback.show(context, 'Password changed successfully.', type: AppFeedbackType.success);
+          _currentController.clear();
+          _newController.clear();
+          _confirmController.clear();
+        }
+      } else {
+        if (mounted) AppFeedback.show(context, 'No active user session found.', type: AppFeedbackType.error);
+      }
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        if (mounted) AppFeedback.show(context, 'Current password is incorrect.', type: AppFeedbackType.error);
+      } else {
+        if (mounted) AppFeedback.show(context, 'Error: ${e.message}', type: AppFeedbackType.error);
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.show(context, 'Failed to update password.', type: AppFeedbackType.error);
     }
-
-    await DatabaseHelper.instance.setSetting('admin_password', newPass);
-    AppFeedback.show(context, 'Password changed successfully.', type: AppFeedbackType.success);
-    _currentController.clear();
-    _newController.clear();
-    _confirmController.clear();
   }
 
   @override
@@ -511,11 +534,29 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildPasswordField(controller: _currentController, label: 'Current Password', hint: 'Enter current password', obscure: true),
+        _buildPasswordField(
+          controller: _currentController, 
+          label: 'Current Password', 
+          hint: 'Enter current password', 
+          obscure: _obscureCurrent,
+          onToggle: () => setState(() => _obscureCurrent = !_obscureCurrent),
+        ),
         const SizedBox(height: 20),
-        _buildPasswordField(controller: _newController, label: 'New Password', hint: 'Enter new password', obscure: true),
+        _buildPasswordField(
+          controller: _newController, 
+          label: 'New Password', 
+          hint: 'Enter new password', 
+          obscure: _obscureNew,
+          onToggle: () => setState(() => _obscureNew = !_obscureNew),
+        ),
         const SizedBox(height: 20),
-        _buildPasswordField(controller: _confirmController, label: 'Confirm Password', hint: 'Confirm new password', obscure: true),
+        _buildPasswordField(
+          controller: _confirmController, 
+          label: 'Confirm Password', 
+          hint: 'Confirm new password', 
+          obscure: _obscureConfirm,
+          onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+        ),
         const SizedBox(height: 24),
         Align(
           alignment: Alignment.centerRight,
@@ -536,7 +577,13 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
     );
   }
 
-  Widget _buildPasswordField({required TextEditingController controller, required String label, required String hint, required bool obscure}) {
+  Widget _buildPasswordField({
+    required TextEditingController controller, 
+    required String label, 
+    required String hint, 
+    required bool obscure,
+    required VoidCallback onToggle,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -551,7 +598,11 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-            prefixIcon: Icon(obscure ? Icons.password_outlined : Icons.lock_outline, color: Colors.grey.shade500, size: 20),
+            prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade500, size: 20),
+            suffixIcon: IconButton(
+              icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade500, size: 20),
+              onPressed: onToggle,
+            ),
             contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade200)),
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade200)),

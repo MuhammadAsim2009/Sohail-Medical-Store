@@ -1693,7 +1693,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     return val;
   }
   double get _taxAmount => (_subtotal - _discountAmount) * (_taxRate / 100);
-  double get _total => _subtotal - _discountAmount + _taxAmount;
+  double get _total => (_subtotal - _discountAmount + _taxAmount).roundToDouble();
   double get _stagedPricePerUnit {
     if (_stagedProduct == null || _stagedUnit == null) return 0;
     final p = _stagedProduct!;
@@ -1782,11 +1782,15 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
 
     setState(() {
       _stagedError = null;
-      final index = _cart.indexWhere(
-        (c) => c.product.id == p.id && c.unit == unit,
-      );
-      if (index >= 0) {
-        _cart[index].unitQty += _stagedQty;
+      final existingIndex = _cart.indexWhere((c) => c.product.id == p.id);
+      
+      if (existingIndex >= 0) {
+        if (_cart[existingIndex].unit == unit) {
+          _cart[existingIndex].unitQty += _stagedQty;
+        } else {
+          _stagedError = 'Product already in invoice. Please edit the existing item.';
+          return;
+        }
       } else {
         _cart.add(
           _CartItem(

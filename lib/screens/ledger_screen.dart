@@ -254,7 +254,11 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     if (path == null) return;
 
     try {
-      final file = File(path);
+      String finalPath = path;
+      if (!finalPath.toLowerCase().endsWith('.csv')) {
+        finalPath += '.csv';
+      }
+      final file = File(finalPath);
       final sink = file.openWrite();
 
       switch (_tabController.index) {
