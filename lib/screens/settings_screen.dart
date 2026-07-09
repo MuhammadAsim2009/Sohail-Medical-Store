@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/firebase_sync_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
@@ -60,6 +61,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       _SettingsCard(
                         title: 'Change Password',
                         child: const _ChangePasswordContent(),
+                      ),
+                      const SizedBox(height: 24),
+                      _SettingsCard(
+                        title: 'Synchronization',
+                        child: const _SyncSettingsContent(),
                       ),
                     ],
                   ),
@@ -227,7 +233,7 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
             ),
             Switch(
               value: _showTaxInReceipt,
-              activeColor: _kPrimary,
+              activeThumbColor: _kPrimary,
               onChanged: (val) => setState(() => _showTaxInReceipt = val),
             ),
           ],
@@ -620,3 +626,75 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
 
 
 
+
+class _SyncSettingsContent extends StatefulWidget {
+  const _SyncSettingsContent();
+
+  @override
+  State<_SyncSettingsContent> createState() => _SyncSettingsContentState();
+}
+
+class _SyncSettingsContentState extends State<_SyncSettingsContent> {
+  bool _isSyncing = false;
+
+  Future<void> _runSync() async {
+    if (_isSyncing) return;
+    setState(() => _isSyncing = true);
+
+    try {
+      final result = await FirebaseSyncService.instance.sync();
+      
+      if (!mounted) return;
+
+      if (result.offline) {
+        AppFeedback.show(context, 'Sync failed: No internet connection or route to Google', type: AppFeedbackType.error);
+      } else if (result.notAuthenticated) {
+        AppFeedback.show(context, 'Sync failed: Not authenticated with Firebase', type: AppFeedbackType.error);
+      } else {
+        final hasErrors = result.errors.isNotEmpty;
+        final type = hasErrors ? AppFeedbackType.warning : AppFeedbackType.success;
+        AppFeedback.show(
+          context, 
+          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.${hasErrors ? ' Some tables had errors.' : ''}', 
+          type: type
+        );
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.show(context, 'Sync Error: $e', type: AppFeedbackType.error);
+    } finally {
+      if (mounted) setState(() => _isSyncing = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Manually synchronize your local database with Firebase Firestore. '
+          'The system uses a richness-based two-way sync.',
+          style: TextStyle(fontSize: 14, color: Color(0xFF666666), height: 1.5),
+        ),
+        const SizedBox(height: 24),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton.icon(
+            onPressed: _isSyncing ? null : _runSync,
+            icon: _isSyncing 
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.sync, size: 18),
+            label: Text(_isSyncing ? 'Syncing...' : 'Sync Now'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F6E5C),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              elevation: 0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}

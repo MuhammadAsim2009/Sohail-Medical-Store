@@ -1,14 +1,27 @@
+import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'database_helper.dart';
 
-/// Manages bidirectional synchronization between local SQLite and Firebase.
+/// Manages bidirectional synchronisation between local SQLite and Firestore.
 ///
-/// Strategy:
-/// - Offline-first: all writes go to SQLite first.
-/// - When online, this service pushes dirty local records to Firebase and
-///   pulls changes from Firebase into SQLite.
-/// - Conflict resolution: Last-Write-Wins based on [updated_at] timestamp.
+/// ## Strategy
+///
+/// ### First sync (lastSync == 0) — Richness-based
+/// For every table compare local row-count vs Firestore doc-count:
+///   | local | cloud | action                                   |
+///   |-------|-------|------------------------------------------|
+///   | 0     | > 0   | Pull all from cloud                      |
+///   | N     | > N   | Pull all from cloud, then delta-push     |
+///   | N     | <= N  | Push all local, delta-pull for any newer |
+///   | equal | equal | Delta push+pull                          |
+///
+/// ### Subsequent syncs — Incremental Delta (Last-Write-Wins)
+/// Push local rows with `updated_at > lastSync`. Pull cloud docs with
+/// `updated_at > lastSync`. For conflicts, higher `updated_at` wins.
 class FirebaseSyncService {
   static final FirebaseSyncService instance = FirebaseSyncService._();
   FirebaseSyncService._();
@@ -16,15 +29,15 @@ class FirebaseSyncService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final _uuid = const Uuid();
 
-  // Tables that participate in sync (order matters: parents before children)
+  // Tables that participate in sync — order: parents before children
   static const List<String> _syncTables = [
+    'settings',
+    'suppliers',
     'products',
-    'purchase_history',
+    'customers',
     'purchase_orders',
     'purchase_order_items',
-    'suppliers',
-    'customers',
-    'settings',
+    'purchase_history',
     'daily_sales_sheets',
     'sales',
     'sale_items',
@@ -35,165 +48,276 @@ class FirebaseSyncService {
     'supplier_payments',
   ];
 
-  /// Root Firestore path for this table
-  CollectionReference _col(String table) {
-    return _firestore.collection(table);
-  }
+  CollectionReference _col(String table) => _firestore.collection(table);
+
+  bool _isSyncing = false;
 
   // ─── Public API ─────────────────────────────────────────────────────────────
 
-  /// Performs a full bidirectional sync. Call this when network is available.
-  Future<SyncResult> sync({bool forcePull = false}) async {
+  /// Performs a full bidirectional sync.
+  ///
+  /// Set [forceInitial] = true to redo the smart initial-sync regardless of
+  /// whether a previous sync has run (useful for "Reset Sync" in settings).
+  Future<SyncResult> sync({bool forceInitial = false}) async {
+    if (_isSyncing) return SyncResult.offline(); // Prevent concurrent syncs
 
-    int pushed = 0;
-    int pulled = 0;
-    final errors = <String>[];
-
-    final db = await DatabaseHelper.instance.database;
-    final lastSync = await _getLastSyncTimestamp();
-
-    for (final table in _syncTables) {
-      try {
-        pushed += await _push(db, table, lastSync);
-        pulled += await _pull(db, table, forcePull ? 0 : lastSync, forcePull: forcePull);
-      } catch (e) {
-        errors.add('$table: $e');
-      }
+    // Guard: check connectivity (fast - just checks OS network state)
+    final connectivityResults = await Connectivity().checkConnectivity();
+    if (connectivityResults.contains(ConnectivityResult.none)) {
+      return SyncResult.offline();
     }
 
-    await _setLastSyncTimestamp(DateTime.now().millisecondsSinceEpoch);
-    return SyncResult(pushed: pushed, pulled: pulled, errors: errors);
+    // Guard: verify an actual route to Firebase via TCP (3s timeout)
+    // We pass the raw IP to avoid extra DNS resolution time.
+    try {
+      final addresses = await InternetAddress.lookup(
+        'firestore.googleapis.com',
+        type: InternetAddressType.IPv4,
+      ).timeout(const Duration(seconds: 4));
+      if (addresses.isEmpty) return SyncResult.offline();
+      final socket = await Socket.connect(
+        addresses.first,
+        443,
+        timeout: const Duration(seconds: 3),
+      );
+      socket.destroy();
+    } on SocketException {
+      return SyncResult.offline();
+    } catch (_) {
+      return SyncResult.offline();
+    }
+
+    _isSyncing = true;
+    try {
+      // Guard: user must be authenticated
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) return SyncResult.notAuthenticated();
+
+      int pushed = 0;
+      int pulled = 0;
+      final errors = <String>[];
+
+      final db = await DatabaseHelper.instance.database;
+      final lastSync = forceInitial ? 0 : await _getLastSyncTimestamp();
+
+      for (final table in _syncTables) {
+        try {
+          if (lastSync == 0) {
+            // ── First-time / forced: richness-based direction decision ──────────
+            final localCountResult =
+                await db.rawQuery('SELECT COUNT(*) as count FROM $table');
+            final int localCount = Sqflite.firstIntValue(localCountResult) ?? 0;
+
+            final AggregateQuerySnapshot cloudCountSnap =
+                await _col(table).count().get();
+            final int cloudCount = cloudCountSnap.count ?? 0;
+
+            if (localCount == 0 && cloudCount > 0) {
+              // Cloud only → pull everything
+              final snap = await _col(table).get();
+              pulled += await _applySnapshot(db, table, snap);
+            } else if (cloudCount > localCount) {
+              // Cloud richer → pull everything, then push any local extras
+              final snap = await _col(table).get();
+              pulled += await _applySnapshot(db, table, snap);
+              pushed += await _deltaPush(db, table, 0);
+            } else if (localCount > 0) {
+              // Local richer (or equal with data) → push all local, delta-pull cloud
+              final localRows =
+                  List<Map<String, dynamic>>.from(await db.query(table));
+              pushed += await _pushRows(db, table, localRows);
+              // Pull anything from cloud that we don't have yet
+              final snap = await _col(table).get();
+              pulled += await _applySnapshot(db, table, snap);
+            }
+          } else {
+            // ── Subsequent syncs: incremental delta ────────────────────────────
+            pushed += await _deltaPush(db, table, lastSync);
+            pulled += await _deltaPull(db, table, lastSync);
+          }
+        } catch (e) {
+          errors.add('$table: $e');
+        }
+      }
+
+      await _setLastSyncTimestamp(DateTime.now().millisecondsSinceEpoch);
+
+      // Write a lightweight summary to _sync_metadata (one doc, not per-table)
+      try {
+        await _firestore.collection('_sync_metadata').doc('last_sync').set({
+          'timestamp': FieldValue.serverTimestamp(),
+          'pushed': pushed,
+          'pulled': pulled,
+          'errorCount': errors.length,
+          'errors': errors.take(5).toList(),
+          'status': errors.isEmpty ? 'success' : 'partial',
+        }, SetOptions(merge: true));
+      } catch (_) {} // Don't fail the sync just because metadata write failed
+
+      return SyncResult(pushed: pushed, pulled: pulled, errors: errors);
+    } finally {
+      _isSyncing = false;
+    }
   }
 
-  // ─── Push: Local → Firebase ──────────────────────────────────────────────
+  // ─── Incremental Push (local → Firebase) ────────────────────────────────────
 
-  Future<int> _push(dynamic db, String table, int lastSync) async {
-    // Fetch rows modified after the last sync (or all if first sync)
+  Future<int> _deltaPush(dynamic db, String table, int lastSync) async {
     List<Map<String, dynamic>> rows;
     try {
-      if (lastSync == 0) {
-        rows = await db.query(table);
-      } else {
-        rows = await db.query(
-          table,
-          where: 'updated_at > ? OR sync_id IS NULL',
-          whereArgs: [lastSync],
-        );
-      }
+      rows = List<Map<String, dynamic>>.from(await db.query(
+        table,
+        where: 'updated_at > ? OR sync_id IS NULL',
+        whereArgs: [lastSync],
+      ));
     } catch (_) {
-      // Fallback: column may not exist yet — push everything
-      rows = await db.query(table);
+      rows = List<Map<String, dynamic>>.from(await db.query(table));
     }
 
     if (rows.isEmpty) return 0;
-
-    var batch = _firestore.batch();
-    int count = 0;
-
-    for (final raw in rows) {
-      final row = Map<String, dynamic>.from(raw);
-
-      // Assign a sync_id if the record doesn't have one yet
-      if (row['sync_id'] == null) {
-        row['sync_id'] = _uuid.v4();
-        // settings table uses 'key' as PK; all others use 'id'
-        final pkCol = (table == 'settings') ? 'key' : 'id';
-        await db.update(
-          table,
-          {'sync_id': row['sync_id'], 'updated_at': DateTime.now().millisecondsSinceEpoch},
-          where: '$pkCol = ?',
-          whereArgs: [row[pkCol]],
-        );
-      }
-
-      final docRef = _col(table).doc(row['sync_id'] as String);
-      batch.set(docRef, _toFirestoreMap(row), SetOptions(merge: true));
-      count++;
-
-      // Firestore batches are limited to 500 ops — commit and reset
-      if (count % 490 == 0) {
-        await batch.commit();
-        batch = _firestore.batch();
-      }
-    }
-
-    // Commit any remaining ops in the batch
-    if (count % 490 != 0) {
-      await batch.commit();
-    }
-    return count;
+    return _pushRows(db, table, rows);
   }
 
-  // ─── Pull: Firebase → Local ──────────────────────────────────────────────
+  // ─── Incremental Pull (Firebase → local) ────────────────────────────────────
 
-  Future<int> _pull(dynamic db, String table, int lastSync, {bool forcePull = false}) async {
-    Query query = _col(table);
-    if (lastSync > 0) {
-      query = query.where('updated_at', isGreaterThan: lastSync);
+  Future<int> _deltaPull(dynamic db, String table, int lastSync) async {
+    final QuerySnapshot snap = await _col(table)
+        .where('updated_at', isGreaterThan: lastSync)
+        .get();
+    if (snap.docs.isEmpty) return 0;
+    return _applySnapshot(db, table, snap);
+  }
+
+  // ─── Core: push a list of local rows to Firestore ───────────────────────────
+
+  Future<int> _pushRows(
+    dynamic db,
+    String table,
+    List<Map<String, dynamic>> rawRows,
+  ) async {
+    if (rawRows.isEmpty) return 0;
+
+    // Collect rows that need a new sync_id and assign them in one local pass
+    final rowsNeedingId = <Map<String, dynamic>>[];
+    for (final raw in rawRows) {
+      if ((raw['sync_id'] as String?) == null ||
+          (raw['sync_id'] as String).isEmpty) {
+        rowsNeedingId.add(raw);
+      }
     }
 
-    final snapshot = await query.get();
+    // Batch-update sync_ids in SQLite if needed
+    if (rowsNeedingId.isNotEmpty) {
+      final batch = db.batch();
+      for (final row in rowsNeedingId) {
+        final syncId = _uuid.v4();
+        row['sync_id'] = syncId;
+        row['updated_at'] =
+            row['updated_at'] ?? DateTime.now().millisecondsSinceEpoch;
+        final pkCol = (table == 'settings') ? 'key' : 'id';
+        try {
+          batch.update(
+            table,
+            {'sync_id': syncId, 'updated_at': row['updated_at']},
+            where: '$pkCol = ?',
+            whereArgs: [row[pkCol]],
+          );
+        } catch (_) {}
+      }
+      await batch.commit(noResult: true);
+    }
+
+    // Now push all rows to Firestore in 490-op batches
+    var fbBatch = _firestore.batch();
+    int total = 0;
+    int batchSize = 0;
+
+    for (final raw in rawRows) {
+      final row = Map<String, dynamic>.from(raw);
+      final syncId = (row['sync_id'] as String?) ?? _uuid.v4();
+      row['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
+      fbBatch.set(_col(table).doc(syncId), row, SetOptions(merge: true));
+      total++;
+      batchSize++;
+
+      if (batchSize == 490) {
+        await fbBatch.commit();
+        fbBatch = _firestore.batch();
+        batchSize = 0;
+      }
+    }
+
+    if (batchSize > 0) await fbBatch.commit();
+    return total;
+  }
+
+  // ─── Core: apply a Firestore snapshot to the local DB ───────────────────────
+  //
+  // Uses a single bulk query to load all existing sync_ids into memory,
+  // avoiding N individual queries for N documents.
+
+  Future<int> _applySnapshot(
+    dynamic db,
+    String table,
+    QuerySnapshot snapshot,
+  ) async {
     if (snapshot.docs.isEmpty) return 0;
 
+    // Load all existing sync_ids for this table into a map: sync_id → row
+    final List<Map<String, dynamic>> existingRows =
+        List<Map<String, dynamic>>.from(
+      await db.query(table, columns: ['sync_id', 'updated_at']),
+    );
+    final existingMap = <String, int>{};
+    for (final row in existingRows) {
+      final sid = row['sync_id'] as String?;
+      if (sid != null) {
+        existingMap[sid] = (row['updated_at'] as int?) ?? 0;
+      }
+    }
+
     int count = 0;
+    final insertBatch = db.batch();
+    final updateBatch = db.batch();
+
     for (final doc in snapshot.docs) {
-      final data = doc.data() as Map<String, dynamic>;
-      data['sync_id'] = doc.id; // ensure sync_id is set
+      final data =
+          Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+      data['sync_id'] = doc.id;
       data['is_deleted'] = (data['is_deleted'] as int?) ?? 0;
 
-      // Check if this record exists locally
-      final existing = await db.query(
-        table,
-        where: 'sync_id = ?',
-        whereArgs: [doc.id],
-        limit: 1,
-      );
+      try {
+        final localTs = existingMap[doc.id];
+        final int remoteTs = (data['updated_at'] as int?) ?? 0;
 
-      if (existing.isEmpty) {
-        // New record from Firebase – insert locally (without the 'id' PK)
-        final insertData = Map<String, dynamic>.from(data)..remove('id');
-        await db.insert(table, insertData, conflictAlgorithm: 5 /* replace */);
-      } else {
-        final localRow = existing.first;
-        final localUpdatedAt = (localRow['updated_at'] as int?) ?? 0;
-        final remoteUpdatedAt = (data['updated_at'] as int?) ?? 0;
-        final isDirty = (localRow['is_dirty'] as int?) == 1;
-
-        bool dataDiffers = false;
-        for (final key in data.keys) {
-          if (key == 'updated_at' || key == 'is_dirty' || key == 'id') continue;
-          if (data[key] != localRow[key]) {
-            dataDiffers = true;
-            break;
-          }
-        }
-
-        // Update local if Firebase is newer, OR if forced, OR if Firebase data was
-        // manually changed (differs) and local is not dirty.
-        if (forcePull || remoteUpdatedAt > localUpdatedAt || (!isDirty && dataDiffers)) {
+        if (localTs == null) {
+          // New record — insert without the cloud's id (let SQLite auto-assign)
+          final insertData = Map<String, dynamic>.from(data)..remove('id');
+          insertBatch.insert(table, insertData, conflictAlgorithm: 5);
+          count++;
+        } else if (remoteTs >= localTs) {
+          // Remote is newer — update local
           final updateData = Map<String, dynamic>.from(data)..remove('id');
-          await db.update(
+          updateBatch.update(
             table,
             updateData,
             where: 'sync_id = ?',
             whereArgs: [doc.id],
           );
+          count++;
         }
+        // else: local is newer — skip; will be pushed on next _deltaPush
+      } catch (_) {
+        // Skip bad rows
       }
-      count++;
     }
 
+    await insertBatch.commit(noResult: true);
+    await updateBatch.commit(noResult: true);
     return count;
   }
 
-  // ─── Helpers ─────────────────────────────────────────────────────────────
-
-  Map<String, dynamic> _toFirestoreMap(Map<String, dynamic> row) {
-    final data = Map<String, dynamic>.from(row);
-    // Firestore document ID = sync_id; keep it in the data too for queries
-    data['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
-    return data;
-  }
+  // ─── Timestamp helpers ───────────────────────────────────────────────────────
 
   Future<int> _getLastSyncTimestamp() async {
     final raw = await DatabaseHelper.instance.getSetting('last_sync_timestamp');
@@ -201,31 +325,43 @@ class FirebaseSyncService {
   }
 
   Future<void> _setLastSyncTimestamp(int ts) async {
-    await DatabaseHelper.instance.setSetting('last_sync_timestamp', ts.toString());
+    await DatabaseHelper.instance
+        .setSetting('last_sync_timestamp', ts.toString());
   }
 }
 
-/// Result object returned after a sync operation.
+// ─── Public result object ─────────────────────────────────────────────────────
+
 class SyncResult {
   final int pushed;
   final int pulled;
   final List<String> errors;
   final bool notAuthenticated;
+  final bool offline;
 
   SyncResult({
     required this.pushed,
     required this.pulled,
     required this.errors,
-  }) : notAuthenticated = false;
+  })  : notAuthenticated = false,
+        offline = false;
 
   SyncResult.notAuthenticated()
       : pushed = 0,
         pulled = 0,
         errors = const ['User not authenticated.'],
-        notAuthenticated = true;
+        notAuthenticated = true,
+        offline = false;
+
+  SyncResult.offline()
+      : pushed = 0,
+        pulled = 0,
+        errors = const ['Device is offline.'],
+        notAuthenticated = false,
+        offline = true;
 
   bool get hasErrors => errors.isNotEmpty;
-  bool get isSuccess => !hasErrors && !notAuthenticated;
+  bool get isSuccess => !hasErrors && !notAuthenticated && !offline;
 
   @override
   String toString() =>

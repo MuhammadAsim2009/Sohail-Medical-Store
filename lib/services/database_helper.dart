@@ -541,14 +541,14 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
       final newStock = product.stock + qtyPurchased * multiplier;
       await txn.update('products', {'stock': newStock, 'updated_at': DateTime.now().millisecondsSinceEpoch},
           where: 'id = ?', whereArgs: [product.id]);
-      await txn.insert('purchase_history', {
+      await txn.insert('purchase_history', _stamp({
         'product_id': product.id,
         'purchase_date': DateTime.now().toIso8601String(),
         'unit_purchased': unitPurchased,
         'quantity': qtyPurchased,
         'cost_price': costPerUnit,
         'total_cost': qtyPurchased * costPerUnit,
-      });
+      }));
     });
   }
 
@@ -672,14 +672,14 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
         updateMap['updated_at'] = DateTime.now().millisecondsSinceEpoch;
         await txn.update('products', updateMap,
             where: 'id = ?', whereArgs: [item.productId]);
-        await txn.insert('purchase_history', {
+        await txn.insert('purchase_history', _stamp({
           'product_id': item.productId,
           'purchase_date': DateTime.now().toIso8601String(),
           'unit_purchased': item.unitPurchased,
           'quantity': item.quantity,
           'cost_price': item.purchasePrice,
           'total_cost': item.quantity * item.purchasePrice,
-        });
+        }));
       }
 
       final supplierRows = await txn.query(
@@ -718,7 +718,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     final db = await instance.database;
     await db.insert(
       'suppliers',
-      _stamp(supplier.toMap(), isUpdate: true),
+      _stamp(supplier.toMap()),  // isUpdate defaults to false → assigns new sync_id
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
@@ -762,7 +762,7 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
 
   Future<int> insertCustomer(Customer customer) async {
     final db = await instance.database;
-    return await db.insert('customers', _stamp(customer.toMap(), isUpdate: true));
+    return await db.insert('customers', _stamp(customer.toMap()));  // assigns new sync_id
   }
 
   Future<List<Customer>> getCustomers() async {

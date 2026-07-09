@@ -42,7 +42,6 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   String _searchQuery = '';
-  final GlobalKey<AnimatedListState> _listKey = GlobalKey<AnimatedListState>();
 
   List<Customer> get _filteredCustomers {
     if (_searchQuery.isEmpty) return _customers;
@@ -305,15 +304,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                         ? const Center(child: CircularProgressIndicator())
                         : displayList.isEmpty
                             ? _buildEmptyState()
-                            : _searchQuery.isEmpty 
-                                ? AnimatedList(
-                                    key: _listKey,
-                                    initialItemCount: displayList.length,
-                                    itemBuilder: (context, index, animation) {
-                                      return _buildAnimatedRow(displayList[index], animation, index);
-                                    },
-                                  )
-                                : ListView.builder(
+                            : ListView.builder(
                                     itemCount: displayList.length,
                                     itemBuilder: (context, index) {
                                       return _CustomerRow(
@@ -374,22 +365,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     );
   }
 
-  Widget _buildAnimatedRow(Customer customer, Animation<double> animation, int index) {
-    return SizeTransition(
-      sizeFactor: animation,
-      child: FadeTransition(
-        opacity: animation,
-        child: _CustomerRow(
-          customer: customer,
-          onPayment: () => _recordPayment(customer),
-          onView: () => _showViewCustomerDialog(customer),
-          onEdit: () => _showCustomerDialog(existingCustomer: customer),
-          onDelete: () => _confirmDelete(customer),
-          isEven: index % 2 == 0,
-        ),
-      ),
-    );
-  }
+
 }
 
 // ---------------------------------------------------------------------------

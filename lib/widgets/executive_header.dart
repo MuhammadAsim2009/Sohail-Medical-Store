@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/firebase_sync_service.dart';
 import '../services/database_helper.dart';
 
@@ -19,12 +21,35 @@ class ExecutiveHeader extends StatefulWidget {
 
 class _ExecutiveHeaderState extends State<ExecutiveHeader> {
   bool _isSyncing = false;
+  bool _isPending = false;
   DateTime? _lastSyncTime;
+  StreamSubscription? _connectivitySubscription;
 
   @override
   void initState() {
     super.initState();
     _loadLastSyncTime();
+    _checkInitialConnectivity();
+    
+    _connectivitySubscription = Connectivity().onConnectivityChanged.listen((results) {
+      bool hasConnection = !results.contains(ConnectivityResult.none);
+      if (hasConnection && _isPending) {
+        _syncNow();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _connectivitySubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _checkInitialConnectivity() async {
+    final results = await Connectivity().checkConnectivity();
+    if (results.contains(ConnectivityResult.none)) {
+      if (mounted) setState(() => _isPending = true);
+    }
   }
 
   Future<void> _loadLastSyncTime() async {
@@ -46,19 +71,56 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
     
     setState(() {
       _isSyncing = true;
+      _isPending = false;
     });
 
+    // Capture messenger before any async gaps
+    final messenger = ScaffoldMessenger.of(context);
+
     try {
-      await FirebaseSyncService.instance.sync(forcePull: true);
+      final results = await Connectivity().checkConnectivity();
+      if (results.contains(ConnectivityResult.none)) {
+        throw Exception('No internet connection');
+      }
+
+      // Only force full richness sync on first-ever sync (timestamp == 0)
+      final lastSyncRaw = await DatabaseHelper.instance.getSetting('last_sync_timestamp');
+      final lastSyncTs = int.tryParse(lastSyncRaw ?? '0') ?? 0;
+      final isFirstSync = lastSyncTs == 0;
+
+      final result = await FirebaseSyncService.instance
+          .sync(forceInitial: isFirstSync)
+          .timeout(const Duration(seconds: 60));
+
+      if (result.offline) {
+        throw Exception('Cannot reach Firebase — check your internet connection');
+      } else if (result.notAuthenticated) {
+        throw Exception('Not signed in to Firebase');
+      } else if (result.hasErrors) {
+        // Partial success — show what failed but don't mark as pending
+        messenger.showSnackBar(SnackBar(
+          content: Text('Sync completed with ${result.errors.length} error(s): ${result.errors.first}'),
+          backgroundColor: Colors.orange.shade700,
+          duration: const Duration(seconds: 5),
+        ));
+      }
+
       await _loadLastSyncTime();
     } catch (e) {
-      debugPrint('Sync failed: $e');
+      debugPrint('Sync failed or timed out: $e');
+      if (mounted) setState(() => _isPending = true);
+      messenger.showSnackBar(SnackBar(
+        content: Text('Sync failed: ${e.toString().replaceAll("Exception: ", "")}'),
+        backgroundColor: Colors.red.shade700,
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Retry',
+          textColor: Colors.white,
+          onPressed: _syncNow,
+        ),
+      ));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isSyncing = false;
-        });
-      }
+      if (mounted) setState(() => _isSyncing = false);
     }
   }
 
@@ -78,6 +140,12 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
       syncColor = Colors.blue.shade600;
       syncBgColor = Colors.blue.shade50;
       syncIcon = Icons.cloud_sync_outlined;
+    } else if (_isPending) {
+      syncText = 'Pending';
+      syncSubText = 'Waiting for connection';
+      syncColor = Colors.orange.shade600;
+      syncBgColor = Colors.orange.shade50;
+      syncIcon = Icons.cloud_off_outlined;
     } else if (_lastSyncTime != null) {
       syncText = 'Data synced';
       syncSubText = 'Updated ${DateFormat('h:mm a').format(_lastSyncTime!)}';
