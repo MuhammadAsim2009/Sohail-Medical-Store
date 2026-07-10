@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/firebase_sync_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
+import 'dart:async';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart' as p;
 import 'package:file_picker/file_picker.dart';
@@ -487,34 +488,60 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
   bool _obscureCurrent = true;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
+  bool _isLoading = false;
+  String _statusMessage = '';
 
   Future<void> _changePassword() async {
-
+    print("DEBUG: Update button pressed.");
     final currentInput = _currentController.text;
     final newPass = _newController.text;
     final confirmPass = _confirmController.text;
 
     if (newPass.isEmpty || confirmPass.isEmpty || currentInput.isEmpty) {
+      print("DEBUG: Validation failed - Empty fields.");
       AppFeedback.show(context, 'Please fill all fields.', type: AppFeedbackType.warning);
       return;
     }
 
     if (newPass != confirmPass) {
+      print("DEBUG: Validation failed - Passwords do not match.");
       AppFeedback.show(context, 'New passwords do not match.', type: AppFeedbackType.warning);
       return;
     }
 
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Starting...';
+    });
+
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && user.email != null) {
-        AuthCredential credential = EmailAuthProvider.credential(
+        print("DEBUG: Attempting re-authentication for ${user.email}.");
+        setState(() => _statusMessage = 'Re-authenticating with Firebase...');
+        
+
+        // Use signInWithEmailAndPassword instead of reauthenticateWithCredential
+        // because reauthenticateWithCredential is known to hang indefinitely on Flutter Windows desktop.
+        await FirebaseAuth.instance.signInWithEmailAndPassword(
           email: user.email!,
           password: currentInput,
+        ).timeout(
+          const Duration(seconds: 15), 
+          onTimeout: () => throw TimeoutException("Re-authentication timed out")
         );
-        await user.reauthenticateWithCredential(credential);
-        await user.updatePassword(newPass);
-        await DatabaseHelper.instance.setSetting('admin_password', newPass);
         
+        print("DEBUG: Re-authentication successful. Attempting to update password.");
+        setState(() => _statusMessage = 'Updating Firebase password...');
+        
+        await user.updatePassword(newPass).timeout(
+          const Duration(seconds: 15), 
+          onTimeout: () => throw TimeoutException("Update password timed out")
+        );
+        
+        print("DEBUG: Firebase password updated.");
+        
+        print("DEBUG: Process completed successfully.");
         if (mounted) {
           AppFeedback.show(context, 'Password changed successfully.', type: AppFeedbackType.success);
           _currentController.clear();
@@ -522,16 +549,26 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
           _confirmController.clear();
         }
       } else {
+        print("DEBUG: No active user session found (user or email is null).");
         if (mounted) AppFeedback.show(context, 'No active user session found.', type: AppFeedbackType.error);
       }
     } on FirebaseAuthException catch (e) {
+      print("DEBUG: FirebaseAuthException caught: ${e.code} - ${e.message}");
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
         if (mounted) AppFeedback.show(context, 'Current password is incorrect.', type: AppFeedbackType.error);
       } else {
         if (mounted) AppFeedback.show(context, 'Error: ${e.message}', type: AppFeedbackType.error);
       }
     } catch (e) {
-      if (mounted) AppFeedback.show(context, 'Failed to update password.', type: AppFeedbackType.error);
+      print("DEBUG: General Exception caught: $e");
+      if (mounted) AppFeedback.show(context, 'Failed to update password: $e', type: AppFeedbackType.error);
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _statusMessage = '';
+        });
+      }
     }
   }
 
@@ -567,18 +604,33 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
         Align(
           alignment: Alignment.centerRight,
           child: ElevatedButton.icon(
-            onPressed: _changePassword,
-            icon: const Icon(Icons.lock_reset, size: 18),
-            label: const Text('Update Password'),
+            onPressed: _isLoading ? null : _changePassword,
+            icon: _isLoading 
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Icon(Icons.lock_reset, size: 18),
+            label: Text(_isLoading ? 'Updating...' : 'Update Password'),
             style: ElevatedButton.styleFrom(
               backgroundColor: _kPrimary,
               foregroundColor: Colors.white,
+              disabledBackgroundColor: _kPrimary.withValues(alpha: 0.6),
+              disabledForegroundColor: Colors.white70,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               elevation: 0,
             ),
           ),
         ),
+        if (_isLoading && _statusMessage.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                _statusMessage, 
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontStyle: FontStyle.italic),
+              ),
+            ),
+          ),
       ],
     );
   }
