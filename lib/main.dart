@@ -35,8 +35,8 @@ class _PharmacyAppState extends State<PharmacyApp> {
   @override
   void initState() {
     super.initState();
-    // Start background sync loop to sync SQLite tables to Firestore
-    _syncTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+    // Background delta sync every 60 seconds — only pushes/pulls changed rows
+    _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       FirebaseSyncService.instance.sync();
     });
   }

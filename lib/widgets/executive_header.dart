@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../services/firebase_sync_service.dart';
 import '../services/database_helper.dart';
+import '../utils/app_feedback.dart';
 
 class ExecutiveHeader extends StatefulWidget {
   final String title;
@@ -68,21 +69,13 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
 
   Future<void> _syncNow() async {
     if (_isSyncing) return;
-    
+
     setState(() {
       _isSyncing = true;
       _isPending = false;
     });
 
-    // Capture messenger before any async gaps
-    final messenger = ScaffoldMessenger.of(context);
-
     try {
-      final results = await Connectivity().checkConnectivity();
-      if (results.contains(ConnectivityResult.none)) {
-        throw Exception('No internet connection');
-      }
-
       // Only force full richness sync on first-ever sync (timestamp == 0)
       final lastSyncRaw = await DatabaseHelper.instance.getSetting('last_sync_timestamp');
       final lastSyncTs = int.tryParse(lastSyncRaw ?? '0') ?? 0;
@@ -92,33 +85,29 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
           .sync(forceInitial: isFirstSync)
           .timeout(const Duration(seconds: 60));
 
-      if (result.offline) {
-        throw Exception('Cannot reach Firebase — check your internet connection');
-      } else if (result.notAuthenticated) {
-        throw Exception('Not signed in to Firebase');
-      } else if (result.hasErrors) {
-        // Partial success — show what failed but don't mark as pending
-        messenger.showSnackBar(SnackBar(
-          content: Text('Sync completed with ${result.errors.length} error(s): ${result.errors.first}'),
-          backgroundColor: Colors.orange.shade700,
-          duration: const Duration(seconds: 5),
-        ));
-      }
+      if (!mounted) return;
 
-      await _loadLastSyncTime();
+      if (result.offline) {
+        AppFeedback.show(context, 'Sync failed: No internet connection or route to Google', type: AppFeedbackType.error);
+        setState(() => _isPending = true);
+      } else if (result.notAuthenticated) {
+        AppFeedback.show(context, 'Sync failed: Not authenticated with Firebase', type: AppFeedbackType.error);
+        setState(() => _isPending = true);
+      } else {
+        final hasErrors = result.errors.isNotEmpty;
+        AppFeedback.show(
+          context,
+          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.${hasErrors ? ' Some tables had errors.' : ''}',
+          type: hasErrors ? AppFeedbackType.warning : AppFeedbackType.success,
+        );
+        await _loadLastSyncTime();
+      }
     } catch (e) {
       debugPrint('Sync failed or timed out: $e');
-      if (mounted) setState(() => _isPending = true);
-      messenger.showSnackBar(SnackBar(
-        content: Text('Sync failed: ${e.toString().replaceAll("Exception: ", "")}'),
-        backgroundColor: Colors.red.shade700,
-        duration: const Duration(seconds: 6),
-        action: SnackBarAction(
-          label: 'Retry',
-          textColor: Colors.white,
-          onPressed: _syncNow,
-        ),
-      ));
+      if (mounted) {
+        AppFeedback.show(context, 'Sync Error: $e', type: AppFeedbackType.error);
+        setState(() => _isPending = true);
+      }
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }

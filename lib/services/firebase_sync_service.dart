@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -51,6 +52,18 @@ class FirebaseSyncService {
   CollectionReference _col(String table) => _firestore.collection(table);
 
   bool _isSyncing = false;
+  Timer? _debounceTimer;
+
+  // ─── Auto-sync trigger ───────────────────────────────────────────────────────
+
+  /// Call this after any local write to schedule a background push.
+  /// Uses a 3-second debounce so rapid successive saves only trigger one sync.
+  void triggerAutoSync() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(seconds: 3), () {
+      sync(); // silent background delta push — no forceInitial
+    });
+  }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
 
