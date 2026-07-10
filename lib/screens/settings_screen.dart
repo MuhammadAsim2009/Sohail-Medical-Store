@@ -389,36 +389,6 @@ class _BackupRestoreContent extends StatelessWidget {
     }
   }
 
-  Future<void> _clearAllData(BuildContext context) async {
-
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete All Data?'),
-        content: const Text('This will permanently delete all records (products, sales, customers, etc.) except for app settings. This action cannot be undone.\n\nAre you sure?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await DatabaseHelper.instance.clearAllData();
-        AppFeedback.show(context, 'All data cleared successfully.', type: AppFeedbackType.success);
-      } catch (e) {
-        AppFeedback.show(context, 'Error clearing data: $e', type: AppFeedbackType.error);
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -447,25 +417,6 @@ class _BackupRestoreContent extends StatelessWidget {
             padding: const EdgeInsets.symmetric(vertical: 16),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             side: BorderSide(color: Colors.grey.shade200),
-          ),
-        ),
-        const SizedBox(height: 32),
-        const Divider(),
-        const SizedBox(height: 16),
-        const Text(
-          'Danger Zone',
-          style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: () => _clearAllData(context),
-          icon: const Icon(Icons.delete_forever, size: 18),
-          label: const Text('Clear All Data (Debug)'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: Colors.red,
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            side: const BorderSide(color: Colors.red),
           ),
         ),
       ],

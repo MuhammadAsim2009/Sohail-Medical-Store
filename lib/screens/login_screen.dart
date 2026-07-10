@@ -119,36 +119,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _seedAdmin() async {
-    setState(() {
-      _isLoading = true;
-    });
-    try {
-      try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: 'admin@gmail.com',
-          password: 'Admin@123',
-        );
-      } catch (e) {
-        debugPrint('Sign in failed, attempting to create account. Error was: $e');
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-          email: 'admin@gmail.com',
-          password: 'Admin@123',
-        );
-      }
-      if (!mounted) return;
-      AppFeedback.show(context, 'Admin account seeded successfully!', type: AppFeedbackType.success);
-    } catch (e) {
-      if (!mounted) return;
-      AppFeedback.show(context, 'Failed to seed admin: $e', type: AppFeedbackType.error);
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -304,17 +274,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                         'Sign In',
                                         style: TextStyle(fontSize: 16),
                                       ),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Center(
-                              child: TextButton.icon(
-                                onPressed: _isLoading ? null : _seedAdmin,
-                                icon: const Icon(Icons.admin_panel_settings),
-                                label: const Text('Seed Admin Account'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: _primaryColor,
-                                ),
                               ),
                             ),
                             const SizedBox(height: 16),
