@@ -88,6 +88,7 @@ class PurchaseOrder {
   final double taxRate;
   final double taxAmount;
   final double paidAmount;
+  final double discount;
 
   const PurchaseOrder({
     this.id,
@@ -100,11 +101,12 @@ class PurchaseOrder {
     this.taxRate = 0.0,
     this.taxAmount = 0.0,
     this.paidAmount = 0.0,
+    this.discount = 0.0,
   });
 
   double get subtotal => items.fold(0, (s, i) => s + i.subtotal);
-  double get totalTax => taxAmount > 0 ? taxAmount : (subtotal * taxRate / 100);
-  double get totalAmount => subtotal + totalTax;
+  double get totalTax => taxAmount > 0 ? taxAmount : ((subtotal - discount) * taxRate / 100);
+  double get totalAmount => (subtotal - discount) + totalTax;
   double get balance => totalAmount - paidAmount;
 
   PurchaseOrder copyWith({
@@ -118,6 +120,7 @@ class PurchaseOrder {
     double? taxRate,
     double? taxAmount,
     double? paidAmount,
+    double? discount,
   }) {
     return PurchaseOrder(
       id: id ?? this.id,
@@ -130,6 +133,7 @@ class PurchaseOrder {
       taxRate: taxRate ?? this.taxRate,
       taxAmount: taxAmount ?? this.taxAmount,
       paidAmount: paidAmount ?? this.paidAmount,
+      discount: discount ?? this.discount,
     );
   }
 
@@ -146,6 +150,7 @@ class PurchaseOrder {
       taxRate: (map['tax_rate'] as num?)?.toDouble() ?? 0.0,
       taxAmount: (map['tax_amount'] as num?)?.toDouble() ?? 0.0,
       paidAmount: (map['paid_amount'] as num?)?.toDouble() ?? 0.0,
+      discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

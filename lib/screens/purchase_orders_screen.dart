@@ -572,6 +572,7 @@ class _OrderDetailDialog extends StatelessWidget {
                   ),
                   child: Column(children: [
                     _TotalRow('Subtotal', currency.format(order.subtotal)),
+                    if (order.discount > 0) _TotalRow('Discount', currency.format(order.discount)),
                     if (order.taxRate > 0) _TotalRow('Tax (${order.taxRate}%)', currency.format(order.totalTax)),
                     const Divider(height: 16),
                     _TotalRow('Total', currency.format(order.totalAmount), bold: true),
@@ -686,6 +687,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
   String? _selectedSupplier;
   final _taxCtrl      = TextEditingController(text: '0');
   final _paidCtrl     = TextEditingController(text: '0');
+  final _invoiceDiscCtrl = TextEditingController(text: '0');
   
   List<Supplier> _suppliers = [];
   bool _loadingSuppliers = true;
@@ -707,23 +709,19 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
         _selectedSupplier = o.supplier;
         _taxCtrl.text = o.taxRate.toString();
         _paidCtrl.text = o.paidAmount.toString();
+        _invoiceDiscCtrl.text = o.discount.toString();
         _items = o.items.map((i) {
           final prod = widget.products.firstWhere(
             (p) => p.id == i.productId,
             orElse: () => widget.products.first,
           );
-          double dPct = 0.0;
-          if (i.quantity > 0 && i.purchasePrice > 0) {
-            dPct = (i.discount / (i.quantity * i.purchasePrice)) * 100;
-          }
           return _ItemRow(
             product: prod,
             unitPurchased: i.unitPurchased,
             quantity: i.quantity,
             purchasePrice: i.purchasePrice,
             sellingPrice: i.sellingPrice,
-            discount: i.discount,
-            discountPercent: dPct,
+            expiryDate: i.expiryDate,
           );
         }).toList();
       } else {
@@ -749,6 +747,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
   void dispose() {
     _taxCtrl.dispose();
     _paidCtrl.dispose();
+    _invoiceDiscCtrl.dispose();
     super.dispose();
   }
 
@@ -761,14 +760,13 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
       quantity: 1,
       purchasePrice: p.costPrice,
       sellingPrice: p.sellPrice,
-      discount: 0,
-      discountPercent: 0,
     )));
   }
 
-  double get _subtotal      => _items.fold(0.0, (s, i) => s + i.quantity * i.purchasePrice - i.discount);
-  double get _tax           => _subtotal * (double.tryParse(_taxCtrl.text) ?? 0) / 100;
-  double get _total         => _subtotal + _tax;
+  double get _subtotal      => _items.fold(0.0, (s, i) => s + i.quantity * i.purchasePrice);
+  double get _invoiceDiscount => double.tryParse(_invoiceDiscCtrl.text) ?? 0;
+  double get _tax           => (_subtotal - _invoiceDiscount) * (double.tryParse(_taxCtrl.text) ?? 0) / 100;
+  double get _total         => (_subtotal - _invoiceDiscount) + _tax;
   double get _balance       => _total - (double.tryParse(_paidCtrl.text) ?? 0);
   final _currency = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 0);
 
@@ -787,6 +785,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
       taxRate: double.tryParse(_taxCtrl.text) ?? 0,
       taxAmount: _tax,
       paidAmount: double.tryParse(_paidCtrl.text) ?? 0,
+      discount: _invoiceDiscount,
       items: _items.map((r) => PurchaseOrderItem(
         productId: r.product.id,
         productName: r.product.name,
@@ -794,7 +793,8 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
         quantity: r.quantity,
         purchasePrice: r.purchasePrice,
         sellingPrice: r.sellingPrice,
-        discount: r.discount,
+        discount: 0.0,
+        expiryDate: r.expiryDate,
       )).toList(),
     );
 
@@ -948,9 +948,15 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
                       child: Column(children: [
                         _SummaryField(label: 'Tax %', controller: _taxCtrl, onChanged: () => setState((){})),
                         const SizedBox(height: 10),
+                        _SummaryField(label: 'Discount (Rs.)', controller: _invoiceDiscCtrl, onChanged: () => setState((){})),
+                        const SizedBox(height: 10),
                         _SummaryField(label: 'Amount Paid (Rs.)', controller: _paidCtrl, onChanged: () => setState((){})),
                         const Divider(height: 24),
                         _SumRow('Subtotal', _currency.format(_subtotal)),
+                        if (_invoiceDiscount > 0) ...[
+                          const SizedBox(height: 6),
+                          _SumRow('Discount', _currency.format(_invoiceDiscount)),
+                        ],
                         if ((double.tryParse(_taxCtrl.text) ?? 0) > 0) ...[
                           const SizedBox(height: 6),
                           _SumRow('Tax', _currency.format(_tax)),
@@ -1034,8 +1040,7 @@ class _ItemRow {
   double quantity;
   double purchasePrice;
   double sellingPrice;
-  double discount;
-  double discountPercent;
+  DateTime? expiryDate;
 
   _ItemRow({
     required this.product,
@@ -1043,8 +1048,7 @@ class _ItemRow {
     required this.quantity,
     required this.purchasePrice,
     required this.sellingPrice,
-    required this.discount,
-    this.discountPercent = 0.0,
+    this.expiryDate,
   });
 }
 
@@ -1072,7 +1076,7 @@ class _ItemCardState extends State<_ItemCard> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _sellCtrl;
-  late final TextEditingController _discCtrl;
+  late final TextEditingController _expiryCtrl;
 
   @override
   void initState() {
@@ -1080,18 +1084,31 @@ class _ItemCardState extends State<_ItemCard> {
     _qtyCtrl   = TextEditingController(text: widget.row.quantity.toString());
     _priceCtrl = TextEditingController(text: widget.row.purchasePrice.toString());
     _sellCtrl  = TextEditingController(text: widget.row.sellingPrice.toString());
-    _discCtrl  = TextEditingController(text: widget.row.discountPercent.toString());
+    _expiryCtrl = TextEditingController(
+      text: widget.row.expiryDate != null ? DateFormat('MMM d, yyyy').format(widget.row.expiryDate!) : '',
+    );
   }
 
-  void _updateDiscount() {
-    final r = widget.row;
-    r.discount = (r.quantity * r.purchasePrice) * (r.discountPercent / 100);
+  Future<void> _pickExpiry() async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: widget.row.expiryDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (date != null) {
+      setState(() {
+        widget.row.expiryDate = date;
+        _expiryCtrl.text = DateFormat('MMM d, yyyy').format(date);
+      });
+      widget.onChanged();
+    }
   }
 
   @override
   void dispose() {
     _qtyCtrl.dispose(); _priceCtrl.dispose();
-    _sellCtrl.dispose(); _discCtrl.dispose();
+    _sellCtrl.dispose(); _expiryCtrl.dispose();
     super.dispose();
   }
 
@@ -1246,7 +1263,6 @@ class _ItemCardState extends State<_ItemCard> {
                         onChanged: (v) { 
                           setState(() { 
                             widget.row.quantity = double.tryParse(v) ?? 0; 
-                            _updateDiscount();
                           }); 
                           widget.onChanged(); 
                         },
@@ -1284,7 +1300,6 @@ class _ItemCardState extends State<_ItemCard> {
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
                   onChanged: (v) { 
                     r.purchasePrice = double.tryParse(v) ?? 0; 
-                    _updateDiscount();
                     widget.onChanged(); 
                   },
                   validator: (v) {
@@ -1314,19 +1329,19 @@ class _ItemCardState extends State<_ItemCard> {
               )),
               const SizedBox(width: 10),
               Expanded(child: _LabelField(
-                label: 'Discount (%)',
+                label: 'Expiry Date',
                 child: TextFormField(
-                  controller: _discCtrl,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  controller: _expiryCtrl,
+                  readOnly: true,
+                  onTap: _pickExpiry,
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
-                  onChanged: (v) { 
-                    r.discountPercent = double.tryParse(v) ?? 0; 
-                    _updateDiscount();
-                    widget.onChanged(); 
-                  },
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), 
+                    isDense: true,
+                    hintText: 'Select Date',
+                    suffixIcon: const Icon(Icons.calendar_today, size: 16),
+                  ),
                 ),
               )),
             ]),

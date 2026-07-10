@@ -62,8 +62,9 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   status      TEXT NOT NULL,
   notes       TEXT,
   tax_rate    REAL NOT NULL DEFAULT 0.0,
-    tax_amount  REAL NOT NULL DEFAULT 0.0,
-    paid_amount REAL NOT NULL DEFAULT 0.0
+  tax_amount  REAL NOT NULL DEFAULT 0.0,
+  paid_amount REAL NOT NULL DEFAULT 0.0,
+  discount    REAL NOT NULL DEFAULT 0.0
 )""");
       await db.execute("""
 CREATE TABLE IF NOT EXISTS purchase_order_items (
@@ -219,6 +220,9 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     if (oldVersion < 20) {
       try { await db.execute("ALTER TABLE sales ADD COLUMN discount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
     }
+    if (oldVersion < 21) {
+      try { await db.execute("ALTER TABLE purchase_orders ADD COLUMN discount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -266,7 +270,8 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   status      TEXT NOT NULL,
   notes       TEXT,
   tax_rate    REAL NOT NULL DEFAULT 0.0,
-  paid_amount REAL NOT NULL DEFAULT 0.0
+  paid_amount REAL NOT NULL DEFAULT 0.0,
+  discount    REAL NOT NULL DEFAULT 0.0
 )""");
 
     await db.execute("""
@@ -581,6 +586,7 @@ return db.delete('products', where: 'id = ?', whereArgs: [id]);
         'tax_rate': order.taxRate,
         'tax_amount': order.taxAmount,
         'paid_amount': order.paidAmount,
+        'discount': order.discount,
       }));
       final savedItems = <PurchaseOrderItem>[];
       for (final item in order.items) {
@@ -635,6 +641,7 @@ return saved;
           'tax_rate': order.taxRate,
           'tax_amount': order.taxAmount,
           'paid_amount': order.paidAmount,
+          'discount': order.discount,
           'status': order.status,
         }),
         where: 'id = ?',
