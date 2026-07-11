@@ -61,26 +61,10 @@ class _LoginScreenState extends State<LoginScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
       
-      try {
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
-      } on FirebaseAuthException catch (e) {
-        if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
-          if (email == 'admin@gmail.com' && password == 'Admin@123') {
-            // Auto create admin account if it doesn't exist
-            await FirebaseAuth.instance.createUserWithEmailAndPassword(
-              email: email,
-              password: password,
-            );
-          } else {
-            rethrow;
-          }
-        } else {
-          rethrow;
-        }
-      }
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', _rememberMe);

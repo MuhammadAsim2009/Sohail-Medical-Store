@@ -10,9 +10,7 @@ import 'services/firebase_sync_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   if (Platform.isWindows || Platform.isLinux) {
     sqfliteFfiInit();

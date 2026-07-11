@@ -40,7 +40,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 20,
+      version: 21,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -222,6 +222,33 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     }
     if (oldVersion < 21) {
       try { await db.execute("ALTER TABLE purchase_orders ADD COLUMN discount REAL NOT NULL DEFAULT 0.0"); } catch(_) {}
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS product_categories (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id     TEXT UNIQUE,
+  updated_at  INTEGER,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
+  name        TEXT UNIQUE NOT NULL,
+  packaging   TEXT NOT NULL DEFAULT '[]'
+)""");
+      // Seed default categories
+      final defaults = [
+        {'name': 'Tablet',  'packaging': '[{"name":"Box","contains":10},{"name":"Strip","contains":10},{"name":"Tablet","contains":1}]'},
+        {'name': 'Syrup',   'packaging': '[{"name":"Bottle","contains":1}]'},
+        {'name': 'Sachet',  'packaging': '[{"name":"Box","contains":30},{"name":"Sachet","contains":1}]'},
+        {'name': 'Other',   'packaging': '[{"name":"Unit","contains":1}]'},
+      ];
+      for (final cat in defaults) {
+        try {
+          await db.insert('product_categories', {
+            'name': cat['name'],
+            'packaging': cat['packaging'],
+            'sync_id': _uuid.v4(),
+            'updated_at': DateTime.now().millisecondsSinceEpoch,
+            'is_deleted': 0,
+          });
+        } catch (_) {}
+      }
     }
   }
 
@@ -455,6 +482,69 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
     await db.execute(
       'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
     );
+
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS product_categories (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id     TEXT UNIQUE,
+  updated_at  INTEGER,
+  is_deleted  INTEGER NOT NULL DEFAULT 0,
+  name        TEXT UNIQUE NOT NULL,
+  packaging   TEXT NOT NULL DEFAULT '[]'
+)""");
+    // Seed defaults
+    final defaults = [
+      {'name': 'Tablet',  'packaging': '[{"name":"Box","contains":10},{"name":"Strip","contains":10},{"name":"Tablet","contains":1}]'},
+      {'name': 'Syrup',   'packaging': '[{"name":"Bottle","contains":1}]'},
+      {'name': 'Sachet',  'packaging': '[{"name":"Box","contains":30},{"name":"Sachet","contains":1}]'},
+      {'name': 'Other',   'packaging': '[{"name":"Unit","contains":1}]'},
+    ];
+    for (final cat in defaults) {
+      try {
+        await db.insert('product_categories', {
+          'name': cat['name'],
+          'packaging': cat['packaging'],
+          'sync_id': _uuid.v4(),
+          'updated_at': DateTime.now().millisecondsSinceEpoch,
+          'is_deleted': 0,
+        });
+      } catch (_) {}
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+
+  // PRODUCT CATEGORIES
+  // ---------------------------------------------------------------------------
+
+  Future<List<Map<String, dynamic>>> getCategories() async {
+    final db = await instance.database;
+    return await db.query(
+      'product_categories',
+      where: 'is_deleted = 0',
+      orderBy: 'name ASC',
+    );
+  }
+
+  Future<void> insertCategory(String name, String packagingJson) async {
+    final db = await instance.database;
+    await db.insert('product_categories', _stamp({
+      'name': name,
+      'packaging': packagingJson,
+      'is_deleted': 0,
+    }));
+    FirebaseSyncService.instance.triggerAutoSync();
+  }
+
+  Future<void> deleteCategory(int id) async {
+    final db = await instance.database;
+    await db.update(
+      'product_categories',
+      _stamp({'is_deleted': 1}, isUpdate: true),
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   // ---------------------------------------------------------------------------

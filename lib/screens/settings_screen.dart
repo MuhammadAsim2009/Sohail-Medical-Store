@@ -68,6 +68,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: 'Synchronization',
                         child: const _SyncSettingsContent(),
                       ),
+
                     ],
                   ),
                 ),
