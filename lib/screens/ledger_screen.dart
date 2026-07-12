@@ -138,6 +138,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   bool _isLoading = true;
 
   List<LedgerEntry> _generalLedger = [];
+  List<LedgerEntry> _expensesLedger = [];
   List<CustomerStatementEntry> _customerStatements = [];
   List<SupplierStatementEntry> _supplierStatements = [];
 
@@ -153,7 +154,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChanged);
     _loadInitialData();
   }
@@ -188,11 +189,14 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
         final data = await DatabaseHelper.instance.getGeneralLedger(_selectedDateRange?.start, _selectedDateRange?.end);
         _generalLedger = data.map((e) => LedgerEntry.fromMap(e)).toList();
       } else if (_tabController.index == 1) {
+        final data = await DatabaseHelper.instance.getExpensesLedger(_selectedDateRange?.start, _selectedDateRange?.end);
+        _expensesLedger = data.map((e) => LedgerEntry.fromMap(e)).toList();
+      } else if (_tabController.index == 2) {
         if (_selectedCustomerId != null) {
           final data = await DatabaseHelper.instance.getCustomerStatement(_selectedCustomerId!, _selectedDateRange?.start, _selectedDateRange?.end);
           _customerStatements = data.map((e) => CustomerStatementEntry.fromMap(e)).toList();
         }
-      } else if (_tabController.index == 2) {
+      } else if (_tabController.index == 3) {
         if (_selectedSupplierId != null) {
           final data = await DatabaseHelper.instance.getSupplierStatement(_selectedSupplierId!, _selectedDateRange?.start, _selectedDateRange?.end);
           _supplierStatements = data.map((e) => SupplierStatementEntry.fromMap(e)).toList();
@@ -269,12 +273,18 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
           }
           break;
         case 1:
+          sink.writeln('Date,Reference,Description,Category,Type,Amount');
+          for (var e in _expensesLedger) {
+            sink.writeln('${DateFormat('yyyy-MM-dd').format(e.date)},"${e.title}","${e.description}","${e.category}","${e.type}",${e.amount}');
+          }
+          break;
+        case 2:
           sink.writeln('Date,Reference,Description,Debit,Credit,Balance');
           for (var e in _customerStatements) {
             sink.writeln('${DateFormat('yyyy-MM-dd').format(e.date)},"${e.reference}","${e.description}",${e.debit},${e.credit},${e.balance}');
           }
           break;
-        case 2:
+        case 3:
           sink.writeln('Date,Reference,Description,Debit,Credit,Balance');
           for (var e in _supplierStatements) {
             sink.writeln('${DateFormat('yyyy-MM-dd').format(e.date)},"${e.reference}","${e.description}",${e.debit},${e.credit},${e.balance}');
@@ -345,9 +355,11 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
       case 0:
         return _buildGeneralCashLedgerTab(key: const ValueKey(0));
       case 1:
-        return _buildCustomerStatementsTab(key: const ValueKey(1));
+        return _buildExpensesTab(key: const ValueKey(1));
       case 2:
-        return _buildSupplierStatementsTab(key: const ValueKey(2));
+        return _buildCustomerStatementsTab(key: const ValueKey(2));
+      case 3:
+        return _buildSupplierStatementsTab(key: const ValueKey(3));
       default:
         return const SizedBox.shrink();
     }
@@ -407,20 +419,6 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                     textStyle: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
-                const SizedBox(width: 12),
-                ElevatedButton.icon(
-                  onPressed: _addExpense,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Add Expense'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    textStyle: const TextStyle(fontWeight: FontWeight.w600),
-                    elevation: 0,
-                  ),
-                ),
               ],
             ),
           ),
@@ -442,6 +440,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
             splashBorderRadius: BorderRadius.circular(8),
             tabs: const [
               Tab(text: 'General Cash Ledger'),
+              Tab(text: 'Expenses'),
               Tab(text: 'Customer Statements'),
               Tab(text: 'Supplier Statements'),
             ],
@@ -501,14 +500,25 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
 
     // --- Dynamic summary computation ---
     final fmt = NumberFormat('#,##0.00', 'en_US');
-    final inflow = _generalLedger
+    
+    final rawInflow = _generalLedger
         .where((e) => e.amount > 0)
         .fold(0.0, (sum, e) => sum + e.amount.abs());
-    final outflow = _generalLedger
-        .where((e) => e.amount < 0)
+        
+    final salesReturn = _generalLedger
+        .where((e) => e.type == 'RETURN') // 'RETURN' type from DB queries (uppercased in LedgerEntry.fromMap)
         .fold(0.0, (sum, e) => sum + e.amount.abs());
+
+    // Net Sales (Inflow minus returns)
+    final netSells = rawInflow - salesReturn;
+    
+    // Purchases (Outflow minus returns)
+    final purchaseOutflow = _generalLedger
+        .where((e) => e.amount < 0 && e.type != 'RETURN')
+        .fold(0.0, (sum, e) => sum + e.amount.abs());
+
     final opening = 0.0; // Could be fetched from a settings table in future
-    final closing = opening + inflow - outflow;
+    final closing = opening + netSells - purchaseOutflow;
 
     return Column(
       key: key,
@@ -519,9 +529,9 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
           children: [
             Expanded(child: _SummaryStatCard(title: 'Opening', amount: 'Rs. ${fmt.format(opening)}', icon: Icons.flag, bgColor: Colors.grey.shade100, iconColor: Colors.grey.shade700, textColor: _primary)),
             const SizedBox(width: 16),
-            Expanded(child: _SummaryStatCard(title: 'Inflow', amount: 'Rs. ${fmt.format(inflow)}', icon: Icons.call_received, bgColor: Colors.green.shade50, iconColor: Colors.green.shade700, textColor: Colors.green.shade700)),
+            Expanded(child: _SummaryStatCard(title: 'Net Sells', amount: 'Rs. ${fmt.format(netSells)}', icon: Icons.call_received, bgColor: Colors.green.shade50, iconColor: Colors.green.shade700, textColor: Colors.green.shade700)),
             const SizedBox(width: 16),
-            Expanded(child: _SummaryStatCard(title: 'Outflow', amount: 'Rs. ${fmt.format(outflow)}', icon: Icons.call_made, bgColor: Colors.red.shade50, iconColor: Colors.red.shade700, textColor: Colors.red.shade700)),
+            Expanded(child: _SummaryStatCard(title: 'Purchase', amount: 'Rs. ${fmt.format(purchaseOutflow)}', icon: Icons.call_made, bgColor: Colors.red.shade50, iconColor: Colors.red.shade700, textColor: Colors.red.shade700)),
             const SizedBox(width: 16),
             Expanded(child: _SummaryStatCard(title: 'Closing', amount: 'Rs. ${fmt.format(closing)}', icon: Icons.account_balance_wallet, bgColor: _primary.withValues(alpha: 0.05), iconColor: _primary, textColor: _primary)),
           ],
@@ -622,6 +632,75 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
           ),
         ),
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // TAB 1.5: EXPENSES
+  // ---------------------------------------------------------------------------
+  Widget _buildExpensesTab({Key? key}) {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
+
+    final fmt = NumberFormat('#,##0.00', 'en_US');
+    final totalExpenses = _expensesLedger.fold(0.0, (sum, e) => sum + e.amount.abs());
+
+    return Column(
+      key: key,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: _SummaryStatCard(
+                title: 'Total Expenses', 
+                amount: 'Rs. ${fmt.format(totalExpenses)}', 
+                icon: Icons.money_off, 
+                bgColor: Colors.red.shade50, 
+                iconColor: Colors.red.shade700, 
+                textColor: Colors.red.shade700
+              ),
+            ),
+            const SizedBox(width: 24),
+            ElevatedButton.icon(
+              onPressed: _addExpense,
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Add Expense'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F4C81), // using _primary
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                textStyle: const TextStyle(fontWeight: FontWeight.w600),
+                elevation: 0,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              )
+            ],
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildTableHeader(['DATE', 'TITLE & DESCRIPTION', 'CATEGORY', 'TYPE', 'AMOUNT']),
+              if (_expensesLedger.isEmpty) _buildEmptyState('No expenses found.'),
+              for (var entry in _expensesLedger) _buildGeneralLedgerRow(entry),
+            ],
+          ),
+        ),
+      ],
     );
   }
 

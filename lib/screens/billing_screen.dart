@@ -1450,7 +1450,7 @@ class _SaleRowState extends State<_SaleRow> {
       return pw.Padding(
         padding: const pw.EdgeInsets.symmetric(vertical: 4),
         child: pw.Text(
-          ':::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::',
+          '------------------------------------------------------------------',
           maxLines: 1,
           style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
         ),
@@ -1487,17 +1487,29 @@ class _SaleRowState extends State<_SaleRow> {
               pw.Text('INVOICE INFORMATION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
               divider(),
               
-              pw.Container(
-                alignment: pw.Alignment.centerLeft,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Invoice #', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': ${widget.sale.invoiceNumber}', style: const pw.TextStyle(fontSize: 8)))]),
-                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Date', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': $dateStr', style: const pw.TextStyle(fontSize: 8)))]),
-                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Time', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': $timeStr', style: const pw.TextStyle(fontSize: 8)))]),
-                    pw.Row(children: [pw.SizedBox(width: 48, child: pw.Text('Customer', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': ${widget.sale.customerName ?? 'Walk-in'}', style: const pw.TextStyle(fontSize: 8)))]),
-                  ]
-                ),
+              pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Inv #: ${widget.sale.invoiceNumber}', style: const pw.TextStyle(fontSize: 8)),
+                        pw.Text('Date: $dateStr', style: const pw.TextStyle(fontSize: 8)),
+                        pw.Text('Time: $timeStr', style: const pw.TextStyle(fontSize: 8)),
+                      ],
+                    ),
+                  ),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Cust: ${widget.sale.customerName ?? 'Walk-in'}', style: const pw.TextStyle(fontSize: 8)),
+                        pw.Text('Status: ${widget.sale.balance <= 0 ? 'PAID' : 'PENDING'}', style: const pw.TextStyle(fontSize: 8)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
               
               divider(),
@@ -1562,35 +1574,6 @@ class _SaleRowState extends State<_SaleRow> {
                 ],
               ),
               divider(),
-              pw.Text('PAYMENT', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-              divider(),
-              
-              pw.Container(
-                alignment: pw.Alignment.centerLeft,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Row(children: [pw.SizedBox(width: 50, child: pw.Text('Method', style: const pw.TextStyle(fontSize: 8))), pw.Expanded(child: pw.Text(': ${widget.sale.paymentMethod}', style: const pw.TextStyle(fontSize: 8)))]),
-                  ]
-                ),
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Paid Amount', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text(widget.sale.received.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              pw.Row(
-                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                children: [
-                  pw.Text('Remaining', style: const pw.TextStyle(fontSize: 8)),
-                  pw.Text(widget.sale.balance.toStringAsFixed(2), style: const pw.TextStyle(fontSize: 8)),
-                ],
-              ),
-              divider(),
-              pw.Text(widget.sale.balance <= 0 ? 'PAID' : 'PENDING', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-              divider(),
               
               pw.Container(
                 alignment: pw.Alignment.centerLeft,
@@ -1606,11 +1589,6 @@ class _SaleRowState extends State<_SaleRow> {
                   ]
                 ),
               ),
-              divider(),
-              
-              pw.Text('THANK YOU', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-              pw.Text('Thank you for shopping with us', style: const pw.TextStyle(fontSize: 8)),
-              pw.Text('Goods once sold are not returnable', style: const pw.TextStyle(fontSize: 8)),
               divider(),
               
               pw.Text('Powered By TryUnity Solutions', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),

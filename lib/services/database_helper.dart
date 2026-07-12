@@ -1364,9 +1364,6 @@ return await db.transaction((txn) async {
       SELECT date, return_number AS title, customer_name AS description, CASE WHEN invoice_number LIKE 'OSR-%' OR invoice_number LIKE 'OPEN-%' THEN 'Open Return' ELSE 'Sales Return' END AS category, 'Return' AS type, 0.0 AS debit, total_refund AS credit, -total_refund AS amount FROM sales_returns
         WHERE total_refund > 0 AND date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
-      SELECT date, title AS title, notes AS description, category AS category, 'Expense' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
-        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
-      UNION ALL
       SELECT date, COALESCE(invoice_number, reference) AS title, reference AS description, 'Customer Receipt' AS category, 'Receipt' AS type, amount AS debit, 0.0 AS credit, amount AS amount FROM customer_payments
         WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       UNION ALL
@@ -1376,7 +1373,18 @@ return await db.transaction((txn) async {
       SELECT order_date AS date, po_number AS title, supplier AS description, 'Purchase' AS category, 'Purchase' AS type, 0.0 AS debit, paid_amount AS credit, -paid_amount AS amount FROM purchase_orders
         WHERE paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?) AND is_deleted = 0
       ORDER BY date DESC
-    ''', [f, t, f, t, f, t, f, t, f, t, f, t]);
+    ''', [f, t, f, t, f, t, f, t, f, t]);
+  }
+
+  Future<List<Map<String, dynamic>>> getExpensesLedger(DateTime? from, DateTime? to) async {
+    final db = await instance.database;
+    final f = from?.toIso8601String().substring(0, 10) ?? '1970-01-01';
+    final t = to?.toIso8601String().substring(0, 10) ?? DateTime.now().toIso8601String().substring(0, 10);
+    return await db.rawQuery('''
+      SELECT date, title AS title, notes AS description, category AS category, 'Expense' AS type, 0.0 AS debit, amount AS credit, -amount AS amount FROM expenses
+        WHERE date(date) BETWEEN date(?) AND date(?) AND is_deleted = 0
+      ORDER BY date DESC
+    ''', [f, t]);
   }
 
   Future<List<Map<String, dynamic>>> getCustomerStatement(String customerId, DateTime? from, DateTime? to) async {
