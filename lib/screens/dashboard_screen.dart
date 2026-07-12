@@ -539,7 +539,7 @@ class _DashboardBodyState extends State<_DashboardBody> {
                 crossAxisCount: crossAxisCount,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
-                childAspectRatio: constraints.maxWidth < 800 ? 1.6 : 2.2,
+                mainAxisExtent: 160,
               ),
               itemCount: stats.length,
               itemBuilder: (_, i) => _StatCard(data: stats[i]),

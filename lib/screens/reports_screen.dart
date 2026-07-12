@@ -1470,31 +1470,44 @@ class _ReportTypeItemState extends State<_ReportTypeItem> {
   Widget build(BuildContext context) {
     final selected = widget.isSelected;
     return MouseRegion(
+      cursor: SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
+          width: double.infinity,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            color: selected ? _kPrimary.withValues(alpha: 0.08) : _hovered ? Colors.grey.shade50 : Colors.transparent,
+            color: selected
+                ? _kPrimary.withValues(alpha: 0.08)
+                : _hovered
+                    ? Colors.grey.shade100
+                    : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? _kPrimary.withValues(alpha: 0.3) : Colors.transparent),
+            border: Border.all(
+              color: selected ? _kPrimary.withValues(alpha: 0.3) : Colors.transparent,
+            ),
           ),
           child: Row(
             children: [
-              Icon(widget.report.icon, size: 18, color: selected ? _kPrimary : Colors.grey.shade600),
+              Icon(widget.report.icon,
+                  size: 18, color: selected ? _kPrimary : Colors.grey.shade600),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
                   widget.report.label,
-                  style: TextStyle(fontSize: 13.5, fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-                      color: selected ? _kPrimary : const Color(0xFF1A2E2B)),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                    color: selected ? _kPrimary : const Color(0xFF1A2E2B),
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              if (selected) const Icon(Icons.chevron_right_rounded, size: 16, color: _kPrimary),
+              if (selected)
+                const Icon(Icons.chevron_right_rounded, size: 16, color: _kPrimary),
             ],
           ),
         ),

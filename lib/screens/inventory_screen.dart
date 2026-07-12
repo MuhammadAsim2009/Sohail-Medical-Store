@@ -1,4 +1,7 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:csv/csv.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import '../models/product.dart';
 import '../services/database_helper.dart';
@@ -108,6 +111,108 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ),
       ),
     );
+  }
+
+  // ── CSV Bulk Import ────────────────────────────────────────────────────────
+  Future<void> _downloadCsvTemplate() async {
+    try {
+      final List<List<dynamic>> rows = [
+        ['Product Code', 'Product Name', 'Category'],
+        ['P001', 'Sample Product', 'Medicine']
+      ];
+      String csv = ListToCsvConverter().convert(rows);
+      String? outputFile = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save CSV Template',
+        fileName: 'inventory_template.csv',
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+      if (outputFile != null) {
+        final file = File(outputFile);
+        await file.writeAsString(csv);
+        if (mounted) AppFeedback.show(context, 'Template saved to $outputFile');
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.show(context, 'Failed to save template: $e', type: AppFeedbackType.error);
+    }
+  }
+
+  Future<void> _importCsv() async {
+    try {
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+      );
+      if (result != null && result.files.single.path != null) {
+        final file = File(result.files.single.path!);
+        final csvString = await file.readAsString();
+        final List<List<dynamic>> rows = CsvToListConverter().convert(csvString);
+        if (rows.isEmpty || rows.length == 1) {
+           if (mounted) AppFeedback.show(context, 'CSV is empty or missing data', type: AppFeedbackType.error);
+           return;
+        }
+
+        int added = 0;
+        final categories = await DatabaseHelper.instance.getCategories();
+        
+        for (int i = 1; i < rows.length; i++) {
+          final row = rows[i];
+          if (row.length < 3) continue;
+
+          String sku = row[0].toString().trim();
+          String name = row[1].toString().trim();
+          String category = row[2].toString().trim();
+          
+          // Default values since they are not in the CSV template
+          double costPrice = 0.0;
+          double sellPrice = 0.0;
+          double stock = 0.0;
+          double threshold = 10.0;
+          
+          if (sku.isEmpty || name.isEmpty) continue;
+
+          List<ProductUnit> packaging = [];
+          if (category.isNotEmpty) {
+             final catData = categories.firstWhere(
+                (c) => c['name'].toString().toLowerCase() == category.toLowerCase(),
+                orElse: () => <String, dynamic>{},
+             );
+             if (catData.isNotEmpty) {
+                final pkgJson = catData['packaging'] as String?;
+                if (pkgJson != null && pkgJson.isNotEmpty) {
+                  try {
+                    final List<dynamic> parsed = jsonDecode(pkgJson);
+                    packaging = parsed.map((item) => ProductUnit.fromMap(item as Map<String, dynamic>)).toList();
+                  } catch (_) {}
+                }
+             }
+          }
+
+          final p = Product(
+            sku: sku,
+            name: name,
+            category: category,
+            costPrice: costPrice,
+            sellPrice: sellPrice,
+            stock: stock,
+            threshold: threshold,
+            packaging: packaging,
+          );
+          try {
+             await DatabaseHelper.instance.insertProduct(p);
+             added++;
+          } catch(e) {
+             // Silently ignore duplicates for bulk import
+          }
+        }
+        if (mounted) {
+           AppFeedback.show(context, 'Successfully imported $added products!');
+           _loadProducts();
+        }
+      }
+    } catch (e) {
+      if (mounted) AppFeedback.show(context, 'Failed to import CSV: $e', type: AppFeedbackType.error);
+    }
   }
 
   // ── Stat Cards ─────────────────────────────────────────────────────────────
@@ -222,6 +327,50 @@ class _InventoryScreenState extends State<InventoryScreen> {
             elevation: 0,
           ).copyWith(
             overlayColor: WidgetStateProperty.all(Colors.white.withValues(alpha: 0.1)),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Bulk Actions
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+          ),
+          child: PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'download') {
+                _downloadCsvTemplate();
+              } else if (value == 'import') {
+                _importCsv();
+              }
+            },
+            tooltip: 'Bulk Actions',
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            icon: const Icon(Icons.more_vert_rounded, color: Color(0xFF475569)),
+            offset: const Offset(0, 48),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'download',
+                child: Row(
+                  children: [
+                    Icon(Icons.download_rounded, size: 20, color: Color(0xFF475569)),
+                    SizedBox(width: 12),
+                    Text('Download CSV Template', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'import',
+                child: Row(
+                  children: [
+                    Icon(Icons.upload_file_rounded, size: 20, color: Color(0xFF475569)),
+                    SizedBox(width: 12),
+                    Text('Import from CSV', style: TextStyle(color: Color(0xFF0F172A), fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ],
