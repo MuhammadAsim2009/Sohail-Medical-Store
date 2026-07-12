@@ -9,6 +9,7 @@ import 'package:file_picker/file_picker.dart';
 import '../widgets/executive_header.dart';
 import '../services/database_helper.dart';
 import '../utils/app_feedback.dart';
+import 'login_screen.dart';
 
 // ---------------------------------------------------------------------------
 // THEME TOKENS
@@ -35,7 +36,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const ExecutiveHeader(title: 'Settings', subtitle: 'Manage store preferences, user accounts, backup, and sync configuration.'),
+            const ExecutiveHeader(
+              title: 'Settings',
+              subtitle:
+                  'Manage store preferences, user accounts, backup, and sync configuration.',
+            ),
             const SizedBox(height: 32),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -68,7 +73,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: 'Synchronization',
                         child: const _SyncSettingsContent(),
                       ),
-
+                      const SizedBox(height: 24),
+                      _SettingsCard(
+                        title: 'Danger Zone',
+                        child: const _DangerZoneContent(),
+                      ),
                     ],
                   ),
                 ),
@@ -110,10 +119,7 @@ class _SettingsCard extends StatelessWidget {
             ),
           ),
           Divider(height: 1, thickness: 1, color: Colors.grey.shade100),
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: child,
-          ),
+          Padding(padding: const EdgeInsets.all(24.0), child: child),
         ],
       ),
     );
@@ -124,7 +130,8 @@ class _GeneralSettingsContent extends StatefulWidget {
   const _GeneralSettingsContent();
 
   @override
-  State<_GeneralSettingsContent> createState() => _GeneralSettingsContentState();
+  State<_GeneralSettingsContent> createState() =>
+      _GeneralSettingsContentState();
 }
 
 class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
@@ -157,15 +164,37 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
   }
 
   Future<void> _saveSettings() async {
-    await DatabaseHelper.instance.setSetting('shop_name', _shopNameController.text);
-    await DatabaseHelper.instance.setSetting('shop_owner_name', _shopOwnerNameController.text);
-    await DatabaseHelper.instance.setSetting('shop_address', _shopAddressController.text);
-    await DatabaseHelper.instance.setSetting('shop_phone', _shopPhoneController.text);
-    await DatabaseHelper.instance.setSetting('tax_rate', _taxRateController.text);
-    await DatabaseHelper.instance.setSetting('show_tax_in_receipt', _showTaxInReceipt.toString());
-    
+    await DatabaseHelper.instance.setSetting(
+      'shop_name',
+      _shopNameController.text,
+    );
+    await DatabaseHelper.instance.setSetting(
+      'shop_owner_name',
+      _shopOwnerNameController.text,
+    );
+    await DatabaseHelper.instance.setSetting(
+      'shop_address',
+      _shopAddressController.text,
+    );
+    await DatabaseHelper.instance.setSetting(
+      'shop_phone',
+      _shopPhoneController.text,
+    );
+    await DatabaseHelper.instance.setSetting(
+      'tax_rate',
+      _taxRateController.text,
+    );
+    await DatabaseHelper.instance.setSetting(
+      'show_tax_in_receipt',
+      _showTaxInReceipt.toString(),
+    );
+
     if (mounted) {
-      AppFeedback.show(context, 'Settings saved successfully.', type: AppFeedbackType.success);
+      AppFeedback.show(
+        context,
+        'Settings saved successfully.',
+        type: AppFeedbackType.success,
+      );
     }
   }
 
@@ -197,14 +226,14 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
         _buildField(
           controller: _shopOwnerNameController,
           label: 'Shop Owner Name',
-          hint: 'e.g. Muhammad Asim',
+          hint: 'e.g. Muhammad Sohail',
           icon: Icons.person_outline,
         ),
         const SizedBox(height: 20),
         _buildField(
           controller: _shopAddressController,
           label: 'Shop Address',
-          hint: 'e.g. Main Market, Lahore',
+          hint: 'e.g. Main Market, Larkana',
           icon: Icons.location_on_outlined,
         ),
         const SizedBox(height: 20),
@@ -228,9 +257,19 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Show Tax in Receipt', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.grey.shade800)),
+                Text(
+                  'Show Tax in Receipt',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text('Display tax amount on printed receipts', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
+                Text(
+                  'Display tax amount on printed receipts',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                ),
               ],
             ),
             Switch(
@@ -251,7 +290,9 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
               backgroundColor: _kPrimary,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 0,
             ),
           ),
@@ -260,13 +301,23 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
     );
   }
 
-  Widget _buildField({required TextEditingController controller, required String label, required String hint, IconData? icon, String? prefixText}) {
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    IconData? icon,
+    String? prefixText,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade600),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
+          ),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -277,15 +328,38 @@ class _GeneralSettingsContentState extends State<_GeneralSettingsContent> {
             prefixIcon: icon != null
                 ? Icon(icon, color: Colors.grey.shade500, size: 20)
                 : (prefixText != null
-                    ? Padding(
-                        padding: const EdgeInsets.only(left: 16, top: 14, bottom: 14),
-                        child: Text(prefixText, style: TextStyle(color: Colors.grey.shade600, fontSize: 16, fontWeight: FontWeight.w500)),
-                      )
-                    : null),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade200)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _kPrimary)),
+                      ? Padding(
+                          padding: const EdgeInsets.only(
+                            left: 16,
+                            top: 14,
+                            bottom: 14,
+                          ),
+                          child: Text(
+                            prefixText,
+                            style: TextStyle(
+                              color: Colors.grey.shade600,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        )
+                      : null),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _kPrimary),
+            ),
           ),
         ),
       ],
@@ -297,20 +371,33 @@ class _BackupRestoreContent extends StatelessWidget {
   const _BackupRestoreContent();
 
   Future<void> _backup(BuildContext context) async {
-
     try {
       final dbPath = await getDatabasesPath();
       final path = p.join(dbPath, 'pharmacy.db');
       final file = File(path);
-      
-      final downloadsDir = p.join(Platform.environment['USERPROFILE'] ?? 'C:\\', 'Downloads');
-      final backupPath = p.join(downloadsDir, 'pharmacy_backup_${DateTime.now().millisecondsSinceEpoch}.db');
-      
+
+      final downloadsDir = p.join(
+        Platform.environment['USERPROFILE'] ?? 'C:\\',
+        'Downloads',
+      );
+      final backupPath = p.join(
+        downloadsDir,
+        'pharmacy_backup_${DateTime.now().millisecondsSinceEpoch}.db',
+      );
+
       if (await file.exists()) {
         await file.copy(backupPath);
-        AppFeedback.show(context, 'Backup saved to: $backupPath', type: AppFeedbackType.success);
+        AppFeedback.show(
+          context,
+          'Backup saved to: $backupPath',
+          type: AppFeedbackType.success,
+        );
       } else {
-        AppFeedback.show(context, 'Database not found.', type: AppFeedbackType.warning);
+        AppFeedback.show(
+          context,
+          'Database not found.',
+          type: AppFeedbackType.warning,
+        );
       }
     } catch (e) {
       AppFeedback.show(context, 'Error: $e', type: AppFeedbackType.error);
@@ -318,7 +405,6 @@ class _BackupRestoreContent extends StatelessWidget {
   }
 
   Future<void> _restore(BuildContext context) async {
-
     String? selectedPath;
     final restored = await showDialog<bool>(
       context: context,
@@ -330,7 +416,9 @@ class _BackupRestoreContent extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                selectedPath == null ? 'No backup file selected.' : selectedPath!,
+                selectedPath == null
+                    ? 'No backup file selected.'
+                    : selectedPath!,
                 style: TextStyle(color: Colors.grey.shade700, fontSize: 13),
               ),
               const SizedBox(height: 12),
@@ -358,7 +446,9 @@ class _BackupRestoreContent extends StatelessWidget {
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              onPressed: selectedPath == null ? null : () => Navigator.pop(ctx, true),
+              onPressed: selectedPath == null
+                  ? null
+                  : () => Navigator.pop(ctx, true),
               child: const Text('Restore'),
             ),
           ],
@@ -373,7 +463,11 @@ class _BackupRestoreContent extends StatelessWidget {
     try {
       final source = File(selectedPath!);
       if (!await source.exists()) {
-        AppFeedback.show(context, 'Backup file not found.', type: AppFeedbackType.warning);
+        AppFeedback.show(
+          context,
+          'Backup file not found.',
+          type: AppFeedbackType.warning,
+        );
         return;
       }
 
@@ -384,12 +478,19 @@ class _BackupRestoreContent extends StatelessWidget {
       await source.copy(target.path);
       await DatabaseHelper.instance.database;
 
-      AppFeedback.show(context, 'Database restored successfully. Restart the app if needed.', type: AppFeedbackType.success);
+      AppFeedback.show(
+        context,
+        'Database restored successfully. Restart the app if needed.',
+        type: AppFeedbackType.success,
+      );
     } catch (e) {
-      AppFeedback.show(context, 'Restore failed: $e', type: AppFeedbackType.error);
+      AppFeedback.show(
+        context,
+        'Restore failed: $e',
+        type: AppFeedbackType.error,
+      );
     }
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -404,7 +505,9 @@ class _BackupRestoreContent extends StatelessWidget {
             backgroundColor: _kPrimary,
             foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             elevation: 0,
           ),
         ),
@@ -416,7 +519,9 @@ class _BackupRestoreContent extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: const Color(0xFF333333),
             padding: const EdgeInsets.symmetric(vertical: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
             side: BorderSide(color: Colors.grey.shade200),
           ),
         ),
@@ -451,13 +556,21 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
 
     if (newPass.isEmpty || confirmPass.isEmpty || currentInput.isEmpty) {
       print("DEBUG: Validation failed - Empty fields.");
-      AppFeedback.show(context, 'Please fill all fields.', type: AppFeedbackType.warning);
+      AppFeedback.show(
+        context,
+        'Please fill all fields.',
+        type: AppFeedbackType.warning,
+      );
       return;
     }
 
     if (newPass != confirmPass) {
       print("DEBUG: Validation failed - Passwords do not match.");
-      AppFeedback.show(context, 'New passwords do not match.', type: AppFeedbackType.warning);
+      AppFeedback.show(
+        context,
+        'New passwords do not match.',
+        type: AppFeedbackType.warning,
+      );
       return;
     }
 
@@ -471,49 +584,80 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
       if (user != null && user.email != null) {
         print("DEBUG: Attempting re-authentication for ${user.email}.");
         setState(() => _statusMessage = 'Re-authenticating with Firebase...');
-        
 
         // Use signInWithEmailAndPassword instead of reauthenticateWithCredential
         // because reauthenticateWithCredential is known to hang indefinitely on Flutter Windows desktop.
-        await FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: user.email!,
-          password: currentInput,
-        ).timeout(
-          const Duration(seconds: 15), 
-          onTimeout: () => throw TimeoutException("Re-authentication timed out")
+        await FirebaseAuth.instance
+            .signInWithEmailAndPassword(
+              email: user.email!,
+              password: currentInput,
+            )
+            .timeout(
+              const Duration(seconds: 15),
+              onTimeout: () =>
+                  throw TimeoutException("Re-authentication timed out"),
+            );
+
+        print(
+          "DEBUG: Re-authentication successful. Attempting to update password.",
         );
-        
-        print("DEBUG: Re-authentication successful. Attempting to update password.");
         setState(() => _statusMessage = 'Updating Firebase password...');
-        
-        await user.updatePassword(newPass).timeout(
-          const Duration(seconds: 15), 
-          onTimeout: () => throw TimeoutException("Update password timed out")
-        );
-        
+
+        await user
+            .updatePassword(newPass)
+            .timeout(
+              const Duration(seconds: 15),
+              onTimeout: () =>
+                  throw TimeoutException("Update password timed out"),
+            );
+
         print("DEBUG: Firebase password updated.");
-        
+
         print("DEBUG: Process completed successfully.");
         if (mounted) {
-          AppFeedback.show(context, 'Password changed successfully.', type: AppFeedbackType.success);
+          AppFeedback.show(
+            context,
+            'Password changed successfully.',
+            type: AppFeedbackType.success,
+          );
           _currentController.clear();
           _newController.clear();
           _confirmController.clear();
         }
       } else {
         print("DEBUG: No active user session found (user or email is null).");
-        if (mounted) AppFeedback.show(context, 'No active user session found.', type: AppFeedbackType.error);
+        if (mounted)
+          AppFeedback.show(
+            context,
+            'No active user session found.',
+            type: AppFeedbackType.error,
+          );
       }
     } on FirebaseAuthException catch (e) {
       print("DEBUG: FirebaseAuthException caught: ${e.code} - ${e.message}");
       if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        if (mounted) AppFeedback.show(context, 'Current password is incorrect.', type: AppFeedbackType.error);
+        if (mounted)
+          AppFeedback.show(
+            context,
+            'Current password is incorrect.',
+            type: AppFeedbackType.error,
+          );
       } else {
-        if (mounted) AppFeedback.show(context, 'Error: ${e.message}', type: AppFeedbackType.error);
+        if (mounted)
+          AppFeedback.show(
+            context,
+            'Error: ${e.message}',
+            type: AppFeedbackType.error,
+          );
       }
     } catch (e) {
       print("DEBUG: General Exception caught: $e");
-      if (mounted) AppFeedback.show(context, 'Failed to update password: $e', type: AppFeedbackType.error);
+      if (mounted)
+        AppFeedback.show(
+          context,
+          'Failed to update password: $e',
+          type: AppFeedbackType.error,
+        );
     } finally {
       if (mounted) {
         setState(() {
@@ -530,25 +674,25 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildPasswordField(
-          controller: _currentController, 
-          label: 'Current Password', 
-          hint: 'Enter current password', 
+          controller: _currentController,
+          label: 'Current Password',
+          hint: 'Enter current password',
           obscure: _obscureCurrent,
           onToggle: () => setState(() => _obscureCurrent = !_obscureCurrent),
         ),
         const SizedBox(height: 20),
         _buildPasswordField(
-          controller: _newController, 
-          label: 'New Password', 
-          hint: 'Enter new password', 
+          controller: _newController,
+          label: 'New Password',
+          hint: 'Enter new password',
           obscure: _obscureNew,
           onToggle: () => setState(() => _obscureNew = !_obscureNew),
         ),
         const SizedBox(height: 20),
         _buildPasswordField(
-          controller: _confirmController, 
-          label: 'Confirm Password', 
-          hint: 'Confirm new password', 
+          controller: _confirmController,
+          label: 'Confirm Password',
+          hint: 'Confirm new password',
           obscure: _obscureConfirm,
           onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
         ),
@@ -557,9 +701,16 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
           alignment: Alignment.centerRight,
           child: ElevatedButton.icon(
             onPressed: _isLoading ? null : _changePassword,
-            icon: _isLoading 
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Icon(Icons.lock_reset, size: 18),
+            icon: _isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.lock_reset, size: 18),
             label: Text(_isLoading ? 'Updating...' : 'Update Password'),
             style: ElevatedButton.styleFrom(
               backgroundColor: _kPrimary,
@@ -567,7 +718,9 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
               disabledBackgroundColor: _kPrimary.withValues(alpha: 0.6),
               disabledForegroundColor: Colors.white70,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 0,
             ),
           ),
@@ -578,8 +731,12 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
             child: Align(
               alignment: Alignment.centerRight,
               child: Text(
-                _statusMessage, 
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontStyle: FontStyle.italic),
+                _statusMessage,
+                style: TextStyle(
+                  color: Colors.grey.shade600,
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                ),
               ),
             ),
           ),
@@ -588,9 +745,9 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
   }
 
   Widget _buildPasswordField({
-    required TextEditingController controller, 
-    required String label, 
-    required String hint, 
+    required TextEditingController controller,
+    required String label,
+    required String hint,
     required bool obscure,
     required VoidCallback onToggle,
   }) {
@@ -599,7 +756,11 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
       children: [
         Text(
           label,
-          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey.shade600),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: Colors.grey.shade600,
+          ),
         ),
         const SizedBox(height: 8),
         TextField(
@@ -608,28 +769,41 @@ class _ChangePasswordContentState extends State<_ChangePasswordContent> {
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-            prefixIcon: Icon(Icons.lock_outline, color: Colors.grey.shade500, size: 20),
+            prefixIcon: Icon(
+              Icons.lock_outline,
+              color: Colors.grey.shade500,
+              size: 20,
+            ),
             suffixIcon: IconButton(
-              icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade500, size: 20),
+              icon: Icon(
+                obscure ? Icons.visibility_off : Icons.visibility,
+                color: Colors.grey.shade500,
+                size: 20,
+              ),
               onPressed: onToggle,
             ),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade200)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade200)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: _kPrimary)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade200),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: const BorderSide(color: _kPrimary),
+            ),
           ),
         ),
       ],
     );
   }
 }
-
-
-
-
-
-
-
 
 class _SyncSettingsContent extends StatefulWidget {
   const _SyncSettingsContent();
@@ -647,24 +821,39 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
 
     try {
       final result = await FirebaseSyncService.instance.sync();
-      
+
       if (!mounted) return;
 
       if (result.offline) {
-        AppFeedback.show(context, 'Sync failed: No internet connection or route to Google', type: AppFeedbackType.error);
+        AppFeedback.show(
+          context,
+          'Sync failed: No internet connection or route to Google',
+          type: AppFeedbackType.error,
+        );
       } else if (result.notAuthenticated) {
-        AppFeedback.show(context, 'Sync failed: Not authenticated with Firebase', type: AppFeedbackType.error);
+        AppFeedback.show(
+          context,
+          'Sync failed: Not authenticated with Firebase',
+          type: AppFeedbackType.error,
+        );
       } else {
         final hasErrors = result.errors.isNotEmpty;
-        final type = hasErrors ? AppFeedbackType.warning : AppFeedbackType.success;
+        final type = hasErrors
+            ? AppFeedbackType.warning
+            : AppFeedbackType.success;
         AppFeedback.show(
-          context, 
-          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.${hasErrors ? ' Some tables had errors.' : ''}', 
-          type: type
+          context,
+          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.${hasErrors ? ' Some tables had errors.' : ''}',
+          type: type,
         );
       }
     } catch (e) {
-      if (mounted) AppFeedback.show(context, 'Sync Error: $e', type: AppFeedbackType.error);
+      if (mounted)
+        AppFeedback.show(
+          context,
+          'Sync Error: $e',
+          type: AppFeedbackType.error,
+        );
     } finally {
       if (mounted) setState(() => _isSyncing = false);
     }
@@ -685,15 +874,168 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
           alignment: Alignment.centerRight,
           child: ElevatedButton.icon(
             onPressed: _isSyncing ? null : _runSync,
-            icon: _isSyncing 
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
                 : const Icon(Icons.sync, size: 18),
             label: Text(_isSyncing ? 'Syncing...' : 'Sync Now'),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF0F6E5C),
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              elevation: 0,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// DANGER ZONE
+// ---------------------------------------------------------------------------
+class _DangerZoneContent extends StatefulWidget {
+  const _DangerZoneContent();
+
+  @override
+  State<_DangerZoneContent> createState() => _DangerZoneContentState();
+}
+
+class _DangerZoneContentState extends State<_DangerZoneContent> {
+  bool _isWiping = false;
+
+  Future<void> _handleWipeData() async {
+    final confirmCtrl = TextEditingController();
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text(
+            'Delete All Data',
+            style: TextStyle(color: Colors.red),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This will permanently delete all records locally and on the cloud. '
+                'This action cannot be undone. To proceed, please type "DELETE" below.',
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: confirmCtrl,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'Type DELETE',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (confirmCtrl.text.trim() == 'DELETE') {
+                  Navigator.of(context).pop(true);
+                } else {
+                  AppFeedback.show(
+                    context,
+                    'You must type DELETE to confirm.',
+                    type: AppFeedbackType.error,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Wipe Data'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      if (!mounted) return;
+      setState(() => _isWiping = true);
+
+      try {
+        await FirebaseSyncService.instance.wipeAllData();
+
+        if (!mounted) return;
+        AppFeedback.show(
+          context,
+          'All data deleted successfully.',
+          type: AppFeedbackType.success,
+        );
+
+        // Restart the app / Go to Login
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false,
+        );
+      } catch (e) {
+        if (mounted) {
+          AppFeedback.show(
+            context,
+            'Error wiping data: $e',
+            type: AppFeedbackType.error,
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isWiping = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Wipe all data from the device and the cloud. This will completely reset the database.',
+          style: TextStyle(fontSize: 14, color: Color(0xFF666666), height: 1.5),
+        ),
+        const SizedBox(height: 24),
+        Align(
+          alignment: Alignment.centerRight,
+          child: ElevatedButton.icon(
+            onPressed: _isWiping ? null : _handleWipeData,
+            icon: _isWiping
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 2,
+                    ),
+                  )
+                : const Icon(Icons.delete_forever, size: 18),
+            label: Text(_isWiping ? 'Wiping Data...' : 'Delete All Data'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade600,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 0,
             ),
           ),

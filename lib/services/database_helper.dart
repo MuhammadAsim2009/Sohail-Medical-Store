@@ -46,6 +46,16 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> wipeDatabase() async {
+    final dbPath = await getDatabasesPath();
+    final path = join(dbPath, 'pharmacy.db');
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+    await deleteDatabase(path);
+  }
+
   Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await db.execute('DROP TABLE IF EXISTS products');
@@ -297,6 +307,7 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
   status      TEXT NOT NULL,
   notes       TEXT,
   tax_rate    REAL NOT NULL DEFAULT 0.0,
+  tax_amount  REAL NOT NULL DEFAULT 0.0,
   paid_amount REAL NOT NULL DEFAULT 0.0,
   discount    REAL NOT NULL DEFAULT 0.0
 )""");
@@ -383,6 +394,7 @@ CREATE TABLE IF NOT EXISTS sales (
   status          TEXT NOT NULL,
   tax_rate        REAL NOT NULL DEFAULT 0.0,
   tax_amount      REAL NOT NULL DEFAULT 0.0,
+  discount        REAL NOT NULL DEFAULT 0.0,
   FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
 )""");
 
@@ -479,9 +491,15 @@ CREATE TABLE IF NOT EXISTS supplier_payments (
   FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON DELETE CASCADE
 )""");
 
-    await db.execute(
-      'CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
-    );
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY, 
+  value TEXT NOT NULL,
+  sync_id TEXT UNIQUE,
+  updated_at INTEGER DEFAULT 0,
+  is_dirty INTEGER DEFAULT 0,
+  is_deleted INTEGER DEFAULT 0
+)""");
 
     await db.execute("""
 CREATE TABLE IF NOT EXISTS product_categories (
@@ -552,13 +570,22 @@ CREATE TABLE IF NOT EXISTS product_categories (
   // SETTINGS
   // ---------------------------------------------------------------------------
 
+  static const Map<String, String> defaultSettings = {
+    'shop_name': 'New Soahil Medical Store',
+    'shop_owner_name': 'Sohail',
+    'shop_address': 'Sachal Road, Larkana',
+    'shop_phone': '+92 300 1234567',
+    'tax_rate': '0',
+    'show_tax_in_receipt': 'false',
+  };
+
   Future<String?> getSetting(String key) async {
     final db = await instance.database;
     final maps = await db.query('settings', where: 'key = ?', whereArgs: [key]);
     if (maps.isNotEmpty) {
       return maps.first['value'] as String?;
     }
-    return null;
+    return defaultSettings[key];
   }
 
   Future<void> setSetting(String key, String value) async {
@@ -586,7 +613,8 @@ CREATE TABLE IF NOT EXISTS product_categories (
   Future<Map<String, String>> getAllSettings() async {
     final db = await instance.database;
     final maps = await db.query('settings');
-    return {for (var map in maps) map['key'] as String: map['value'] as String};
+    final dbSettings = {for (var map in maps) map['key'] as String: map['value'] as String};
+    return {...defaultSettings, ...dbSettings};
   }
 
   // -- PRODUCTS ----------------------------------------------------------------
@@ -602,7 +630,7 @@ return product;
 
   Future<List<Product>> getAllProducts() async {
     final db = await instance.database;
-    final result = await db.query('products');
+    final result = await db.query('products', where: 'is_deleted = 0');
     return result.map((json) => Product.fromMap(json)).toList();
   }
 
@@ -626,7 +654,7 @@ return db.update('products', _stamp(map, isUpdate: true),
   Future<int> deleteProduct(int id) async {
     final db = await instance.database;
         FirebaseSyncService.instance.triggerAutoSync();
-return db.delete('products', where: 'id = ?', whereArgs: [id]);
+return db.update('products', _stamp({'is_deleted': 1}, isUpdate: true), where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> purchaseStock(
@@ -833,7 +861,7 @@ return saved;
 
   Future<List<Supplier>> getSuppliers() async {
     final db = await instance.database;
-    final result = await db.query('suppliers');
+    final result = await db.query('suppliers', where: 'is_deleted = 0');
     return result.map((json) => Supplier.fromMap(json)).toList();
   }
 
@@ -851,7 +879,7 @@ return db.update(
   Future<int> deleteSupplier(String id) async {
     final db = await instance.database;
         FirebaseSyncService.instance.triggerAutoSync();
-return db.delete('suppliers', where: 'id = ?', whereArgs: [id]);
+return db.update('suppliers', _stamp({'is_deleted': 1}, isUpdate: true), where: 'id = ?', whereArgs: [id]);
   }
 
   Future<String> nextSaleInvoiceNumber() async {
@@ -878,7 +906,7 @@ return await db.insert('customers', _stamp(customer.toMap()));  // assigns new s
 
   Future<List<Customer>> getCustomers() async {
     final db = await instance.database;
-    final List<Map<String, dynamic>> maps = await db.query('customers', orderBy: 'name ASC');
+    final List<Map<String, dynamic>> maps = await db.query('customers', where: 'is_deleted = 0', orderBy: 'name ASC');
     return maps.map((map) => Customer.fromMap(map)).toList();
   }
 
@@ -892,7 +920,7 @@ return await db.update('customers', _stamp(customer.toMap(), isUpdate: true),
   Future<int> deleteCustomer(String id) async {
     final db = await instance.database;
         FirebaseSyncService.instance.triggerAutoSync();
-return await db.delete('customers', where: 'id = ?', whereArgs: [id]);
+return await db.update('customers', _stamp({'is_deleted': 1}, isUpdate: true), where: 'id = ?', whereArgs: [id]);
   }
 
   // -- DAILY SALES SHEETS (DSS) ------------------------------------------------

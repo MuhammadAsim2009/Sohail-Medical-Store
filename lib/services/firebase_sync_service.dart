@@ -211,12 +211,15 @@ class FirebaseSyncService {
   ) async {
     if (rawRows.isEmpty) return 0;
 
+    // SQLite returns read-only maps. Convert them to mutable maps immediately.
+    final mutableRows = rawRows.map((e) => Map<String, dynamic>.from(e)).toList();
+
     // Collect rows that need a new sync_id and assign them in one local pass
     final rowsNeedingId = <Map<String, dynamic>>[];
-    for (final raw in rawRows) {
-      if ((raw['sync_id'] as String?) == null ||
-          (raw['sync_id'] as String).isEmpty) {
-        rowsNeedingId.add(raw);
+    for (final row in mutableRows) {
+      if ((row['sync_id'] as String?) == null ||
+          (row['sync_id'] as String).isEmpty) {
+        rowsNeedingId.add(row);
       }
     }
 
@@ -246,8 +249,7 @@ class FirebaseSyncService {
     int total = 0;
     int batchSize = 0;
 
-    for (final raw in rawRows) {
-      final row = Map<String, dynamic>.from(raw);
+    for (final row in mutableRows) {
       final syncId = (row['sync_id'] as String?) ?? _uuid.v4();
       row['updated_at'] ??= DateTime.now().millisecondsSinceEpoch;
       fbBatch.set(_col(table).doc(syncId), row, SetOptions(merge: true));
@@ -341,6 +343,32 @@ class FirebaseSyncService {
   Future<void> _setLastSyncTimestamp(int ts) async {
     await DatabaseHelper.instance
         .setSetting('last_sync_timestamp', ts.toString());
+  }
+
+  /// Wipes all local and cloud data completely
+  Future<void> wipeAllData() async {
+    // 1. Wipe Firebase data if authenticated
+    if (FirebaseAuth.instance.currentUser != null) {
+      try {
+        for (final table in _syncTables) {
+          final snapshot = await _col(table).get();
+          final docs = snapshot.docs;
+          for (int i = 0; i < docs.length; i += 400) {
+            final batch = _firestore.batch();
+            final end = (i + 400 < docs.length) ? i + 400 : docs.length;
+            for (int j = i; j < end; j++) {
+              batch.delete(docs[j].reference);
+            }
+            await batch.commit();
+          }
+        }
+      } catch (e) {
+        // Continue even if network fails, to ensure local wipe happens
+      }
+    }
+
+    // 2. Wipe Local DB
+    await DatabaseHelper.instance.wipeDatabase();
   }
 }
 
