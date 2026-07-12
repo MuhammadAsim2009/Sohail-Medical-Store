@@ -6,6 +6,7 @@ import '../models/sale.dart';
 import '../models/product.dart';
 import '../models/customer.dart';
 import '../services/database_helper.dart';
+import '../services/auth_service.dart';
 import '../utils/app_feedback.dart';
 
 // ---------------------------------------------------------------------------
@@ -543,7 +544,7 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
     setState(() {
       _allSales = sales;
       _allProducts = products;
-      _allCustomers = customers;
+      _allCustomers = customers.where((c) => c.id != 'walk-in-customer').toList();
       _isLoadingSales = false;
       _isLoadingOpenData = false;
     });
@@ -608,13 +609,15 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
       dssId: widget.dssId ?? 0,
       date: DateTime.now(),
       invoiceNumber: invoiceNumber,
-      customerName: _selectedCustomer?.name,
+      customerName: _selectedCustomer?.name ?? 'Walk-in Customer',
       mode: _selectedMode,
       reason: _selectedReason,
       totalRefund: _openTotal,
       cashRefunded: cashRefund,
       creditIssued: credit,
       status: 'Posted',
+      createdByUserId: AuthService.instance.currentUserId,
+      createdByRole: AuthService.instance.currentUserRole,
       items: returnItems,
     );
 
@@ -890,16 +893,16 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Customer (optional)
-          _SectionLabel('Customer (Optional)'),
+          _SectionLabel('Customer (defaults to Walk-in)'),
           const SizedBox(height: 8),
           _isLoadingOpenData
               ? const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
               : DropdownButtonFormField<Customer?>(
                   initialValue: _selectedCustomer,
                   isExpanded: true,
+                  hint: const Text('Walk-in Customer', style: TextStyle(fontSize: 13)),
                   onChanged: (v) => setState(() => _selectedCustomer = v),
                   items: [
-                    const DropdownMenuItem<Customer?>(value: null, child: Text('Walk-in Customer', style: TextStyle(fontSize: 13))),
                     ..._allCustomers.map((c) => DropdownMenuItem<Customer?>(value: c, child: Text(c.name, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis))),
                   ],
                   decoration: InputDecoration(
@@ -1596,6 +1599,8 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
       cashRefunded: widget.mode == 'Cash Refund' ? _total : 0,
       creditIssued: widget.mode == 'Store Credit' ? _total : 0,
       status: 'Posted',
+      createdByUserId: AuthService.instance.currentUserId,
+      createdByRole: AuthService.instance.currentUserRole,
       items: returnItems,
     );
 
@@ -2306,6 +2311,8 @@ class _EditReturnDialogState extends State<_EditReturnDialog> {
         cashRefunded: _mode == 'Cash Refund' ? total : 0.0,
         creditIssued: _mode == 'Store Credit' ? total : 0.0,
         status: _status,
+        createdByUserId: widget.salesReturn.createdByUserId,
+        createdByRole: widget.salesReturn.createdByRole,
         items: widget.salesReturn.items,
       );
       await DatabaseHelper.instance.updateSalesReturn(updated);

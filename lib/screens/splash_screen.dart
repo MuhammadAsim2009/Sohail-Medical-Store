@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'login_screen.dart';
 import 'dashboard_screen.dart';
 import '../services/database_helper.dart';
+import '../services/auth_service.dart';
 
 // ---------------------------------------------------------------------------
 // ENTRY POINT
@@ -151,6 +152,15 @@ class _SplashScreenState extends State<SplashScreen>
           // No activity logged, just update and proceed
           await prefs.setString('last_activity', DateTime.now().toIso8601String());
           shouldGoToDashboard = true;
+        }
+
+        if (shouldGoToDashboard) {
+          await AuthService.instance.loadUserMetadata(user);
+          if (!AuthService.instance.currentUserIsActive) {
+            await FirebaseAuth.instance.signOut();
+            AuthService.instance.clear();
+            shouldGoToDashboard = false;
+          }
         }
       }
     } catch (e) {

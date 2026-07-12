@@ -59,6 +59,8 @@ class SalesReturn {
   double cashRefunded;
   double creditIssued;
   String status; // 'Posted', 'Draft'
+  String? createdByUserId;
+  String? createdByRole;
   List<SalesReturnItem> items;
 
   SalesReturn({
@@ -74,6 +76,8 @@ class SalesReturn {
     required this.cashRefunded,
     required this.creditIssued,
     required this.status,
+    this.createdByUserId,
+    this.createdByRole,
     this.items = const [],
   });
 
@@ -91,6 +95,8 @@ class SalesReturn {
       'cash_refunded': cashRefunded,
       'credit_issued': creditIssued,
       'status': status,
+      'created_by_user_id': createdByUserId,
+      'created_by_role': createdByRole,
     };
   }
 
@@ -108,6 +114,8 @@ class SalesReturn {
       cashRefunded: map['cash_refunded'],
       creditIssued: map['credit_issued'],
       status: map['status'],
+      createdByUserId: map['created_by_user_user_id'] ?? map['created_by_user_id'], // fallback typo safeguard
+      createdByRole: map['created_by_role'],
     );
   }
 }

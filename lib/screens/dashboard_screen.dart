@@ -12,6 +12,8 @@ import 'reports_screen.dart';
 import 'settings_screen.dart';
 import 'purchase_orders_screen.dart';
 import 'sales_return_screen.dart';
+import 'cashier_management_screen.dart';
+import '../services/auth_service.dart';
 
 // ---------------------------------------------------------------------------
 // DASHBOARD SCREEN
@@ -23,23 +25,54 @@ class DashboardScreen extends StatefulWidget {
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
+class _AppScreen {
+  final String label;
+  final IconData icon;
+  final Widget screen;
+  final bool cashierAllowed;
+  const _AppScreen({
+    required this.label, 
+    required this.icon, 
+    required this.screen, 
+    this.cashierAllowed = false,
+  });
+}
+
 class _DashboardScreenState extends State<DashboardScreen> {
   int _selectedIndex = 0;
-
-  final List<_NavItem> _navItems = const [
-    _NavItem(label: 'Dashboard', icon: Icons.dashboard_outlined),
-    _NavItem(label: 'Sales (POS)', icon: Icons.shopping_cart_outlined),
-    _NavItem(label: 'Sales Return', icon: Icons.assignment_return_outlined),
-    _NavItem(label: 'Inventory', icon: Icons.inventory_2_outlined),
-    _NavItem(label: 'Purchases', icon: Icons.local_shipping_outlined),
-    _NavItem(label: 'Customers', icon: Icons.people_outline),
-    _NavItem(label: 'Suppliers', icon: Icons.business_outlined),
-    _NavItem(label: 'Ledger', icon: Icons.account_balance_wallet_outlined),
-    _NavItem(label: 'Reports', icon: Icons.bar_chart_outlined),
-    _NavItem(label: 'Settings', icon: Icons.settings_outlined),
-  ];
+  late List<_AppScreen> _availableScreens;
 
   @override
+  void initState() {
+    super.initState();
+    final allScreens = [
+      _AppScreen(label: 'Dashboard', icon: Icons.dashboard_outlined, screen: _DashboardBody(onNavigate: _navigateToScreen), cashierAllowed: true),
+      _AppScreen(label: 'Sales (POS)', icon: Icons.shopping_cart_outlined, screen: const BillingScreen(), cashierAllowed: true),
+      _AppScreen(label: 'Sales Return', icon: Icons.assignment_return_outlined, screen: const SalesReturnScreen(), cashierAllowed: true),
+      _AppScreen(label: 'Inventory', icon: Icons.inventory_2_outlined, screen: const InventoryScreen(), cashierAllowed: true),
+      _AppScreen(label: 'Purchases', icon: Icons.local_shipping_outlined, screen: const PurchaseOrdersScreen()),
+      _AppScreen(label: 'Customers', icon: Icons.people_outline, screen: const CustomersScreen(), cashierAllowed: true),
+      _AppScreen(label: 'Suppliers', icon: Icons.business_outlined, screen: const SuppliersScreen()),
+      _AppScreen(label: 'Ledger', icon: Icons.account_balance_wallet_outlined, screen: const LedgerScreen()),
+      _AppScreen(label: 'Reports', icon: Icons.bar_chart_outlined, screen: const ReportsScreen()),
+      _AppScreen(label: 'Settings', icon: Icons.settings_outlined, screen: const SettingsScreen()),
+      _AppScreen(label: 'Cashiers', icon: Icons.manage_accounts_outlined, screen: const CashierManagementScreen()),
+    ];
+    
+    _availableScreens = allScreens.where((s) {
+       if (AuthService.instance.isAdmin) return true;
+       return s.cashierAllowed;
+    }).toList();
+  }
+
+  void _navigateToScreen(String label) {
+    final index = _availableScreens.indexWhere((s) => s.label == label);
+    if (index != -1) {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
+  }
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
@@ -55,7 +88,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             // -- Sidebar ----------------------------------------------------
             _Sidebar(
-              navItems: _navItems,
+              navItems: _availableScreens.map((s) => _NavItem(label: s.label, icon: s.icon)).toList(),
               selectedIndex: _selectedIndex,
               onItemSelected: (i) => setState(() => _selectedIndex = i),
               onLogout: _handleLogout,
@@ -67,38 +100,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   // Scrollable body
                   Expanded(
-                    child: _selectedIndex == 0
+                    child: _availableScreens[_selectedIndex].label == 'Dashboard'
                         ? SingleChildScrollView(
                             padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _DashboardBody(
-                                  onNavigate: (index) =>
-                                      setState(() => _selectedIndex = index),
-                                ),
+                                _availableScreens[_selectedIndex].screen,
                               ],
                             ),
                           )
-                        : _selectedIndex == 1
-                        ? const BillingScreen()
-                        : _selectedIndex == 2
-                        ? const SalesReturnScreen()
-                        : _selectedIndex == 3
-                        ? const InventoryScreen()
-                        : _selectedIndex == 4
-                        ? const PurchaseOrdersScreen()
-                        : _selectedIndex == 5
-                        ? const CustomersScreen()
-                        : _selectedIndex == 6
-                        ? const SuppliersScreen()
-                        : _selectedIndex == 7
-                        ? const LedgerScreen()
-                        : _selectedIndex == 8
-                        ? const ReportsScreen()
-                        : _selectedIndex == 9
-                        ? const SettingsScreen()
-                        : const Center(child: Text('Coming Soon...')),
+                        : _availableScreens[_selectedIndex].screen,
                   ),
                 ],
               ),
@@ -414,10 +426,10 @@ class _SidebarNavItem extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// DASHBOARD BODY (stats + tables)
+// DASHBOARD BODY
 // ---------------------------------------------------------------------------
 class _DashboardBody extends StatefulWidget {
-  final ValueChanged<int>? onNavigate;
+  final ValueChanged<String>? onNavigate;
   const _DashboardBody({this.onNavigate});
 
   @override
@@ -765,7 +777,7 @@ class _DashboardCard extends StatelessWidget {
 // QUICK ACTIONS CARD
 // ---------------------------------------------------------------------------
 class _QuickActionsCard extends StatelessWidget {
-  final ValueChanged<int>? onNavigate;
+  final ValueChanged<String>? onNavigate;
   const _QuickActionsCard({this.onNavigate});
 
   @override
@@ -783,7 +795,7 @@ class _QuickActionsCard extends StatelessWidget {
                     icon: Icons.add_shopping_cart,
                     label: 'New Sale',
                     color: const Color(0xFF0F4C81),
-                    onTap: () => onNavigate?.call(2),
+                    onTap: () => onNavigate?.call('Sales (POS)'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -792,7 +804,7 @@ class _QuickActionsCard extends StatelessWidget {
                     icon: Icons.inventory_2_outlined,
                     label: 'Add Stock',
                     color: const Color(0xFF1565C0),
-                    onTap: () => onNavigate?.call(1),
+                    onTap: () => onNavigate?.call('Inventory'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -801,7 +813,7 @@ class _QuickActionsCard extends StatelessWidget {
                     icon: Icons.assignment_return_outlined,
                     label: 'Return',
                     color: const Color(0xFFE65100),
-                    onTap: () => onNavigate?.call(2),
+                    onTap: () => onNavigate?.call('Sales Return'),
                   ),
                 ),
               ],
@@ -814,7 +826,7 @@ class _QuickActionsCard extends StatelessWidget {
                     icon: Icons.person_add_alt_1_outlined,
                     label: 'Add Customer',
                     color: const Color(0xFF6A1B9A),
-                    onTap: () => onNavigate?.call(3),
+                    onTap: () => onNavigate?.call('Customers'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -823,7 +835,7 @@ class _QuickActionsCard extends StatelessWidget {
                     icon: Icons.local_shipping_outlined,
                     label: 'Add Supplier',
                     color: const Color(0xFF00695C),
-                    onTap: () => onNavigate?.call(4),
+                    onTap: () => onNavigate?.call('Suppliers'),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -832,7 +844,7 @@ class _QuickActionsCard extends StatelessWidget {
                     icon: Icons.bar_chart_outlined,
                     label: 'View Reports',
                     color: const Color(0xFF455A64),
-                    onTap: () => onNavigate?.call(6),
+                    onTap: () => onNavigate?.call('Reports'),
                   ),
                 ),
               ],

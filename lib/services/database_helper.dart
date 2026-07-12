@@ -40,7 +40,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 21,
+      version: 22,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -260,10 +260,42 @@ CREATE TABLE IF NOT EXISTS product_categories (
         } catch (_) {}
       }
     }
+    if (oldVersion < 22) {
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  sync_id TEXT UNIQUE NOT NULL
+)""");
+      try { await db.execute("ALTER TABLE sales ADD COLUMN created_by_user_id TEXT"); } catch(_) {}
+      try { await db.execute("ALTER TABLE sales ADD COLUMN created_by_role TEXT"); } catch(_) {}
+      
+      try { await db.execute("ALTER TABLE sales_returns ADD COLUMN created_by_user_id TEXT"); } catch(_) {}
+      try { await db.execute("ALTER TABLE sales_returns ADD COLUMN created_by_role TEXT"); } catch(_) {}
+    }
   }
 
   // ---------------------------------------------------------------------------
   Future _createDB(Database db, int version) async {
+    await db.execute("""
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  full_name TEXT NOT NULL,
+  role TEXT NOT NULL,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at INTEGER NOT NULL,
+  sync_id TEXT UNIQUE NOT NULL
+)""");
+
     await db.execute("""
 CREATE TABLE IF NOT EXISTS products (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -395,6 +427,8 @@ CREATE TABLE IF NOT EXISTS sales (
   tax_rate        REAL NOT NULL DEFAULT 0.0,
   tax_amount      REAL NOT NULL DEFAULT 0.0,
   discount        REAL NOT NULL DEFAULT 0.0,
+  created_by_user_id TEXT,
+  created_by_role TEXT,
   FOREIGN KEY (dss_id) REFERENCES daily_sales_sheets (id) ON DELETE RESTRICT
 )""");
 
@@ -429,7 +463,9 @@ CREATE TABLE IF NOT EXISTS sales_returns (
   total_refund    REAL NOT NULL,
   cash_refunded   REAL NOT NULL,
   credit_issued   REAL NOT NULL,
-  status          TEXT NOT NULL
+  status          TEXT NOT NULL,
+  created_by_user_id TEXT,
+  created_by_role TEXT
 )""");
 
     await db.execute("""
@@ -528,6 +564,24 @@ CREATE TABLE IF NOT EXISTS product_categories (
         });
       } catch (_) {}
     }
+
+    // Seed Walk-in Customer (fixed ID so it's never duplicated)
+    try {
+      await db.insert('customers', {
+        'id': 'walk-in-customer',
+        'name': 'Walk-in Customer',
+        'phone': '0000000000',
+        'email': null,
+        'address': null,
+        'totalPurchases': 0.0,
+        'pendingAmount': 0.0,
+        'advanceAmount': 0.0,
+        'lastVisit': DateTime.now().toIso8601String(),
+        'sync_id': _uuid.v4(),
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+        'is_deleted': 0,
+      });
+    } catch (_) {} // Already exists — safe to ignore
   }
 
   // ---------------------------------------------------------------------------
@@ -902,6 +956,26 @@ return db.update('suppliers', _stamp({'is_deleted': 1}, isUpdate: true), where: 
     final db = await instance.database;
         FirebaseSyncService.instance.triggerAutoSync();
 return await db.insert('customers', _stamp(customer.toMap()));  // assigns new sync_id
+  }
+
+  /// Ensures the Walk-in Customer row exists (for existing installs that
+  /// pre-date the seed). Safe to call on every startup — uses INSERT OR IGNORE.
+  Future<void> ensureWalkInCustomer() async {
+    final db = await instance.database;
+    await db.execute("""
+      INSERT OR IGNORE INTO customers
+        (id, name, phone, totalPurchases, pendingAmount, advanceAmount,
+         lastVisit, sync_id, updated_at, is_deleted)
+      VALUES
+        ('walk-in-customer', 'Walk-in Customer', '0000000000',
+         0.0, 0.0, 0.0, ?,
+         COALESCE((SELECT sync_id FROM customers WHERE id='walk-in-customer'), ?),
+         ?, 0)
+    """, [
+      DateTime.now().toIso8601String(),
+      _uuid.v4(),
+      DateTime.now().millisecondsSinceEpoch,
+    ]);
   }
 
   Future<List<Customer>> getCustomers() async {

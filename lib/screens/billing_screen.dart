@@ -6,6 +6,7 @@ import '../models/sale.dart';
 import '../models/product.dart';
 import '../models/customer.dart';
 import '../services/database_helper.dart';
+import '../services/auth_service.dart';
 import '../utils/app_feedback.dart';
 import '../widgets/executive_header.dart';
 import 'package:pdf/pdf.dart';
@@ -1731,7 +1732,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     final products = await DatabaseHelper.instance.getAllProducts();
     if (mounted) {
       setState(() {
-        _customers = customers;
+        _customers = customers.where((c) => c.id != 'walk-in-customer').toList();
         _products = products;
         _isLoading = false;
       });
@@ -1955,17 +1956,19 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       final sale = Sale(
         invoiceNumber: invoiceNumber,
         dssId: widget.dssId,
-        customerId: _selectedCustomer?.id,
-        customerName: _selectedCustomer?.name,
+        customerId: _selectedCustomer?.id ?? 'walk-in-customer',
+        customerName: _selectedCustomer?.name ?? 'Walk-in Customer',
         date: DateTime.now().toIso8601String(),
         total: _total,
         received: received,
         balance: balance,
         paymentMethod: _paymentMethod,
-          status: balance > 0 ? 'Partial' : 'Paid',
+        status: balance > 0 ? 'Partial' : 'Paid',
           taxRate: _taxRate,
           taxAmount: _taxAmount,
           discount: _discountAmount,
+          createdByUserId: AuthService.instance.currentUserId,
+          createdByRole: AuthService.instance.currentUserRole,
         );
 
       final items = _cart
@@ -2051,6 +2054,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                           child: DropdownButtonFormField<Customer?>(
                             decoration: InputDecoration(
                               labelText: 'Customer',
+                              hintText: 'Walk-in Customer',
                               prefixIcon: Icon(
                                 Icons.person_outline,
                                 size: 17,
@@ -2068,11 +2072,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                               ),
                             ),
                             value: _selectedCustomer,
+                            hint: const Text('Walk-in Customer'),
                             items: [
-                              const DropdownMenuItem(
-                                value: null,
-                                child: Text('Walk-in Customer'),
-                              ),
                               ..._customers.map(
                                 (c) => DropdownMenuItem(
                                   value: c,

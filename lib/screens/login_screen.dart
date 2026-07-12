@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_feedback.dart';
 import '../services/database_helper.dart';
+import '../services/auth_service.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -65,6 +66,21 @@ class _LoginScreenState extends State<LoginScreen> {
         email: email,
         password: password,
       );
+
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null) {
+        await AuthService.instance.loadUserMetadata(user);
+        
+        if (!AuthService.instance.currentUserIsActive) {
+          await FirebaseAuth.instance.signOut();
+          AuthService.instance.clear();
+          if (mounted) {
+            AppFeedback.show(context, 'This account has been deactivated.', type: AppFeedbackType.error);
+            setState(() { _isLoading = false; });
+          }
+          return;
+        }
+      }
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('remember_me', _rememberMe);

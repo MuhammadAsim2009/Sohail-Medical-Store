@@ -13,6 +13,8 @@ class Sale {
   final double taxRate;
   final double taxAmount;
   final double discount;
+  final String? createdByUserId;
+  final String? createdByRole;
 
   Sale({
     this.id,
@@ -29,6 +31,8 @@ class Sale {
     this.taxRate = 0.0,
     this.taxAmount = 0.0,
     this.discount = 0.0,
+    this.createdByUserId,
+    this.createdByRole,
   });
 
   Map<String, dynamic> toMap() {
@@ -47,6 +51,8 @@ class Sale {
       'tax_rate': taxRate,
       'tax_amount': taxAmount,
       'discount': discount,
+      'created_by_user_id': createdByUserId,
+      'created_by_role': createdByRole,
     };
   }
 
@@ -66,6 +72,8 @@ class Sale {
       taxRate: map['tax_rate'] ?? 0.0,
       taxAmount: map['tax_amount'] ?? 0.0,
       discount: map['discount'] ?? 0.0,
+      createdByUserId: map['created_by_user_id'],
+      createdByRole: map['created_by_role'],
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
 import 'services/firebase_sync_service.dart';
+import 'services/database_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,9 @@ void main() async {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
+
+  // Ensure Walk-in customer exists
+  await DatabaseHelper.instance.ensureWalkInCustomer();
 
   runApp(const PharmacyApp());
 }

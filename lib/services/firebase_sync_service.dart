@@ -33,6 +33,7 @@ class FirebaseSyncService {
   // Tables that participate in sync — order: parents before children
   static const List<String> _syncTables = [
     'settings',
+    'users',
     'product_categories',  // must come before products
     'suppliers',
     'products',
