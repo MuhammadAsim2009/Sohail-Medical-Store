@@ -548,10 +548,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
 )""");
     // Seed defaults
     final defaults = [
-      {'name': 'Tablet',  'packaging': '[{"name":"Box","contains":10},{"name":"Strip","contains":10},{"name":"Tablet","contains":1}]'},
-      {'name': 'Syrup',   'packaging': '[{"name":"Bottle","contains":1}]'},
-      {'name': 'Sachet',  'packaging': '[{"name":"Box","contains":30},{"name":"Sachet","contains":1}]'},
-      {'name': 'Other',   'packaging': '[{"name":"Unit","contains":1}]'},
+      // Removed default categories as per user request
     ];
     for (final cat in defaults) {
       try {

@@ -31,8 +31,6 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
       final db = await DatabaseHelper.instance.database;
       final results = await db.query(
         'users',
-        where: 'role = ?',
-        whereArgs: ['cashier'],
         orderBy: 'created_at DESC',
       );
       setState(() => _users = results);
@@ -83,6 +81,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     final confirmPasswordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     bool obscurePassword = true;
+    String role = 'cashier';
 
     await showDialog(
       context: context,
@@ -366,7 +365,46 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                             return 'Please confirm your password';
                           if (value != passwordController.text)
                             return 'Passwords do not match';
-                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 20),
+                      // Role
+                      const Text(
+                        'Role',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A2E2B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: role,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(
+                            Icons.admin_panel_settings_outlined,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0F4C81),
+                            ),
+                          ),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                          DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setStateDialog(() => role = val);
                         },
                       ),
                       const SizedBox(height: 36),
@@ -396,6 +434,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                                   'name': nameController.text.trim(),
                                   'email': emailController.text.trim(),
                                   'password': passwordController.text,
+                                  'role': role,
                                 });
                               }
                             },
@@ -433,6 +472,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
           result['name'],
           result['email'],
           result['password'],
+          result['role'],
         );
       }
     });
@@ -442,6 +482,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     String name,
     String email,
     String password,
+    String role,
   ) async {
     setState(() => _isLoading = true);
     try {
@@ -463,7 +504,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
           'id': newUser.uid,
           'email': email,
           'full_name': name,
-          'role': 'cashier',
+          'role': role,
           'is_active': 1,
           'created_at': now.toIso8601String(),
           'updated_at': now.millisecondsSinceEpoch,
@@ -492,6 +533,259 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     }
   }
 
+  Future<void> _showEditCashierDialog(Map<String, dynamic> user) async {
+    final nameController = TextEditingController(text: user['full_name']);
+    final formKey = GlobalKey<FormState>();
+    String role = user['role'] ?? 'cashier';
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              elevation: 0,
+              backgroundColor: Colors.transparent,
+              child: Container(
+                width: 440,
+                padding: const EdgeInsets.all(32),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 24,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Edit User',
+                                  style: TextStyle(
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xFF1A2E2B),
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Update access credentials',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close, color: Colors.grey),
+                            onPressed: () => Navigator.of(context).pop(),
+                            splashRadius: 20,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      // Full Name
+                      const Text(
+                        'Full Name',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A2E2B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      TextFormField(
+                        controller: nameController,
+                        decoration: InputDecoration(
+                          hintText: 'John Doe',
+                          hintStyle: TextStyle(color: Colors.grey.shade400),
+                          prefixIcon: const Icon(
+                            Icons.person_outline,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0F4C81),
+                            ),
+                          ),
+                        ),
+                        validator: (value) => value == null || value.isEmpty
+                            ? 'Full name required'
+                            : null,
+                      ),
+                      const SizedBox(height: 20),
+                      // Role
+                      const Text(
+                        'Role',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFF1A2E2B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        value: role,
+                        decoration: InputDecoration(
+                          prefixIcon: const Icon(
+                            Icons.admin_panel_settings_outlined,
+                            color: Colors.grey,
+                            size: 20,
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF8FAFC),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Color(0xFF0F4C81),
+                            ),
+                          ),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'admin', child: Text('Admin')),
+                          DropdownMenuItem(value: 'cashier', child: Text('Cashier')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setStateDialog(() => role = val);
+                        },
+                      ),
+                      const SizedBox(height: 36),
+                      // Actions
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                                vertical: 14,
+                              ),
+                              foregroundColor: Colors.grey.shade600,
+                            ),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton(
+                            onPressed: () {
+                              if (formKey.currentState!.validate()) {
+                                Navigator.of(context).pop({
+                                  'name': nameController.text.trim(),
+                                  'role': role,
+                                });
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF0F4C81),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 32,
+                                vertical: 14,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            child: const Text('Save Changes'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).then((result) async {
+      if (result != null) {
+        await _updateUser(
+          user['id'],
+          result['name'],
+          result['role'],
+        );
+      }
+    });
+  }
+
+  Future<void> _updateUser(String id, String name, String role) async {
+    setState(() => _isLoading = true);
+    try {
+      final db = await DatabaseHelper.instance.database;
+      final now = DateTime.now();
+      await db.update(
+        'users',
+        {
+          'full_name': name,
+          'role': role,
+          'updated_at': now.millisecondsSinceEpoch,
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      await _loadUsers();
+      if (mounted) {
+        AppFeedback.show(
+          context,
+          'User "$name" updated successfully.',
+          type: AppFeedbackType.success,
+        );
+      }
+    } catch (e) {
+      if (mounted)
+        AppFeedback.show(
+          context,
+          'Error updating user: $e',
+          type: AppFeedbackType.error,
+        );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -503,8 +797,8 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
           children: [
             // Sticky header
             const ExecutiveHeader(
-              title: 'Cashier Management',
-              subtitle: 'Manage point-of-sale operator access and credentials',
+              title: 'User Management',
+              subtitle: 'Manage user access and credentials',
             ),
             const SizedBox(height: 24),
             // Main card (fills remaining space)
@@ -887,6 +1181,12 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                                             ),
                                           ),
                                         ),
+                                        // Edit button
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, color: Colors.grey),
+                                          onPressed: () => _showEditCashierDialog(user),
+                                        ),
+                                        const SizedBox(width: 8),
                                         // Toggle switch
                                         Switch(
                                           value: isActive,
