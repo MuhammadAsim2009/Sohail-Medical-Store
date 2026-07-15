@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/app_feedback.dart';
 import '../services/database_helper.dart';
 import '../services/auth_service.dart';
+import '../services/firebase_sync_service.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -91,6 +92,11 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (!mounted) return;
+
+      // Trigger initial richness-based sync after successful login
+      Future.microtask(() {
+        FirebaseSyncService.instance.sync(forceInitial: true);
+      });
       
       Navigator.pushReplacement(
         context,

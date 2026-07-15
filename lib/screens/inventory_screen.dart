@@ -85,30 +85,28 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
     return Container(
       color: _kBg,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Executive Header ───────────────────────────────────────────
-            const ExecutiveHeader(
-              title: 'Inventory',
-              subtitle: 'Monitor stock health, catalog quality, and inventory value from one workspace.',
-            ),
-            const SizedBox(height: 28),
+      padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Executive Header ───────────────────────────────────────────
+          const ExecutiveHeader(
+            title: 'Inventory',
+            subtitle: 'Monitor stock health, catalog quality, and inventory value from one workspace.',
+          ),
+          const SizedBox(height: 28),
 
-            // ── 4 Stat Cards ───────────────────────────────────────────────
-            _buildStatCards(),
-            const SizedBox(height: 20),
+          // ── 4 Stat Cards ───────────────────────────────────────────────
+          _buildStatCards(),
+          const SizedBox(height: 20),
 
-            // ── Search + Add Product ────────────────────────────────────────
-            _buildSearchBar(),
-            const SizedBox(height: 12),
+          // ── Search + Add Product ────────────────────────────────────────
+          _buildSearchBar(),
+          const SizedBox(height: 12),
 
-            // ── Product Table ───────────────────────────────────────────────
-            _buildTable(rows),
-          ],
-        ),
+          // ── Product Table ───────────────────────────────────────────────
+          Expanded(child: _buildTable(rows)),
+        ],
       ),
     );
   }
@@ -117,8 +115,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Future<void> _downloadCsvTemplate() async {
     try {
       final List<List<dynamic>> rows = [
-        ['Product Code', 'Product Name', 'Category'],
-        ['P001', 'Sample Product', 'Medicine']
+        ['Product Code', 'Product Name', 'Category', 'Packaging (e.g. 14x2)'],
+        ['P001', 'Sample Product', 'Medicine', '14x2']
       ];
       String csv = ListToCsvConverter().convert(rows);
       String? outputFile = await FilePicker.platform.saveFile(
@@ -162,6 +160,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           String sku = row[0].toString().trim();
           String name = row[1].toString().trim();
           String category = row[2].toString().trim();
+          String packagingCsv = row.length > 3 ? row[3].toString().trim() : '';
           
           // Default values since they are not in the CSV template
           double costPrice = 0.0;
@@ -183,6 +182,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   try {
                     final List<dynamic> parsed = jsonDecode(pkgJson);
                     packaging = parsed.map((item) => ProductUnit.fromMap(item as Map<String, dynamic>)).toList();
+                    
+                    if (packagingCsv.isNotEmpty && packaging.length > 1) {
+                      final parts = packagingCsv.toLowerCase().split('x').map((s) => int.tryParse(s.trim()) ?? 1).toList();
+                      for (int j = 0; j < parts.length; j++) {
+                        int unitIndex = packaging.length - 2 - j;
+                        if (unitIndex >= 0) {
+                          packaging[unitIndex] = ProductUnit(name: packaging[unitIndex].name, contains: parts[j]);
+                        }
+                      }
+                    }
                   } catch (_) {}
                 }
              }
@@ -451,33 +460,40 @@ class _InventoryScreenState extends State<InventoryScreen> {
 
           // Empty state
           if (rows.isEmpty)
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 60),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade300),
-                    const SizedBox(height: 12),
-                    Text('No products found', style: TextStyle(color: Colors.grey.shade400, fontSize: 15, fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    Text('Click "+ Add Product" to add your first product', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
-                  ],
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 60),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade300),
+                      const SizedBox(height: 12),
+                      Text('No products found', style: TextStyle(color: Colors.grey.shade400, fontSize: 15, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 4),
+                      Text('Click "+ Add Product" to add your first product', style: TextStyle(color: Colors.grey.shade400, fontSize: 13)),
+                    ],
+                  ),
                 ),
               ),
+            )
+          else
+            Expanded(
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: rows.length,
+                itemBuilder: (context, index) {
+                  final p = rows[index];
+                  return _ProductRow(
+                    product: p,
+                    isEven: index.isEven,
+                    onEdit: () => _showProductDialog(product: p),
+                    onDelete: () => _confirmDelete(p),
+                    onView: () => _viewProduct(p),
+                  );
+                },
+              ),
             ),
-
-          // Rows
-          ...rows.asMap().entries.map((entry) {
-            final i = entry.key;
-            final p = entry.value;
-            return _ProductRow(
-              product: p,
-              isEven: i.isEven,
-              onEdit: () => _showProductDialog(product: p),
-              onDelete: () => _confirmDelete(p),
-              onView: () => _viewProduct(p),
-            );
-          }),
         ],
       ),
     );
@@ -1052,6 +1068,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   String? _selectedCategory;
   List<Map<String, dynamic>> _categories = [];
   bool _isLoadingCats = true;
+  List<_PackagingRow> _productPkgRows = [];
 
   @override
   void initState() {
@@ -1060,6 +1077,36 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
     _skuCtrl  = TextEditingController(text: p?.sku ?? '');
     _nameCtrl = TextEditingController(text: p?.name ?? '');
     _loadCategories(p?.category);
+  }
+
+  void _updateProductPkgRows(String categoryName) {
+    for (var r in _productPkgRows) { r.dispose(); }
+    _productPkgRows.clear();
+
+    final catData = _categories.firstWhere(
+      (c) => c['name'] == categoryName,
+      orElse: () => {},
+    );
+    if (catData.isNotEmpty) {
+      final pkgJson = catData['packaging'] as String?;
+      if (pkgJson != null && pkgJson.isNotEmpty) {
+        try {
+          final List<dynamic> parsed = jsonDecode(pkgJson);
+          final units = parsed.map((item) => ProductUnit.fromMap(item as Map<String, dynamic>)).toList();
+          
+          for (int i = 0; i < units.length; i++) {
+            int existingContains = 1;
+            if (widget.product != null && widget.product!.packaging.isNotEmpty) {
+              final existingUnit = widget.product!.packaging.firstWhere((u) => u.name == units[i].name, orElse: () => ProductUnit(name: '', contains: 1));
+              if (existingUnit.name.isNotEmpty) {
+                existingContains = existingUnit.contains;
+              }
+            }
+            _productPkgRows.add(_PackagingRow(units[i].name, existingContains.toString()));
+          }
+        } catch (_) {}
+      }
+    }
   }
 
   Future<void> _loadCategories(String? defaultCat) async {
@@ -1074,6 +1121,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         } else {
           _selectedCategory = _categories.first['name'] as String;
         }
+        _updateProductPkgRows(_selectedCategory!);
       }
     });
   }
@@ -1082,31 +1130,17 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   void dispose() {
     _skuCtrl.dispose();
     _nameCtrl.dispose();
+    for (var r in _productPkgRows) { r.dispose(); }
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
 
-    // Load packaging from the selected category
-    List<ProductUnit> packaging = [];
-    if (_selectedCategory != null && _categories.isNotEmpty) {
-      final catData = _categories.firstWhere(
-        (c) => c['name'] == _selectedCategory,
-        orElse: () => {},
-      );
-      final pkgJson = catData['packaging'] as String?;
-      if (pkgJson != null && pkgJson.isNotEmpty) {
-        try {
-          final List<dynamic> parsed = jsonDecode(pkgJson);
-          packaging = parsed.map((item) => ProductUnit.fromMap(item as Map<String, dynamic>)).toList();
-        } catch (_) {}
-      }
-    }
-    // Fallback: keep existing packaging if editing
-    if (packaging.isEmpty && widget.product?.packaging.isNotEmpty == true) {
-      packaging = widget.product!.packaging;
-    }
+    List<ProductUnit> packaging = _productPkgRows.map((r) => ProductUnit(
+      name: r.nameCtrl.text.trim(),
+      contains: int.tryParse(r.containsCtrl.text.trim()) ?? 1,
+    )).toList();
 
     try {
       await widget.onSave(Product(
@@ -1144,26 +1178,118 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
       children: [
         const Text('Category', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569), letterSpacing: 0.2)),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          key: ValueKey(_selectedCategory),
-          initialValue: _selectedCategory,
-          decoration: const InputDecoration(
-            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Color(0xFF4F46E5), width: 2)),
-            filled: true,
-            fillColor: Color(0xFFF8FAFC),
-          ),
-          items: _categories.map((cat) {
-            return DropdownMenuItem<String>(
-              value: cat['name'] as String,
-              child: Text(cat['name'] as String),
-            );
-          }).toList(),
-          onChanged: (val) {
-            if (val != null) setState(() => _selectedCategory = val);
+        Autocomplete<String>(
+          initialValue: _selectedCategory != null ? TextEditingValue(text: _selectedCategory!) : TextEditingValue.empty,
+          optionsBuilder: (TextEditingValue textEditingValue) {
+            if (textEditingValue.text.isEmpty) {
+              return _categories.map((c) => c['name'] as String);
+            }
+            return _categories.map((c) => c['name'] as String).where((String option) {
+              return option.toLowerCase().contains(textEditingValue.text.toLowerCase());
+            });
           },
+          onSelected: (String val) {
+            setState(() {
+              _selectedCategory = val;
+              _updateProductPkgRows(val);
+            });
+          },
+          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+            return TextField(
+              controller: controller,
+              focusNode: focusNode,
+              decoration: const InputDecoration(
+                contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(12)), borderSide: BorderSide(color: Color(0xFF4F46E5), width: 2)),
+                filled: true,
+                fillColor: Color(0xFFF8FAFC),
+                hintText: 'Search Category',
+              ),
+            );
+          },
+          optionsViewBuilder: (context, onSelected, options) {
+            return Align(
+              alignment: Alignment.topLeft,
+              child: Material(
+                elevation: 4,
+                borderRadius: BorderRadius.circular(12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 250, maxWidth: 300),
+                  child: ListView.builder(
+                    padding: EdgeInsets.zero,
+                    shrinkWrap: true,
+                    itemCount: options.length,
+                    itemBuilder: (context, index) {
+                      final option = options.elementAt(index);
+                      return InkWell(
+                        onTap: () => onSelected(option),
+                        child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(option),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPackagingEditor() {
+    if (_productPkgRows.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Packaging Quantities', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF475569), letterSpacing: 0.2)),
+        const SizedBox(height: 8),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < _productPkgRows.length; i++)
+                Padding(
+                  padding: EdgeInsets.only(bottom: i < _productPkgRows.length - 1 ? 8 : 0),
+                  child: Row(
+                    children: [
+                      if (i < _productPkgRows.length - 1) ...[
+                        const Text('1 ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A))),
+                        Expanded(child: Text(_productPkgRows[i].nameCtrl.text, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A)))),
+                        const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('contains', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14, fontWeight: FontWeight.w600))),
+                        SizedBox(width: 80, child: TextField(
+                          controller: _productPkgRows[i].containsCtrl,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                            hintText: 'Qty',
+                            isDense: true, filled: true, fillColor: Colors.white,
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5)),
+                          ),
+                          style: const TextStyle(fontSize: 13),
+                        )),
+                        const SizedBox(width: 8),
+                        Expanded(child: Text(_productPkgRows[i + 1].nameCtrl.text, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A)))),
+                      ] else ...[
+                        Text('Base Unit: ${_productPkgRows[i].nameCtrl.text}', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF475569))),
+                      ],
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ],
     );
@@ -1233,6 +1359,10 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
                 
                 // Category
                 _buildCategorySelector(),
+                const SizedBox(height: 24),
+                
+                // Packaging Editor
+                _buildPackagingEditor(),
                 const SizedBox(height: 24),
 
 
@@ -1343,6 +1473,7 @@ class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
 
   final _nameCtrl = TextEditingController();
   List<_PackagingRow> _pkgRows = [];
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -1375,7 +1506,7 @@ class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
     
     final pkgJson = jsonEncode(_pkgRows.map((r) => {
       'name': r.nameCtrl.text.trim(),
-      'contains': int.tryParse(r.containsCtrl.text.trim()) ?? 1,
+      'contains': 1,
     }).toList());
     try {
       await DatabaseHelper.instance.insertCategory(name, pkgJson);
@@ -1434,25 +1565,11 @@ class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
                   child: Row(
                     children: [
                       if (i < _pkgRows.length - 1) ...[
-                        const Text('1 ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A))),
+                        const Text('Parent: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF475569))),
                         Expanded(child: TextField(
                           controller: _pkgRows[i].nameCtrl,
                           decoration: const InputDecoration(
-                            hintText: 'Unit name',
-                            isDense: true, filled: true, fillColor: Colors.white,
-                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
-                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
-                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFF4F46E5), width: 1.5)),
-                          ),
-                          style: const TextStyle(fontSize: 13),
-                        )),
-                        const Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Text('=', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 14, fontWeight: FontWeight.w600))),
-                        SizedBox(width: 54, child: TextField(
-                          controller: _pkgRows[i].containsCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                            hintText: 'Qty',
+                            hintText: 'e.g. Box, Strip',
                             isDense: true, filled: true, fillColor: Colors.white,
                             contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
@@ -1469,11 +1586,11 @@ class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
                           padding: EdgeInsets.zero,
                         ),
                       ] else ...[
-                        const Text('Base: ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF475569))),
+                        const Text('Base:   ', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF475569))),
                         Expanded(child: TextField(
                           controller: _pkgRows[i].nameCtrl,
                           decoration: const InputDecoration(
-                            hintText: 'e.g. Tablet',
+                            hintText: 'e.g. Tablet, Bottle',
                             isDense: true, filled: true, fillColor: Colors.white,
                             contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                             border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFE2E8F0))),
@@ -1568,6 +1685,24 @@ class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 16),
+                        child: TextField(
+                          onChanged: (val) => setState(() => _searchQuery = val),
+                          decoration: InputDecoration(
+                            hintText: 'Search categories...',
+                            hintStyle: const TextStyle(color: Color(0xFF94A3B8), fontSize: 14),
+                            prefixIcon: const Icon(Icons.search, color: Color(0xFF94A3B8), size: 20),
+                            isDense: true,
+                            filled: true,
+                            fillColor: const Color(0xFFF8FAFC),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
+                            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5)),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          ),
+                        ),
+                      ),
                       if (_categories.isEmpty)
                         Container(
                           padding: const EdgeInsets.all(20),
@@ -1585,7 +1720,7 @@ class _CategoryManagerDialogState extends State<_CategoryManagerDialog> {
                           ),
                         ),
 
-                      ..._categories.map((cat) {
+                      ..._categories.where((c) => (c['name'] as String).toLowerCase().contains(_searchQuery.toLowerCase())).map((cat) {
                         final pkgList = <ProductUnit>[];
                         try {
                           final decoded = jsonDecode(cat['packaging'] as String) as List;

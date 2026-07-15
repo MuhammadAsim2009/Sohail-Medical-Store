@@ -820,7 +820,7 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
     setState(() => _isSyncing = true);
 
     try {
-      final result = await FirebaseSyncService.instance.sync();
+      final result = await FirebaseSyncService.instance.sync(forceInitial: true);
 
       if (!mounted) return;
 

@@ -1537,6 +1537,7 @@ class _SaleRowState extends State<_SaleRow> {
                 padding: const pw.EdgeInsets.symmetric(vertical: 1),
                 child: pw.Row(
                   children: [
+                    pw.SizedBox(width: 16, child: pw.Text('#', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
                     pw.Expanded(flex: 3, child: pw.Text('Item', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
                     pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
                     pw.Expanded(flex: 2, child: pw.Text('Price', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
@@ -1559,6 +1560,7 @@ class _SaleRowState extends State<_SaleRow> {
                           pw.Row(
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
+                              pw.SizedBox(width: 16, child: pw.Text('${idx + 1}.', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                               pw.Expanded(flex: 3, child: pw.Text(item['name'], style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
                               pw.Expanded(flex: 1, child: pw.Text(item['qty'], style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9), textAlign: pw.TextAlign.center)),
                               pw.Expanded(flex: 2, child: pw.Text((item['price'] as double).toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9), textAlign: pw.TextAlign.right)),

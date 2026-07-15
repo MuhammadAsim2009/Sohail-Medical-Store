@@ -862,24 +862,30 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
                           label: 'Supplier Name *',
                           child: _loadingSuppliers
                               ? const CircularProgressIndicator()
-                              : DropdownButtonFormField<String>(
-                                  value: _suppliers.any((s) => s.companyName == _selectedSupplier) ? _selectedSupplier : null,
-                                  isExpanded: true,
-                                  decoration: _dec('Select a supplier'),
-                                  items: _suppliers.map((s) {
-                                    return DropdownMenuItem(
+                              : DropdownMenu<String>(
+                                  initialSelection: _suppliers.any((s) => s.companyName == _selectedSupplier) ? _selectedSupplier : null,
+                                  expandedInsets: EdgeInsets.zero,
+                                  enableFilter: true,
+                                  inputDecorationTheme: const InputDecorationTheme(
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                                    filled: true,
+                                    fillColor: Color(0xFFF9FAFB),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFD1D5DB))),
+                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFFD1D5DB))),
+                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide(color: Color(0xFF0F4C81), width: 1.5)),
+                                  ),
+                                  dropdownMenuEntries: _suppliers.map((s) {
+                                    return DropdownMenuEntry<String>(
                                       value: s.companyName,
-                                      child: Text(s.companyName),
+                                      label: s.companyName,
                                     );
                                   }).toList(),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _selectedSupplier = val;
-                                    });
-                                  },
-                                  validator: (val) {
-                                    if (val == null || val.isEmpty) return 'Please select a supplier';
-                                    return null;
+                                  onSelected: (val) {
+                                    if (val != null) {
+                                      setState(() {
+                                        _selectedSupplier = val;
+                                      });
+                                    }
                                   },
                                 ),
                         ),
@@ -1192,34 +1198,74 @@ class _ItemCardState extends State<_ItemCard> {
                       border: Border.all(color: Colors.grey.shade300),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: DropdownButtonHideUnderline(
-                      child: DropdownButton<Product>(
-                        value: r.product,
-                        isExpanded: true,
-                        style: const TextStyle(fontSize: 14, color: Color(0xFF1A2E2B)),
-                        onChanged: (p) {
-                          if (p == null) return;
-                          setState(() {
-                            r.product = p;
-                            r.unitPurchased = p.packaging.isNotEmpty ? p.packaging.first.name : 'Unit';
-                            
-                            // Auto-fill prices only if product already has them set (previously purchased)
-                            // If prices are 0 (new product), leave fields at 0 so user can enter them
-                            final autoPurchasePrice = p.costPrice;
-                            final autoSellPrice = p.sellPrice;
+                    child: Autocomplete<Product>(
+                      initialValue: TextEditingValue(text: r.product.name),
+                      displayStringForOption: (Product option) => option.name,
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text.isEmpty) {
+                          return widget.products;
+                        }
+                        return widget.products.where((Product option) {
+                          return option.name.toLowerCase().contains(textEditingValue.text.toLowerCase()) || 
+                                 option.sku.toLowerCase().contains(textEditingValue.text.toLowerCase());
+                        });
+                      },
+                      onSelected: (Product p) {
+                        setState(() {
+                          r.product = p;
+                          r.unitPurchased = p.packaging.isNotEmpty ? p.packaging.first.name : 'Unit';
+                          
+                          // Auto-fill prices only if product already has them set (previously purchased)
+                          // If prices are 0 (new product), leave fields at 0 so user can enter them
+                          final autoPurchasePrice = p.costPrice;
+                          final autoSellPrice = p.sellPrice;
 
-                            r.purchasePrice = autoPurchasePrice;
-                            r.sellingPrice  = autoSellPrice;
-                            _priceCtrl.text = autoPurchasePrice > 0 ? autoPurchasePrice.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
-                            _sellCtrl.text  = autoSellPrice > 0 ? autoSellPrice.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
-                          });
-                          widget.onChanged();
-                        },
-                        items: widget.products.map((p) => DropdownMenuItem(
-                          value: p,
-                          child: Text(p.name, overflow: TextOverflow.ellipsis),
-                        )).toList(),
-                      ),
+                          r.purchasePrice = autoPurchasePrice;
+                          r.sellingPrice  = autoSellPrice;
+                          _priceCtrl.text = autoPurchasePrice > 0 ? autoPurchasePrice.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
+                          _sellCtrl.text  = autoSellPrice > 0 ? autoSellPrice.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
+                        });
+                        widget.onChanged();
+                      },
+                      fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
+                        return TextField(
+                          controller: controller,
+                          focusNode: focusNode,
+                          style: const TextStyle(fontSize: 14, color: Color(0xFF1A2E2B)),
+                          decoration: const InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                            border: InputBorder.none,
+                            hintText: 'Search product',
+                          ),
+                        );
+                      },
+                      optionsViewBuilder: (context, onSelected, options) {
+                        return Align(
+                          alignment: Alignment.topLeft,
+                          child: Material(
+                            elevation: 4,
+                            borderRadius: BorderRadius.circular(8),
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxHeight: 250, maxWidth: 300),
+                              child: ListView.builder(
+                                padding: EdgeInsets.zero,
+                                shrinkWrap: true,
+                                itemCount: options.length,
+                                itemBuilder: (context, index) {
+                                  final option = options.elementAt(index);
+                                  return InkWell(
+                                    onTap: () => onSelected(option),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(12),
+                                      child: Text(option.name, style: const TextStyle(fontSize: 14)),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ),

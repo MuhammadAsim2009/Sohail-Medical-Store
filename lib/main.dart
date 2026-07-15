@@ -37,6 +37,11 @@ class _PharmacyAppState extends State<PharmacyApp> {
   @override
   void initState() {
     super.initState();
+    // Run an initial richness-based sync on app open
+    Future.microtask(() {
+      FirebaseSyncService.instance.sync(forceInitial: true);
+    });
+
     // Background delta sync every 60 seconds — only pushes/pulls changed rows
     _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       FirebaseSyncService.instance.sync();

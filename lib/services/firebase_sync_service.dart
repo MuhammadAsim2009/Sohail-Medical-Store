@@ -82,25 +82,7 @@ class FirebaseSyncService {
       return SyncResult.offline();
     }
 
-    // Guard: verify an actual route to Firebase via TCP (3s timeout)
-    // We pass the raw IP to avoid extra DNS resolution time.
-    try {
-      final addresses = await InternetAddress.lookup(
-        'firestore.googleapis.com',
-        type: InternetAddressType.IPv4,
-      ).timeout(const Duration(seconds: 4));
-      if (addresses.isEmpty) return SyncResult.offline();
-      final socket = await Socket.connect(
-        addresses.first,
-        443,
-        timeout: const Duration(seconds: 3),
-      );
-      socket.destroy();
-    } on SocketException {
-      return SyncResult.offline();
-    } catch (_) {
-      return SyncResult.offline();
-    }
+
 
     _isSyncing = true;
     try {
@@ -196,11 +178,18 @@ class FirebaseSyncService {
   // ─── Incremental Pull (Firebase → local) ────────────────────────────────────
 
   Future<int> _deltaPull(dynamic db, String table, int lastSync) async {
-    final QuerySnapshot snap = await _col(table)
-        .where('updated_at', isGreaterThan: lastSync)
-        .get();
-    if (snap.docs.isEmpty) return 0;
-    return _applySnapshot(db, table, snap);
+    print('DEBUG: _deltaPull called for table: $table with lastSync: $lastSync');
+    try {
+      final QuerySnapshot snap = await _col(table)
+          .where('updated_at', isGreaterThan: lastSync)
+          .get();
+      print('DEBUG: _deltaPull query for $table returned ${snap.docs.length} docs.');
+      if (snap.docs.isEmpty) return 0;
+      return await _applySnapshot(db, table, snap);
+    } catch (e, st) {
+      print('DEBUG: Error in _deltaPull for $table: $e\n$st');
+      rethrow;
+    }
   }
 
   // ─── Core: push a list of local rows to Firestore ───────────────────────────
@@ -278,6 +267,7 @@ class FirebaseSyncService {
     String table,
     QuerySnapshot snapshot,
   ) async {
+    print('DEBUG: _applySnapshot called for table: $table with ${snapshot.docs.length} docs.');
     if (snapshot.docs.isEmpty) return 0;
 
     // Load all existing sync_ids for this table into a map: sync_id → row
@@ -306,15 +296,18 @@ class FirebaseSyncService {
       try {
         final localTs = existingMap[doc.id];
         final int remoteTs = (data['updated_at'] as int?) ?? 0;
+        print('DEBUG: table $table, doc ${doc.id} - localTs: $localTs, remoteTs: $remoteTs');
 
         if (localTs == null) {
           // New record — insert without the cloud's id (let SQLite auto-assign)
           final insertData = Map<String, dynamic>.from(data)..remove('id');
-          insertBatch.insert(table, insertData, conflictAlgorithm: 5);
+          print('DEBUG: Inserting into $table: $insertData');
+          insertBatch.insert(table, insertData, conflictAlgorithm: ConflictAlgorithm.replace);
           count++;
         } else if (remoteTs >= localTs) {
           // Remote is newer — update local
           final updateData = Map<String, dynamic>.from(data)..remove('id');
+          print('DEBUG: Updating $table where sync_id=${doc.id}: $updateData');
           updateBatch.update(
             table,
             updateData,
@@ -322,15 +315,27 @@ class FirebaseSyncService {
             whereArgs: [doc.id],
           );
           count++;
+        } else {
+          print('DEBUG: Skipping pull for $table doc ${doc.id} because localTs ($localTs) > remoteTs ($remoteTs)');
         }
-        // else: local is newer — skip; will be pushed on next _deltaPush
-      } catch (_) {
-        // Skip bad rows
+      } catch (e, st) {
+        print('DEBUG: Error preparing batch for $table doc ${doc.id}: $e\n$st');
       }
     }
 
-    await insertBatch.commit(noResult: true);
-    await updateBatch.commit(noResult: true);
+    try {
+      await insertBatch.commit(noResult: true);
+      print('DEBUG: Successfully committed insertBatch for $table');
+    } catch (e, st) {
+      print('DEBUG: Error committing insertBatch for $table: $e\n$st');
+    }
+
+    try {
+      await updateBatch.commit(noResult: true);
+      print('DEBUG: Successfully committed updateBatch for $table');
+    } catch (e, st) {
+      print('DEBUG: Error committing updateBatch for $table: $e\n$st');
+    }
     return count;
   }
 
