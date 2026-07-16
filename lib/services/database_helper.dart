@@ -52,7 +52,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 23,
+      version: 24,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   purchase_price REAL NOT NULL,
   selling_price  REAL NOT NULL DEFAULT 0.0,
   discount       REAL NOT NULL DEFAULT 0.0,
+  gst            REAL NOT NULL DEFAULT 0.0,
   expiry_date    TEXT,
   FOREIGN KEY (order_id) REFERENCES purchase_orders (id) ON DELETE CASCADE
 )""");
@@ -169,6 +170,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   product_name    TEXT NOT NULL,
   quantity        INTEGER NOT NULL,
   price           REAL NOT NULL,
+  gst             REAL NOT NULL DEFAULT 0.0,
   total           REAL NOT NULL,
   FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
@@ -357,6 +359,11 @@ CREATE TABLE IF NOT EXISTS users (
         try { await db.execute("ALTER TABLE $t ADD COLUMN is_dirty INTEGER NOT NULL DEFAULT 0"); } catch (_) {}
       }
     }
+    if (oldVersion < 24) {
+      try { await db.execute('ALTER TABLE products ADD COLUMN gst REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE purchase_order_items ADD COLUMN gst REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE sale_items ADD COLUMN gst REAL DEFAULT 0.0'); } catch (_) {}
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -387,7 +394,8 @@ CREATE TABLE IF NOT EXISTS products (
   cost_price REAL NOT NULL,
   sell_price REAL NOT NULL,
   stock      REAL NOT NULL,
-  threshold  REAL NOT NULL
+  threshold  REAL NOT NULL,
+  gst        REAL NOT NULL DEFAULT 0.0
 )""");
 
     await db.execute("""
@@ -436,6 +444,7 @@ CREATE TABLE IF NOT EXISTS purchase_order_items (
   purchase_price REAL NOT NULL,
   selling_price  REAL NOT NULL DEFAULT 0.0,
   discount       REAL NOT NULL DEFAULT 0.0,
+  gst            REAL NOT NULL DEFAULT 0.0,
   expiry_date    TEXT,
   FOREIGN KEY (order_id) REFERENCES purchase_orders (id) ON DELETE CASCADE
 )""");
@@ -521,6 +530,7 @@ CREATE TABLE IF NOT EXISTS sale_items (
   product_name    TEXT NOT NULL,
   quantity        INTEGER NOT NULL,
   price           REAL NOT NULL,
+  gst             REAL NOT NULL DEFAULT 0.0,
   total           REAL NOT NULL,
   FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
@@ -789,6 +799,54 @@ CREATE TABLE IF NOT EXISTS product_categories (
     );
   }
 
+  /// Returns a non-null reason string if the product CANNOT be deleted,
+  /// or null if it is safe to delete.
+  ///
+  /// Rules:
+  ///  - Block if the product still has stock > 0.
+  ///  - Block if the product appears in any purchase order (received stock history).
+  ///  - Sales invoices are NOT a block — sale_items stores product_name as text,
+  ///    so old invoices remain correct even after the product is removed.
+  Future<String?> canDeleteProduct(int id) async {
+    final db = await instance.database;
+
+    // 1. Stock check
+    final stockRows = await db.query(
+      'products',
+      columns: ['stock', 'name'],
+      where: 'id = ? AND is_deleted = 0',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (stockRows.isNotEmpty) {
+      final stock = (stockRows.first['stock'] as num?)?.toInt() ?? 0;
+      final name = stockRows.first['name'] as String? ?? '';
+      if (stock > 0) {
+        return '"$name" still has $stock unit(s) in stock. '
+            'Please sell or adjust the stock to zero before deleting.';
+      }
+    }
+
+    // 2. Purchase order history check
+    final poRows = await db.query(
+      'purchase_order_items',
+      columns: ['id'],
+      where: 'product_id = ? AND is_deleted = 0',
+      whereArgs: [id],
+      limit: 1,
+    );
+    if (poRows.isNotEmpty) {
+      final name = stockRows.isNotEmpty
+          ? stockRows.first['name'] as String? ?? 'This product'
+          : 'This product';
+      return '"$name" has purchase order history. '
+          'Deleting it would break purchase records.\n\n'
+          'You can archive it instead by setting the stock to 0 and excluding it from searches.';
+    }
+
+    return null; // safe to delete
+  }
+
   Future<int> deleteProduct(int id) async {
     final db = await instance.database;
     FirebaseSyncService.instance.triggerAutoSync();
@@ -991,9 +1049,11 @@ CREATE TABLE IF NOT EXISTS product_categories (
         final newStock = product.stock + item.quantity * multiplier;
 
         final Map<String, dynamic> updateMap = {'stock': newStock};
-        if (item.purchasePrice > 0)
+        if (item.purchasePrice > 0) {
           updateMap['cost_price'] = item.purchasePrice;
+        }
         if (item.sellingPrice > 0) updateMap['sell_price'] = item.sellingPrice;
+        updateMap['gst'] = item.gst;
 
         updateMap['updated_at'] = DateTime.now().millisecondsSinceEpoch;
         await txn.update(

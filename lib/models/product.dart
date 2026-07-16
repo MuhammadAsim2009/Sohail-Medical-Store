@@ -28,6 +28,7 @@ class Product {
   double sellPrice;
   double stock;       // Stored as total base units
   double threshold;
+  double gst;
   List<ProductUnit> packaging;
 
   Product({
@@ -39,6 +40,7 @@ class Product {
     required this.sellPrice,
     required this.stock,
     required this.threshold,
+    this.gst = 0.0,
     required this.packaging,
   });
 
@@ -52,6 +54,7 @@ class Product {
       'sell_price': sellPrice,
       'stock': stock,
       'threshold': threshold,
+      'gst': gst,
       'packaging': jsonEncode(packaging.map((e) => e.toMap()).toList()),
     };
   }
@@ -75,6 +78,7 @@ class Product {
       sellPrice: (map['sell_price'] as num).toDouble(),
       stock: (map['stock'] as num).toDouble(),
       threshold: (map['threshold'] as num).toDouble(),
+      gst: (map['gst'] as num?)?.toDouble() ?? 0.0,
       packaging: pkg,
     );
   }

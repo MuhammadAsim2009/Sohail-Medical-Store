@@ -76,20 +76,31 @@ class FirebaseSyncService {
   Future<SyncResult> sync({bool forceInitial = false}) async {
     if (_isSyncing) return SyncResult.offline(); // Prevent concurrent syncs
 
-    // Guard: check connectivity (fast - just checks OS network state)
-    final connectivityResults = await Connectivity().checkConnectivity();
-    if (connectivityResults.contains(ConnectivityResult.none)) {
+    // Guard: check real internet connectivity via DNS lookup.
+    // connectivity_plus is unreliable on Windows Desktop (often reports 'none'
+    // even when online), so we skip it and do a direct TCP reachability check.
+    try {
+      final result = await InternetAddress.lookup('google.com')
+          .timeout(const Duration(seconds: 5));
+      if (result.isEmpty || result.first.rawAddress.isEmpty) {
+        return SyncResult.offline();
+      }
+    } on SocketException catch (_) {
+      return SyncResult.offline();
+    } on TimeoutException catch (_) {
+      return SyncResult.offline();
+    } catch (_) {
       return SyncResult.offline();
     }
 
 
 
+    // Guard: user must be authenticated (check BEFORE setting _isSyncing)
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return SyncResult.notAuthenticated();
+
     _isSyncing = true;
     try {
-      // Guard: user must be authenticated
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return SyncResult.notAuthenticated();
-
       int pushed = 0;
       int pulled = 0;
       final errors = <String>[];

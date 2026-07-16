@@ -7,6 +7,7 @@ class PurchaseOrderItem {
   final double purchasePrice;
   final double sellingPrice;
   final double discount;
+  final double gst;
   final DateTime? expiryDate;
 
   const PurchaseOrderItem({
@@ -18,10 +19,11 @@ class PurchaseOrderItem {
     required this.purchasePrice,
     this.sellingPrice = 0.0,
     this.discount = 0.0,
+    this.gst = 0.0,
     this.expiryDate,
   });
 
-  double get subtotal => quantity * purchasePrice - discount;
+  double get subtotal => (quantity * purchasePrice * (1 + (gst / 100))) - discount;
 
   PurchaseOrderItem copyWith({
     int? id,
@@ -32,6 +34,7 @@ class PurchaseOrderItem {
     double? purchasePrice,
     double? sellingPrice,
     double? discount,
+    double? gst,
     DateTime? expiryDate,
   }) {
     return PurchaseOrderItem(
@@ -43,6 +46,7 @@ class PurchaseOrderItem {
       purchasePrice: purchasePrice ?? this.purchasePrice,
       sellingPrice: sellingPrice ?? this.sellingPrice,
       discount: discount ?? this.discount,
+      gst: gst ?? this.gst,
       expiryDate: expiryDate ?? this.expiryDate,
     );
   }
@@ -57,6 +61,7 @@ class PurchaseOrderItem {
       purchasePrice: (map['purchase_price'] as num).toDouble(),
       sellingPrice: (map['selling_price'] as num?)?.toDouble() ?? 0.0,
       discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
+      gst: (map['gst'] as num?)?.toDouble() ?? 0.0,
       expiryDate: map['expiry_date'] != null
           ? DateTime.tryParse(map['expiry_date'] as String)
           : null,
@@ -73,6 +78,7 @@ class PurchaseOrderItem {
         'purchase_price': purchasePrice,
         'selling_price': sellingPrice,
         'discount': discount,
+        'gst': gst,
         'expiry_date': expiryDate?.toIso8601String(),
       };
 }

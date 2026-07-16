@@ -1716,6 +1716,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
 
   final TextEditingController _receivedController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController(text: '1');
+  final TextEditingController _stagedGstController = TextEditingController(text: '0');
   final TextEditingController _discountController = TextEditingController(text: '0');
   String _discountType = 'Rupees';
   String? _validationError;
@@ -1735,11 +1736,13 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   double get _stagedPricePerUnit {
     if (_stagedProduct == null || _stagedUnit == null) return 0;
     final p = _stagedProduct!;
-    if (p.packaging.isEmpty) return p.sellPrice;
-    // sellPrice is entered per the FIRST (largest) unit (e.g. Box)
-    // scale proportionally: pricePerSelectedUnit = sellPrice * multiplier(selectedUnit) / multiplier(firstUnit)
-    final firstMultiplier = p.getMultiplier(p.packaging.first.name);
-    return p.sellPrice * p.getMultiplier(_stagedUnit!) / firstMultiplier;
+    double basePrice = p.sellPrice;
+    if (p.packaging.isNotEmpty) {
+      final firstMultiplier = p.getMultiplier(p.packaging.first.name);
+      basePrice = p.sellPrice * p.getMultiplier(_stagedUnit!) / firstMultiplier;
+    }
+    final stagedGst = double.tryParse(_stagedGstController.text) ?? 0.0;
+    return basePrice * (1 + stagedGst / 100);
   }
 
   double get _stagedLineTotal => _stagedPricePerUnit * _stagedQty;
@@ -1767,6 +1770,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   void dispose() {
     _receivedController.dispose();
     _qtyController.dispose();
+    _stagedGstController.dispose();
     _discountController.dispose();
     super.dispose();
   }
@@ -1789,6 +1793,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       _stagedUnit = p.packaging.isNotEmpty ? p.packaging.first.name : null;
       _stagedQty = 1;
       _qtyController.text = '1';
+      _stagedGstController.text = p.gst.toStringAsFixed(1).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '');
+      if (_stagedGstController.text.isEmpty) _stagedGstController.text = '0';
     });
   }
 
@@ -1836,6 +1842,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
             unit: unit,
             unitQty: _stagedQty,
             pricePerUnit: pricePerUnit,
+            gst: double.tryParse(_stagedGstController.text) ?? 0.0,
           ),
         );
       }
@@ -1861,6 +1868,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   Future<void> _editCartItem(int index) async {
     final item = _cart[index];
     final qtyController = TextEditingController(text: item.unitQty.toString());
+    final gstController = TextEditingController(text: item.gst.toStringAsFixed(1));
     String selectedUnit = item.unit;
     final units = _unitOptionsForProduct(item.product);
 
@@ -1922,6 +1930,30 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                         style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                       ),
                     ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: gstController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'GST %',
+                        hintText: '0',
+                        suffixText: '%',
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 8),
+                    Builder(builder: (_) {
+                      final qty = int.tryParse(qtyController.text.trim()) ?? 0;
+                      final gst = double.tryParse(gstController.text.trim()) ?? 0.0;
+                      final total = (pricePerUnit * qty) * (1 + gst / 100);
+                      return Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Total (with GST): Rs. ${total.toStringAsFixed(0)}',
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F4C81)),
+                        ),
+                      );
+                    }),
                   ],
                 ),
               ),
@@ -1948,6 +1980,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                         unit: selectedUnit,
                         unitQty: qty,
                         pricePerUnit: pricePerUnit,
+                        gst: double.tryParse(gstController.text.trim()) ?? 0.0,
                       ),
                     );
                   },
@@ -1965,6 +1998,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     );
 
     qtyController.dispose();
+    // gstController is function-local and GC'd with the function
 
     if (edited != null && mounted) {
       setState(() => _cart[index] = edited);
@@ -2021,7 +2055,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
               productId: c.product.id!,
               productName: '${c.product.name} (${c.unit})',
               quantity: c.baseUnits,
-              price: c.total / c.baseUnits,
+              price: c.pricePerUnit,
+              gst: c.gst,
               total: c.total,
             ),
           )
@@ -2384,6 +2419,30 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                 onChanged: (val) => setState(
                                   () => _stagedQty = int.tryParse(val) ?? 1,
                                 ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            // GST field
+                            SizedBox(
+                              width: 80,
+                              child: TextFormField(
+                                controller: _stagedGstController,
+                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                textAlign: TextAlign.center,
+                                decoration: InputDecoration(
+                                  labelText: 'GST %',
+                                  filled: true,
+                                  fillColor: Colors.white,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 10,
+                                  ),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                ),
+                                onChanged: (_) => setState(() {}),
                               ),
                             ),
                             const SizedBox(width: 10),
@@ -2861,15 +2920,17 @@ class _CartItem {
   final String unit; // selected unit name (e.g. 'Box', 'Strip', 'Tablet')
   int unitQty; // quantity in the selected unit
   final double pricePerUnit; // price per selected unit
+  double gst; // GST percentage
 
   _CartItem({
     required this.product,
     required this.unit,
     required this.unitQty,
     required this.pricePerUnit,
+    this.gst = 0.0,
   });
 
-  double get total => pricePerUnit * unitQty;
+  double get total => (pricePerUnit * unitQty) * (1 + (gst / 100));
 
   /// Base units to deduct from stock
   int get baseUnits => unitQty * product.getMultiplier(unit);

@@ -760,10 +760,11 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
       quantity: 1,
       purchasePrice: p.costPrice,
       sellingPrice: p.sellPrice,
+      gst: p.gst,
     )));
   }
 
-  double get _subtotal      => _items.fold(0.0, (s, i) => s + i.quantity * i.purchasePrice);
+  double get _subtotal      => _items.fold(0.0, (s, i) => s + (i.quantity * i.purchasePrice * (1 + i.gst / 100)));
   double get _invoiceDiscount => double.tryParse(_invoiceDiscCtrl.text) ?? 0;
   double get _tax           => (_subtotal - _invoiceDiscount) * (double.tryParse(_taxCtrl.text) ?? 0) / 100;
   double get _total         => (_subtotal - _invoiceDiscount) + _tax;
@@ -794,6 +795,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
         purchasePrice: r.purchasePrice,
         sellingPrice: r.sellingPrice,
         discount: 0.0,
+        gst: r.gst,
         expiryDate: r.expiryDate,
       )).toList(),
     );
@@ -1046,6 +1048,7 @@ class _ItemRow {
   double quantity;
   double purchasePrice;
   double sellingPrice;
+  double gst;
   DateTime? expiryDate;
 
   _ItemRow({
@@ -1054,6 +1057,7 @@ class _ItemRow {
     required this.quantity,
     required this.purchasePrice,
     required this.sellingPrice,
+    this.gst = 0.0,
     this.expiryDate,
   });
 }
@@ -1082,14 +1086,18 @@ class _ItemCardState extends State<_ItemCard> {
   late final TextEditingController _qtyCtrl;
   late final TextEditingController _priceCtrl;
   late final TextEditingController _sellCtrl;
+  late final TextEditingController _gstCtrl;
   late final TextEditingController _expiryCtrl;
+  late double _baseSellPrice; // base selling price before GST
 
   @override
   void initState() {
     super.initState();
-    _qtyCtrl   = TextEditingController(text: widget.row.quantity.toString());
-    _priceCtrl = TextEditingController(text: widget.row.purchasePrice.toString());
-    _sellCtrl  = TextEditingController(text: widget.row.sellingPrice.toString());
+    _qtyCtrl    = TextEditingController(text: widget.row.quantity.toString());
+    _priceCtrl  = TextEditingController(text: widget.row.purchasePrice.toString());
+    _baseSellPrice = widget.row.sellingPrice;
+    _sellCtrl   = TextEditingController(text: widget.row.sellingPrice.toString());
+    _gstCtrl    = TextEditingController(text: widget.row.gst.toString());
     _expiryCtrl = TextEditingController(
       text: widget.row.expiryDate != null ? DateFormat('MMM d, yyyy').format(widget.row.expiryDate!) : '',
     );
@@ -1114,7 +1122,7 @@ class _ItemCardState extends State<_ItemCard> {
   @override
   void dispose() {
     _qtyCtrl.dispose(); _priceCtrl.dispose();
-    _sellCtrl.dispose(); _expiryCtrl.dispose();
+    _sellCtrl.dispose(); _gstCtrl.dispose(); _expiryCtrl.dispose();
     super.dispose();
   }
 
@@ -1219,11 +1227,14 @@ class _ItemCardState extends State<_ItemCard> {
                           // If prices are 0 (new product), leave fields at 0 so user can enter them
                           final autoPurchasePrice = p.costPrice;
                           final autoSellPrice = p.sellPrice;
+                          final autoGst = p.gst;
 
                           r.purchasePrice = autoPurchasePrice;
                           r.sellingPrice  = autoSellPrice;
+                          r.gst = autoGst;
                           _priceCtrl.text = autoPurchasePrice > 0 ? autoPurchasePrice.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
                           _sellCtrl.text  = autoSellPrice > 0 ? autoSellPrice.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
+                          _gstCtrl.text = autoGst > 0 ? autoGst.toStringAsFixed(2).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '') : '0';
                         });
                         widget.onChanged();
                       },
@@ -1357,7 +1368,7 @@ class _ItemCardState extends State<_ItemCard> {
               )),
               const SizedBox(width: 10),
               Expanded(child: _LabelField(
-                label: 'Selling Price (Rs.)',
+                label: 'Selling Price (base, Rs.)',
                 child: TextFormField(
                   controller: _sellCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1365,12 +1376,52 @@ class _ItemCardState extends State<_ItemCard> {
                   decoration: InputDecoration(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)), isDense: true),
-                  onChanged: (v) { r.sellingPrice = double.tryParse(v) ?? 0; widget.onChanged(); },
+                  onChanged: (v) {
+                    r.sellingPrice = double.tryParse(v) ?? 0;
+                    widget.onChanged();
+                  },
                   validator: (v) {
                     if (v == null || v.isEmpty) return 'Required';
                     if ((double.tryParse(v) ?? 0) < 0) return 'Invalid';
                     return null;
                   },
+                ),
+              )),
+              const SizedBox(width: 10),
+              Expanded(child: _LabelField(
+                label: 'GST %',
+                child: TextFormField(
+                  controller: _gstCtrl,
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  style: const TextStyle(fontSize: 14),
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                    isDense: true,
+                    hintText: '0',
+                    suffixText: '%',
+                  ),
+                  onChanged: (v) {
+                    r.gst = double.tryParse(v) ?? 0;
+                    widget.onChanged();
+                  },
+                ),
+              )),
+              const SizedBox(width: 10),
+              // Show the GST-inclusive preview
+              Expanded(child: _LabelField(
+                label: 'Final Sell Price',
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Text(
+                    (r.sellingPrice * (1 + r.gst / 100)).toStringAsFixed(2),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Color(0xFF0F4C81)),
+                  ),
                 ),
               )),
               const SizedBox(width: 10),

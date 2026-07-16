@@ -68,18 +68,20 @@ class Supplier {
 
   factory Supplier.fromMap(Map<String, dynamic> map) {
     return Supplier(
-      id: map['id'],
-      companyName: map['companyName'],
-      contactPerson: map['contactPerson'],
-      phone: map['phone'],
-      email: map['email'],
-      address: map['address'],
-      categoriesSupplied: List<String>.from(
-        jsonDecode(map['categoriesSupplied']),
-      ),
-      lastOrderDate: DateTime.parse(map['lastOrderDate']),
-      pendingAmount: map['pendingAmount']?.toDouble() ?? 0.0,
-      advanceAmount: map['advanceAmount']?.toDouble() ?? 0.0,
+      id: map['id']?.toString() ?? '',
+      companyName: map['companyName']?.toString() ?? '',
+      contactPerson: map['contactPerson']?.toString() ?? '',
+      phone: map['phone']?.toString() ?? '',
+      email: map['email']?.toString() ?? '',
+      address: map['address']?.toString() ?? '',
+      categoriesSupplied: map['categoriesSupplied'] != null
+          ? List<String>.from(jsonDecode(map['categoriesSupplied']))
+          : [],
+      lastOrderDate: map['lastOrderDate'] != null
+          ? DateTime.parse(map['lastOrderDate'])
+          : DateTime.now(),
+      pendingAmount: (map['pendingAmount'] as num?)?.toDouble() ?? 0.0,
+      advanceAmount: (map['advanceAmount'] as num?)?.toDouble() ?? 0.0,
     );
   }
 }

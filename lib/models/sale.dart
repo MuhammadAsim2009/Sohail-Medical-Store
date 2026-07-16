@@ -85,6 +85,7 @@ class SaleItem {
   final String productName;
   final int quantity;
   final double price;
+  final double gst;
   final double total;
 
   SaleItem({
@@ -94,6 +95,7 @@ class SaleItem {
     required this.productName,
     required this.quantity,
     required this.price,
+    this.gst = 0.0,
     required this.total,
   });
 
@@ -105,6 +107,7 @@ class SaleItem {
       'product_name': productName,
       'quantity': quantity,
       'price': price,
+      'gst': gst,
       'total': total,
     };
   }
@@ -116,8 +119,9 @@ class SaleItem {
       productId: map['product_id'],
       productName: map['product_name'],
       quantity: map['quantity'],
-      price: map['price'],
-      total: map['total'],
+      price: map['price']?.toDouble() ?? 0.0,
+      gst: map['gst']?.toDouble() ?? 0.0,
+      total: map['total']?.toDouble() ?? 0.0,
     );
   }
 }

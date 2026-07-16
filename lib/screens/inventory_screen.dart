@@ -650,7 +650,64 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  void _confirmDelete(Product p) {
+  void _confirmDelete(Product p) async {
+    if (p.id == null) return;
+
+    // Check if product can be deleted
+    final blockReason = await DatabaseHelper.instance.canDeleteProduct(p.id!);
+
+    if (!mounted) return;
+
+    if (blockReason != null) {
+      // Show blocking error dialog
+      showDialog(
+        context: context,
+        builder: (_) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            width: 420,
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(color: Color(0xFFFFF7ED), shape: BoxShape.circle),
+                  child: const Icon(Icons.block_rounded, color: Color(0xFFD97706), size: 36),
+                ),
+                const SizedBox(height: 24),
+                const Text('Cannot Delete Product',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20, color: Color(0xFF1A2E2B))),
+                const SizedBox(height: 12),
+                Text(
+                  blockReason,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.55),
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0F4C81),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('OK', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      return;
+    }
+
+    // Product is safe to delete — show confirmation dialog
     showDialog(
       context: context,
       builder: (_) => Dialog(
@@ -692,10 +749,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () async {
-                        if (p.id != null) {
-                          await DatabaseHelper.instance.deleteProduct(p.id!);
-                          _loadProducts();
-                        }
+                        await DatabaseHelper.instance.deleteProduct(p.id!);
+                        _loadProducts();
                         if (mounted) {
                           Navigator.pop(context);
                           AppFeedback.show(
@@ -1068,7 +1123,7 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
   String? _selectedCategory;
   List<Map<String, dynamic>> _categories = [];
   bool _isLoadingCats = true;
-  List<_PackagingRow> _productPkgRows = [];
+  final List<_PackagingRow> _productPkgRows = [];
 
   @override
   void initState() {
