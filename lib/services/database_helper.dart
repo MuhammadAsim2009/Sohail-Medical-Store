@@ -1343,14 +1343,14 @@ CREATE TABLE IF NOT EXISTS product_categories (
           double.infinity,
         );
         await txn.rawUpdate(
-          'UPDATE customers SET pendingAmount = pendingAmount + ?, advanceAmount = advanceAmount + ?, totalPurchases = totalPurchases + ?, lastVisit = ? WHERE id = ?',
-          [dueAmount, advanceAmount, sale.total, sale.date, sale.customerId],
+          'UPDATE customers SET pendingAmount = pendingAmount + ?, advanceAmount = advanceAmount + ?, totalPurchases = totalPurchases + ?, lastVisit = ?, updated_at = ? WHERE id = ?',
+          [dueAmount, advanceAmount, sale.total, sale.date, DateTime.now().millisecondsSinceEpoch, sale.customerId],
         );
       }
       if (sale.paymentMethod == 'Cash') {
         await txn.rawUpdate(
-          'UPDATE daily_sales_sheets SET expected_cash = expected_cash + ? WHERE id = ?',
-          [sale.received, sale.dssId],
+          'UPDATE daily_sales_sheets SET expected_cash = expected_cash + ?, updated_at = ? WHERE id = ?',
+          [sale.received, DateTime.now().millisecondsSinceEpoch, sale.dssId],
         );
       }
     });
@@ -1401,6 +1401,22 @@ CREATE TABLE IF NOT EXISTS product_categories (
       }
       return id;
     });
+  }
+
+  Future<String> getNextSupplierPaymentReference() async {
+    final db = await instance.database;
+    final result = await db.rawQuery('SELECT reference FROM supplier_payments WHERE reference LIKE "PAY-SUP-%" ORDER BY id DESC LIMIT 1');
+    if (result.isNotEmpty) {
+      final lastRef = result.first['reference'] as String;
+      final parts = lastRef.split('-');
+      if (parts.length == 3) {
+        final lastNum = int.tryParse(parts[2]);
+        if (lastNum != null) {
+          return 'PAY-SUP-${(lastNum + 1).toString().padLeft(3, '0')}';
+        }
+      }
+    }
+    return 'PAY-SUP-001';
   }
 
   Future<int> insertSupplierPayment(SupplierPayment payment) async {
@@ -2018,21 +2034,21 @@ CREATE TABLE IF NOT EXISTS product_categories (
         await txn.insert('sales_return_items', itemMap);
         // Restock
         await txn.rawUpdate(
-          'UPDATE products SET stock = stock + ? WHERE id = ?',
-          [item.quantityReturned, item.productId],
+          'UPDATE products SET stock = stock + ?, updated_at = ? WHERE id = ?',
+          [item.quantityReturned, DateTime.now().millisecondsSinceEpoch, item.productId],
         );
       }
 
       // Update original sale's balance and status
       await txn.rawUpdate(
-        'UPDATE sales SET balance = CASE WHEN balance - ? <= 0.01 THEN 0 ELSE balance - ? END, status = CASE WHEN balance - ? <= 0.01 THEN \'Paid\' ELSE status END WHERE invoice_number = ?',
-        [returnAmount, returnAmount, returnAmount, returnData.invoiceNumber],
+        'UPDATE sales SET balance = CASE WHEN balance - ? <= 0.01 THEN 0 ELSE balance - ? END, status = CASE WHEN balance - ? <= 0.01 THEN \'Paid\' ELSE status END, updated_at = ? WHERE invoice_number = ?',
+        [returnAmount, returnAmount, returnAmount, DateTime.now().millisecondsSinceEpoch, returnData.invoiceNumber],
       );
 
       if (saleCustomerId?.isNotEmpty == true && saleBalance > 0) {
         await txn.rawUpdate(
-          'UPDATE customers SET pendingAmount = CASE WHEN pendingAmount - ? <= 0.01 THEN 0 ELSE pendingAmount - ? END WHERE id = ?',
-          [returnAmount, returnAmount, saleCustomerId],
+          'UPDATE customers SET pendingAmount = CASE WHEN pendingAmount - ? <= 0.01 THEN 0 ELSE pendingAmount - ? END, updated_at = ? WHERE id = ?',
+          [returnAmount, returnAmount, DateTime.now().millisecondsSinceEpoch, saleCustomerId],
         );
       }
     });
@@ -2074,7 +2090,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
     }
     map.remove('id');
     FirebaseSyncService.instance.triggerAutoSync();
-    return db.update('sales_returns', map, where: 'id = ?', whereArgs: [id]);
+    return db.update('sales_returns', _stamp(map, isUpdate: true), where: 'id = ?', whereArgs: [id]);
   }
 
   // -- DEBUGGING ---------------------------------------------------------------

@@ -1157,8 +1157,17 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
   @override
   void initState() {
     super.initState();
-    _receiptController.text = 'PAY-CUST-${DateTime.now().millisecondsSinceEpoch}';
+    _loadReference();
     _loadInvoices();
+  }
+
+  Future<void> _loadReference() async {
+    final ref = await DatabaseHelper.instance.getNextSupplierPaymentReference();
+    if (mounted) {
+      setState(() {
+        _receiptController.text = ref;
+      });
+    }
   }
 
   @override
@@ -1437,11 +1446,7 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                         );
                         await DatabaseHelper.instance.insertSupplierPayment(payment);
 
-                        // Update supplier advance/pending
-                        final updatedSupplier = widget.supplier.copyWith(
-                          advanceAmount: widget.supplier.advanceAmount + amount,
-                        );
-                        await DatabaseHelper.instance.updateSupplier(updatedSupplier);
+
 
                         if (context.mounted) {
                           Navigator.of(context).pop(true);
