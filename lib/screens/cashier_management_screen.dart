@@ -81,6 +81,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
     final confirmPasswordController = TextEditingController();
     final formKey = GlobalKey<FormState>();
     bool obscurePassword = true;
+    bool obscureConfirmPassword = true;
     String role = 'cashier';
 
     await showDialog(
@@ -330,7 +331,7 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                       const SizedBox(height: 8),
                       TextFormField(
                         controller: confirmPasswordController,
-                        obscureText: obscurePassword,
+                        obscureText: obscureConfirmPassword,
                         decoration: InputDecoration(
                           hintText: 'Repeat your password',
                           hintStyle: TextStyle(color: Colors.grey.shade400),
@@ -338,6 +339,21 @@ class _CashierManagementScreenState extends State<CashierManagementScreen> {
                             Icons.lock_outline_rounded,
                             color: Colors.grey,
                             size: 20,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureConfirmPassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: Colors.grey,
+                              size: 20,
+                            ),
+                            onPressed: () {
+                              setStateDialog(() {
+                                obscureConfirmPassword =
+                                    !obscureConfirmPassword;
+                              });
+                            },
                           ),
                           filled: true,
                           fillColor: const Color(0xFFF8FAFC),

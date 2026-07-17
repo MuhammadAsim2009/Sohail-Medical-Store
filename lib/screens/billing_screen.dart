@@ -41,13 +41,11 @@ class _BillingScreenState extends State<BillingScreen> {
   double get _outstandingBalance => _sales.fold(0, (s, i) => s + i.balance);
   int get _partialCount => _sales.where((i) => i.balance > 0).length;
 
-
   @override
   void initState() {
     super.initState();
     _loadData();
   }
-
 
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
@@ -100,10 +98,11 @@ class _BillingScreenState extends State<BillingScreen> {
                   const SizedBox(height: 20),
                   const ExecutiveHeader(
                     title: 'Sales',
-                    subtitle: 'Manage daily invoices, track collections, and monitor outstanding balances.',
+                    subtitle:
+                        'Manage daily invoices, track collections, and monitor outstanding balances.',
                   ),
                   const SizedBox(height: 20),
-                  
+
                   _buildSummaryCards(),
                   const SizedBox(height: 20),
                   _buildActionBar(),
@@ -119,8 +118,6 @@ class _BillingScreenState extends State<BillingScreen> {
       ),
     );
   }
-
-  
 
   // ── Summary Cards ─────────────────────────
   Widget _buildSummaryCards() {
@@ -246,7 +243,6 @@ class _BillingScreenState extends State<BillingScreen> {
     );
   }
 
-
   void _showOpenDSSDialog() {
     showDialog(
       context: context,
@@ -280,7 +276,11 @@ class _BillingScreenState extends State<BillingScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF0A3356), Color(0xFF0F4C81), Color(0xFF1565C0)],
+                    colors: [
+                      Color(0xFF0A3356),
+                      Color(0xFF0F4C81),
+                      Color(0xFF1565C0),
+                    ],
                   ),
                   borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
                 ),
@@ -293,16 +293,35 @@ class _BillingScreenState extends State<BillingScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          width: 1.5,
+                        ),
                       ),
-                      child: const Icon(Icons.lock_open_rounded, color: Colors.white, size: 26),
+                      child: const Icon(
+                        Icons.lock_open_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Open Sales Shift',
-                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    const Text(
+                      'Open Sales Shift',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('Start accepting sales for today',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
+                    Text(
+                      'Start accepting sales for today',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -321,12 +340,20 @@ class _BillingScreenState extends State<BillingScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.info_outline_rounded, color: Color(0xFF0F4C81), size: 18),
+                          const Icon(
+                            Icons.info_outline_rounded,
+                            color: Color(0xFF0F4C81),
+                            size: 18,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               'Opening a new Daily Sales Sheet will allow you to record sales for today.',
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade700, height: 1.5),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.grey.shade700,
+                                height: 1.5,
+                              ),
                             ),
                           ),
                         ],
@@ -346,7 +373,13 @@ class _BillingScreenState extends State<BillingScreen> {
                                 side: BorderSide(color: Colors.grey.shade200),
                               ),
                             ),
-                            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -354,10 +387,18 @@ class _BillingScreenState extends State<BillingScreen> {
                           flex: 2,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(colors: [Color(0xFF0F4C81), Color(0xFF1565C0)]),
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF0F4C81), Color(0xFF1565C0)],
+                              ),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
-                                BoxShadow(color: const Color(0xFF0F4C81).withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4)),
+                                BoxShadow(
+                                  color: const Color(
+                                    0xFF0F4C81,
+                                  ).withValues(alpha: 0.35),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
                               ],
                             ),
                             child: ElevatedButton.icon(
@@ -368,18 +409,35 @@ class _BillingScreenState extends State<BillingScreen> {
                                   _loadData();
                                 } catch (e) {
                                   if (mounted) {
-                                    AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
+                                    AppFeedback.show(
+                                      context,
+                                      e.toString(),
+                                      type: AppFeedbackType.error,
+                                    );
                                   }
                                 }
                               },
-                              icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-                              label: const Text('Open Shift', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              icon: const Icon(
+                                Icons.check_circle_outline_rounded,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                'Open Shift',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
                                 shadowColor: Colors.transparent,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                             ),
                           ),
@@ -432,9 +490,15 @@ class _BillingScreenState extends State<BillingScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Colors.red.shade900, Colors.red.shade700, Colors.red.shade500],
+                    colors: [
+                      Colors.red.shade900,
+                      Colors.red.shade700,
+                      Colors.red.shade500,
+                    ],
                   ),
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(24),
+                  ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,16 +509,35 @@ class _BillingScreenState extends State<BillingScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.25), width: 1.5),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.25),
+                          width: 1.5,
+                        ),
                       ),
-                      child: const Icon(Icons.lock_rounded, color: Colors.white, size: 26),
+                      child: const Icon(
+                        Icons.lock_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    const Text('Close Sales Shift',
-                        style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -0.3)),
+                    const Text(
+                      'Close Sales Shift',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text('End the current Daily Sales Sheet',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13)),
+                    Text(
+                      'End the current Daily Sales Sheet',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 13,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -473,12 +556,20 @@ class _BillingScreenState extends State<BillingScreen> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.warning_amber_rounded, color: Colors.red.shade600, size: 18),
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.red.shade600,
+                            size: 18,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Text(
                               "Closing the sales sheet will lock today's records. No new sales can be added until a new shift is opened.",
-                              style: TextStyle(fontSize: 13, color: Colors.red.shade800, height: 1.5),
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.red.shade800,
+                                height: 1.5,
+                              ),
                             ),
                           ),
                         ],
@@ -498,7 +589,13 @@ class _BillingScreenState extends State<BillingScreen> {
                                 side: BorderSide(color: Colors.grey.shade200),
                               ),
                             ),
-                            child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                            child: const Text(
+                              'Cancel',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -506,10 +603,19 @@ class _BillingScreenState extends State<BillingScreen> {
                           flex: 2,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              gradient: LinearGradient(colors: [Colors.red.shade700, Colors.red.shade500]),
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.red.shade700,
+                                  Colors.red.shade500,
+                                ],
+                              ),
                               borderRadius: BorderRadius.circular(12),
                               boxShadow: [
-                                BoxShadow(color: Colors.red.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4)),
+                                BoxShadow(
+                                  color: Colors.red.withValues(alpha: 0.35),
+                                  blurRadius: 12,
+                                  offset: const Offset(0, 4),
+                                ),
                               ],
                             ),
                             child: ElevatedButton.icon(
@@ -518,13 +624,18 @@ class _BillingScreenState extends State<BillingScreen> {
                                 try {
                                   final closingDss = _currentDSS!;
                                   final closingSales = List<Sale>.from(_sales);
-                                  await DatabaseHelper.instance.closeDSS(dssId, 0);
+                                  await DatabaseHelper.instance.closeDSS(
+                                    dssId,
+                                    0,
+                                  );
                                   _loadData();
                                   if (mounted) {
                                     showDialog(
                                       context: context,
                                       useRootNavigator: true,
-                                      barrierColor: Colors.black.withValues(alpha: 0.45),
+                                      barrierColor: Colors.black.withValues(
+                                        alpha: 0.45,
+                                      ),
                                       builder: (ctx) => _DSSClosedReportDialog(
                                         dss: closingDss,
                                         sales: closingSales,
@@ -534,18 +645,32 @@ class _BillingScreenState extends State<BillingScreen> {
                                   }
                                 } catch (e) {
                                   if (mounted) {
-                                    AppFeedback.show(context, e.toString(), type: AppFeedbackType.error);
+                                    AppFeedback.show(
+                                      context,
+                                      e.toString(),
+                                      type: AppFeedbackType.error,
+                                    );
                                   }
                                 }
                               },
                               icon: const Icon(Icons.lock_rounded, size: 18),
-                              label: const Text('Close Day', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                              label: const Text(
+                                'Close Day',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 14,
+                                ),
+                              ),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.transparent,
                                 foregroundColor: Colors.white,
                                 shadowColor: Colors.transparent,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
                               ),
                             ),
                           ),
@@ -562,7 +687,6 @@ class _BillingScreenState extends State<BillingScreen> {
       ),
     );
   }
-
 
   // ── Search Bar ────────────────────────────
   Widget _buildSearchBar() {
@@ -1055,8 +1179,9 @@ class _SaleRowState extends State<_SaleRow> {
     if (!context.mounted) return;
 
     final d = DateTime.parse(widget.sale.date);
-    final dateStr = '${d.day}/${d.month}/${d.year} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
-    
+    final dateStr =
+        '${d.day}/${d.month}/${d.year} ${d.hour}:${d.minute.toString().padLeft(2, '0')}';
+
     Color statusColor;
     Color statusBg;
     switch (widget.sale.status.toLowerCase()) {
@@ -1072,7 +1197,7 @@ class _SaleRowState extends State<_SaleRow> {
         statusColor = Colors.grey.shade600;
         statusBg = Colors.grey.shade100;
     }
-    
+
     showDialog(
       context: context,
       useRootNavigator: true,
@@ -1080,7 +1205,9 @@ class _SaleRowState extends State<_SaleRow> {
         return Dialog(
           backgroundColor: Colors.white,
           surfaceTintColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
           child: Container(
             width: 550,
             constraints: const BoxConstraints(maxHeight: 700),
@@ -1089,11 +1216,18 @@ class _SaleRowState extends State<_SaleRow> {
               children: [
                 // Header
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                    border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(20),
+                    ),
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey.shade200),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1127,14 +1261,18 @@ class _SaleRowState extends State<_SaleRow> {
                           shape: BoxShape.circle,
                         ),
                         child: IconButton(
-                          icon: Icon(Icons.close, color: Colors.grey.shade600, size: 20),
+                          icon: Icon(
+                            Icons.close,
+                            color: Colors.grey.shade600,
+                            size: 20,
+                          ),
                           onPressed: () => Navigator.pop(context),
                         ),
-                      )
+                      ),
                     ],
                   ),
                 ),
-                
+
                 // Content
                 Flexible(
                   child: SingleChildScrollView(
@@ -1152,11 +1290,12 @@ class _SaleRowState extends State<_SaleRow> {
                           ),
                           child: Row(
                             children: [
+                              Expanded(child: _buildMetaItem('Date', dateStr)),
                               Expanded(
-                                child: _buildMetaItem('Date', dateStr),
-                              ),
-                              Expanded(
-                                child: _buildMetaItem('Customer', widget.sale.customerName ?? 'Walk-in'),
+                                child: _buildMetaItem(
+                                  'Customer',
+                                  widget.sale.customerName ?? 'Walk-in',
+                                ),
                               ),
                               Expanded(
                                 child: Column(
@@ -1173,7 +1312,10 @@ class _SaleRowState extends State<_SaleRow> {
                                     ),
                                     const SizedBox(height: 6),
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 4,
+                                      ),
                                       decoration: BoxDecoration(
                                         color: statusBg,
                                         borderRadius: BorderRadius.circular(20),
@@ -1194,7 +1336,7 @@ class _SaleRowState extends State<_SaleRow> {
                           ),
                         ),
                         const SizedBox(height: 32),
-                        
+
                         // Items Header
                         const Text(
                           'Purchased Items',
@@ -1205,31 +1347,63 @@ class _SaleRowState extends State<_SaleRow> {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        
+
                         // Table Header
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: const Color(0xFFF3F4F6),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
-                              Expanded(flex: 3, child: Text('ITEM', style: _tableHeaderStyle())),
-                              Expanded(flex: 1, child: Text('QTY', style: _tableHeaderStyle(), textAlign: TextAlign.center)),
-                              Expanded(flex: 2, child: Text('PRICE', style: _tableHeaderStyle(), textAlign: TextAlign.right)),
-                              Expanded(flex: 2, child: Text('TOTAL', style: _tableHeaderStyle(), textAlign: TextAlign.right)),
+                              Expanded(
+                                flex: 3,
+                                child: Text('ITEM', style: _tableHeaderStyle()),
+                              ),
+                              Expanded(
+                                flex: 1,
+                                child: Text(
+                                  'QTY',
+                                  style: _tableHeaderStyle(),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'PRICE',
+                                  style: _tableHeaderStyle(),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
+                              Expanded(
+                                flex: 2,
+                                child: Text(
+                                  'TOTAL',
+                                  style: _tableHeaderStyle(),
+                                  textAlign: TextAlign.right,
+                                ),
+                              ),
                             ],
                           ),
                         ),
                         const SizedBox(height: 8),
-                        
+
                         // Items List
                         ...items.map((item) {
                           return Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
                             decoration: BoxDecoration(
-                              border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
+                              border: Border(
+                                bottom: BorderSide(color: Colors.grey.shade100),
+                              ),
                             ),
                             child: Row(
                               children: [
@@ -1237,7 +1411,11 @@ class _SaleRowState extends State<_SaleRow> {
                                   flex: 3,
                                   child: Text(
                                     item.productName,
-                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF374151)),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13,
+                                      color: Color(0xFF374151),
+                                    ),
                                   ),
                                 ),
                                 Expanded(
@@ -1245,7 +1423,11 @@ class _SaleRowState extends State<_SaleRow> {
                                   child: Text(
                                     '${item.quantity}',
                                     textAlign: TextAlign.center,
-                                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey.shade600),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                    ),
                                   ),
                                 ),
                                 Expanded(
@@ -1253,7 +1435,11 @@ class _SaleRowState extends State<_SaleRow> {
                                   child: Text(
                                     'Rs. ${item.price.toStringAsFixed(0)}',
                                     textAlign: TextAlign.right,
-                                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13, color: Colors.grey.shade600),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 13,
+                                      color: Colors.grey.shade600,
+                                    ),
                                   ),
                                 ),
                                 Expanded(
@@ -1261,16 +1447,20 @@ class _SaleRowState extends State<_SaleRow> {
                                   child: Text(
                                     'Rs. ${(item.price * item.quantity).toStringAsFixed(0)}',
                                     textAlign: TextAlign.right,
-                                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Color(0xFF111827)),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: Color(0xFF111827),
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
                           );
                         }),
-                        
+
                         const SizedBox(height: 24),
-                        
+
                         // Summary Section
                         Align(
                           alignment: Alignment.centerRight,
@@ -1284,18 +1474,28 @@ class _SaleRowState extends State<_SaleRow> {
                             ),
                             child: Column(
                               children: [
-                                _buildSummaryRow('Total Amount', widget.sale.total, isBold: true),
+                                _buildSummaryRow(
+                                  'Total Amount',
+                                  widget.sale.total,
+                                  isBold: true,
+                                ),
                                 const SizedBox(height: 12),
-                                _buildSummaryRow('Received', widget.sale.received, color: const Color(0xFF16A34A)),
+                                _buildSummaryRow(
+                                  'Received',
+                                  widget.sale.received,
+                                  color: const Color(0xFF16A34A),
+                                ),
                                 const Padding(
                                   padding: EdgeInsets.symmetric(vertical: 12),
                                   child: Divider(height: 1),
                                 ),
                                 _buildSummaryRow(
-                                  'Balance Due', 
-                                  widget.sale.balance, 
+                                  'Balance Due',
+                                  widget.sale.balance,
                                   isBold: true,
-                                  color: widget.sale.balance > 0 ? const Color(0xFFDC2626) : const Color(0xFF111827),
+                                  color: widget.sale.balance > 0
+                                      ? const Color(0xFFDC2626)
+                                      : const Color(0xFF111827),
                                   size: 16,
                                 ),
                               ],
@@ -1306,14 +1506,21 @@ class _SaleRowState extends State<_SaleRow> {
                     ),
                   ),
                 ),
-                
+
                 // Footer
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
-                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(20),
+                    ),
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade200),
+                    ),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
@@ -1321,10 +1528,16 @@ class _SaleRowState extends State<_SaleRow> {
                       TextButton(
                         onPressed: () => Navigator.pop(context),
                         style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
                           foregroundColor: Colors.grey.shade700,
                         ),
-                        child: const Text('Close', style: TextStyle(fontWeight: FontWeight.w600)),
+                        child: const Text(
+                          'Close',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       ElevatedButton.icon(
@@ -1337,9 +1550,14 @@ class _SaleRowState extends State<_SaleRow> {
                         style: ElevatedButton.styleFrom(
                           backgroundColor: const Color(0xFF0F4C81),
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 12,
+                          ),
                           elevation: 0,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
                         ),
                       ),
                     ],
@@ -1388,7 +1606,13 @@ class _SaleRowState extends State<_SaleRow> {
     );
   }
 
-  Widget _buildSummaryRow(String label, double value, {bool isBold = false, Color? color, double size = 14}) {
+  Widget _buildSummaryRow(
+    String label,
+    double value, {
+    bool isBold = false,
+    Color? color,
+    double size = 14,
+  }) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -1405,7 +1629,9 @@ class _SaleRowState extends State<_SaleRow> {
           style: TextStyle(
             fontSize: size,
             fontWeight: isBold ? FontWeight.w700 : FontWeight.w600,
-            color: color ?? (isBold ? const Color(0xFF111827) : Colors.grey.shade700),
+            color:
+                color ??
+                (isBold ? const Color(0xFF111827) : Colors.grey.shade700),
           ),
         ),
       ],
@@ -1415,10 +1641,12 @@ class _SaleRowState extends State<_SaleRow> {
   Future<void> _printReceipt(BuildContext context) async {
     final items = await DatabaseHelper.instance.getSaleItems(widget.sale.id!);
     final settingsData = await DatabaseHelper.instance.getAllSettings();
-    final shopName = settingsData['shop_name']?.isNotEmpty == true ? settingsData['shop_name']! : 'PHARMACY RECEIPT';
+    final shopName = settingsData['shop_name']?.isNotEmpty == true
+        ? settingsData['shop_name']!
+        : 'PHARMACY RECEIPT';
     final phone = settingsData['shop_phone'] ?? '';
     final address = settingsData['shop_address'] ?? '';
-    
+
     // Process items for parent unit display
     final processedItems = <Map<String, dynamic>>[];
     for (var item in items) {
@@ -1432,11 +1660,11 @@ class _SaleRowState extends State<_SaleRow> {
         }
       }
       if (multiplier < 1) multiplier = 1;
-      
+
       final displayQty = item.quantity / multiplier;
       final displayPrice = item.price * multiplier;
       final displayAmount = displayPrice * displayQty;
-      
+
       processedItems.add({
         'name': item.productName,
         'qty': displayQty.toInt().toString(),
@@ -1444,7 +1672,7 @@ class _SaleRowState extends State<_SaleRow> {
         'amount': displayAmount,
       });
     }
-    
+
     // Parse date and time if possible
     pw.Widget divider() {
       return pw.Padding(
@@ -1456,12 +1684,15 @@ class _SaleRowState extends State<_SaleRow> {
         ),
       );
     }
+
     String dateStr = widget.sale.date;
     String timeStr = '';
     try {
       final dt = DateTime.parse(widget.sale.date);
-      dateStr = "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
-      timeStr = "${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}";
+      dateStr =
+          "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
+      timeStr =
+          "${dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour)}:${dt.minute.toString().padLeft(2, '0')} ${dt.hour >= 12 ? 'PM' : 'AM'}";
     } catch (e) {
       // Fallback if not parseable
       final parts = widget.sale.date.split(' ');
@@ -1470,12 +1701,16 @@ class _SaleRowState extends State<_SaleRow> {
         timeStr = parts[1];
       }
     }
-    
+
     final pdf = pw.Document();
 
     pdf.addPage(
       pw.Page(
-        pageFormat: const PdfPageFormat(68 * PdfPageFormat.mm, double.infinity, marginAll: 0),
+        pageFormat: const PdfPageFormat(
+          68 * PdfPageFormat.mm,
+          double.infinity,
+          marginAll: 0,
+        ),
         margin: pw.EdgeInsets.zero,
         build: (pw.Context context) {
           return pw.Column(
@@ -1488,16 +1723,46 @@ class _SaleRowState extends State<_SaleRow> {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Text(shopName, style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 14), textAlign: pw.TextAlign.center),
-                    if (address.isNotEmpty) pw.Text(address, style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9), textAlign: pw.TextAlign.center),
-                    if (phone.isNotEmpty) pw.Text('Contact: $phone', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                    pw.Text(
+                      shopName,
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                      textAlign: pw.TextAlign.center,
+                    ),
+                    if (address.isNotEmpty)
+                      pw.Text(
+                        address,
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    if (phone.isNotEmpty)
+                      pw.Text(
+                        'Contact: $phone',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                      ),
                   ],
                 ),
               ),
               divider(),
               pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 1),
-                child: pw.Center(child: pw.Text('INVOICE INFORMATION', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                child: pw.Center(
+                  child: pw.Text(
+                    'INVOICE INFORMATION',
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 9,
+                    ),
+                  ),
+                ),
               ),
               divider(),
               pw.Padding(
@@ -1509,9 +1774,27 @@ class _SaleRowState extends State<_SaleRow> {
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text('Inv #: ${widget.sale.invoiceNumber}', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                          pw.Text('Date: $dateStr', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                          pw.Text('Time: $timeStr', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                          pw.Text(
+                            'Inv #: ${widget.sale.invoiceNumber}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.normal,
+                              fontSize: 9,
+                            ),
+                          ),
+                          pw.Text(
+                            'Date: $dateStr',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.normal,
+                              fontSize: 9,
+                            ),
+                          ),
+                          pw.Text(
+                            'Time: $timeStr',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.normal,
+                              fontSize: 9,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1519,8 +1802,20 @@ class _SaleRowState extends State<_SaleRow> {
                       child: pw.Column(
                         crossAxisAlignment: pw.CrossAxisAlignment.start,
                         children: [
-                          pw.Text('Cust: ${widget.sale.customerName ?? 'Walk-in'}', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                          pw.Text('Status: ${widget.sale.balance <= 0 ? 'PAID' : 'PENDING'}', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                          pw.Text(
+                            'Cust: ${widget.sale.customerName ?? 'Walk-in'}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.normal,
+                              fontSize: 9,
+                            ),
+                          ),
+                          pw.Text(
+                            'Status: ${widget.sale.balance <= 0 ? 'PAID' : 'PENDING'}',
+                            style: pw.TextStyle(
+                              fontWeight: pw.FontWeight.normal,
+                              fontSize: 9,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -1530,18 +1825,74 @@ class _SaleRowState extends State<_SaleRow> {
               divider(),
               pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 1),
-                child: pw.Center(child: pw.Text('PRODUCT DETAILS', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
+                child: pw.Center(
+                  child: pw.Text(
+                    'PRODUCT DETAILS',
+                    style: pw.TextStyle(
+                      fontWeight: pw.FontWeight.bold,
+                      fontSize: 9,
+                    ),
+                  ),
+                ),
               ),
               divider(),
               pw.Padding(
                 padding: const pw.EdgeInsets.symmetric(vertical: 1),
                 child: pw.Row(
                   children: [
-                    pw.SizedBox(width: 16, child: pw.Text('#', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Expanded(flex: 3, child: pw.Text('Item', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold))),
-                    pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.center)),
-                    pw.Expanded(flex: 2, child: pw.Text('Price', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
-                    pw.Expanded(flex: 2, child: pw.Text('Amount', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold), textAlign: pw.TextAlign.right)),
+                    pw.SizedBox(
+                      width: 16,
+                      child: pw.Text(
+                        '#',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 3,
+                      child: pw.Text(
+                        'Item',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 1,
+                      child: pw.Text(
+                        'Qty',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textAlign: pw.TextAlign.center,
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Price',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
+                    pw.Expanded(
+                      flex: 2,
+                      child: pw.Text(
+                        'Amount',
+                        style: pw.TextStyle(
+                          fontSize: 9,
+                          fontWeight: pw.FontWeight.bold,
+                        ),
+                        textAlign: pw.TextAlign.right,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1560,11 +1911,59 @@ class _SaleRowState extends State<_SaleRow> {
                           pw.Row(
                             crossAxisAlignment: pw.CrossAxisAlignment.start,
                             children: [
-                              pw.SizedBox(width: 16, child: pw.Text('${idx + 1}.', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                              pw.Expanded(flex: 3, child: pw.Text(item['name'], style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9))),
-                              pw.Expanded(flex: 1, child: pw.Text(item['qty'], style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9), textAlign: pw.TextAlign.center)),
-                              pw.Expanded(flex: 2, child: pw.Text((item['price'] as double).toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9), textAlign: pw.TextAlign.right)),
-                              pw.Expanded(flex: 2, child: pw.Text((item['amount'] as double).toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9), textAlign: pw.TextAlign.right)),
+                              pw.SizedBox(
+                                width: 16,
+                                child: pw.Text(
+                                  '${idx + 1}.',
+                                  style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.bold,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 3,
+                                child: pw.Text(
+                                  item['name'],
+                                  style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.bold,
+                                    fontSize: 9,
+                                  ),
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 1,
+                                child: pw.Text(
+                                  item['qty'],
+                                  style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.normal,
+                                    fontSize: 9,
+                                  ),
+                                  textAlign: pw.TextAlign.center,
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 2,
+                                child: pw.Text(
+                                  (item['price'] as double).toStringAsFixed(2),
+                                  style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.normal,
+                                    fontSize: 9,
+                                  ),
+                                  textAlign: pw.TextAlign.right,
+                                ),
+                              ),
+                              pw.Expanded(
+                                flex: 2,
+                                child: pw.Text(
+                                  (item['amount'] as double).toStringAsFixed(2),
+                                  style: pw.TextStyle(
+                                    fontWeight: pw.FontWeight.normal,
+                                    fontSize: 9,
+                                  ),
+                                  textAlign: pw.TextAlign.right,
+                                ),
+                              ),
                             ],
                           ),
                           if (idx < processedItems.length - 1)
@@ -1581,8 +1980,21 @@ class _SaleRowState extends State<_SaleRow> {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('Subtotal', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                    pw.Text((widget.sale.total + widget.sale.discount).toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                    pw.Text(
+                      'Subtotal',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.normal,
+                        fontSize: 9,
+                      ),
+                    ),
+                    pw.Text(
+                      (widget.sale.total + widget.sale.discount)
+                          .toStringAsFixed(2),
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.normal,
+                        fontSize: 9,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1593,8 +2005,20 @@ class _SaleRowState extends State<_SaleRow> {
                   child: pw.Row(
                     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                     children: [
-                      pw.Text('Discount', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                      pw.Text('-${widget.sale.discount.toStringAsFixed(2)}', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                      pw.Text(
+                        'Discount',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                      ),
+                      pw.Text(
+                        '-${widget.sale.discount.toStringAsFixed(2)}',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1605,8 +2029,20 @@ class _SaleRowState extends State<_SaleRow> {
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
-                    pw.Text('GRAND TOTAL', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
-                    pw.Text(widget.sale.total.toStringAsFixed(2), style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 11)),
+                    pw.Text(
+                      'GRAND TOTAL',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    pw.Text(
+                      widget.sale.total.toStringAsFixed(2),
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1618,10 +2054,34 @@ class _SaleRowState extends State<_SaleRow> {
                   child: pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Text('NOTES:', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 10)),
-                      pw.Text('1. Products cannot be returned without a receipt.', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                      pw.Text('2. No returns accepted after 7 days.', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                      pw.Text('3. Please check your receipt and cash before leaving.', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                      pw.Text(
+                        'NOTES:',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.bold,
+                          fontSize: 10,
+                        ),
+                      ),
+                      pw.Text(
+                        '1. Products cannot be returned without a receipt.',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                      ),
+                      pw.Text(
+                        '2. No returns accepted after 7 days.',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                      ),
+                      pw.Text(
+                        '3. Please check your receipt and cash before leaving.',
+                        style: pw.TextStyle(
+                          fontWeight: pw.FontWeight.normal,
+                          fontSize: 9,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1632,10 +2092,34 @@ class _SaleRowState extends State<_SaleRow> {
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.center,
                   children: [
-                    pw.Text('Powered By TryUnity Solutions', style: pw.TextStyle(fontWeight: pw.FontWeight.bold, fontSize: 9)),
-                    pw.Text('Developed By Sir Alee', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                    pw.Text('Contact: +92 302 3476605', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
-                    pw.Text('Email: dev-alee@outlook.com', style: pw.TextStyle(fontWeight: pw.FontWeight.normal, fontSize: 9)),
+                    pw.Text(
+                      'Powered By TryUnity Solutions',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.bold,
+                        fontSize: 9,
+                      ),
+                    ),
+                    pw.Text(
+                      'Developed By Sir Alee',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.normal,
+                        fontSize: 9,
+                      ),
+                    ),
+                    pw.Text(
+                      'Contact: +92 302 3476605',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.normal,
+                        fontSize: 9,
+                      ),
+                    ),
+                    pw.Text(
+                      'Email: dev-alee@outlook.com',
+                      style: pw.TextStyle(
+                        fontWeight: pw.FontWeight.normal,
+                        fontSize: 9,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1647,7 +2131,11 @@ class _SaleRowState extends State<_SaleRow> {
 
     await Printing.layoutPdf(
       onLayout: (PdfPageFormat format) async => pdf.save(),
-      format: const PdfPageFormat(68 * PdfPageFormat.mm, double.infinity, marginAll: 0),
+      format: const PdfPageFormat(
+        68 * PdfPageFormat.mm,
+        double.infinity,
+        marginAll: 0,
+      ),
     );
   }
 }
@@ -1716,8 +2204,12 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
 
   final TextEditingController _receivedController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController(text: '1');
-  final TextEditingController _stagedGstController = TextEditingController(text: '0');
-  final TextEditingController _discountController = TextEditingController(text: '0');
+  final TextEditingController _stagedGstController = TextEditingController(
+    text: '0',
+  );
+  final TextEditingController _discountController = TextEditingController(
+    text: '0',
+  );
   String _discountType = 'Rupees';
   String? _validationError;
   String? _stagedError;
@@ -1726,13 +2218,20 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   double get _subtotal => _cart.fold(0, (s, i) => s + i.total);
   double get _discountAmount {
     final val = double.tryParse(_discountController.text) ?? 0.0;
-    if (_discountType == 'Percentage') {
-      return _subtotal * (val / 100);
-    }
-    return val;
+    final raw = _discountType == 'Percentage' ? _subtotal * (val / 100) : val;
+    // Discount must never exceed the subtotal
+    return raw.clamp(0.0, _subtotal);
   }
+
+  bool get _discountExceedsTotal {
+    final val = double.tryParse(_discountController.text) ?? 0.0;
+    final raw = _discountType == 'Percentage' ? _subtotal * (val / 100) : val;
+    return raw > _subtotal;
+  }
+
   double get _taxAmount => (_subtotal - _discountAmount) * (_taxRate / 100);
-  double get _total => (_subtotal - _discountAmount + _taxAmount).roundToDouble();
+  double get _total =>
+      (_subtotal - _discountAmount + _taxAmount).roundToDouble();
   double get _stagedPricePerUnit {
     if (_stagedProduct == null || _stagedUnit == null) return 0;
     final p = _stagedProduct!;
@@ -1746,7 +2245,6 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   }
 
   double get _stagedLineTotal => _stagedPricePerUnit * _stagedQty;
-
 
   @override
   void initState() {
@@ -1765,7 +2263,6 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     }
   }
 
-
   @override
   void dispose() {
     _receivedController.dispose();
@@ -1780,7 +2277,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     final products = await DatabaseHelper.instance.getAllProducts();
     if (mounted) {
       setState(() {
-        _customers = customers.where((c) => c.id != 'walk-in-customer').toList();
+        _customers = customers
+            .where((c) => c.id != 'walk-in-customer')
+            .toList();
         _products = products;
         _isLoading = false;
       });
@@ -1793,7 +2292,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       _stagedUnit = p.packaging.isNotEmpty ? p.packaging.first.name : null;
       _stagedQty = 1;
       _qtyController.text = '1';
-      _stagedGstController.text = p.gst.toStringAsFixed(1).replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '');
+      _stagedGstController.text = p.gst
+          .toStringAsFixed(1)
+          .replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '');
       if (_stagedGstController.text.isEmpty) _stagedGstController.text = '0';
     });
   }
@@ -1827,12 +2328,13 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     setState(() {
       _stagedError = null;
       final existingIndex = _cart.indexWhere((c) => c.product.id == p.id);
-      
+
       if (existingIndex >= 0) {
         if (_cart[existingIndex].unit == unit) {
           _cart[existingIndex].unitQty += _stagedQty;
         } else {
-          _stagedError = 'Product already in invoice. Please edit the existing item.';
+          _stagedError =
+              'Product already in invoice. Please edit the existing item.';
           return;
         }
       } else {
@@ -1868,7 +2370,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   Future<void> _editCartItem(int index) async {
     final item = _cart[index];
     final qtyController = TextEditingController(text: item.unitQty.toString());
-    final gstController = TextEditingController(text: item.gst.toStringAsFixed(1));
+    final gstController = TextEditingController(
+      text: item.gst.toStringAsFixed(1),
+    );
     String selectedUnit = item.unit;
     final units = _unitOptionsForProduct(item.product);
 
@@ -1880,14 +2384,22 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
             final otherBaseUnits = _cart
                 .asMap()
                 .entries
-                .where((entry) => entry.key != index && entry.value.product.id == item.product.id)
+                .where(
+                  (entry) =>
+                      entry.key != index &&
+                      entry.value.product.id == item.product.id,
+                )
                 .fold(0, (sum, entry) => sum + entry.value.baseUnits);
             final multiplier = item.product.getMultiplier(selectedUnit);
-            final maxQty = ((item.product.stock - otherBaseUnits) / multiplier).floor().clamp(0, item.product.stock.toInt());
+            final maxQty = ((item.product.stock - otherBaseUnits) / multiplier)
+                .floor()
+                .clamp(0, item.product.stock.toInt());
             final pricePerUnit = _pricePerUnitFor(item.product, selectedUnit);
 
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
               title: const Text('Edit cart item'),
               content: SizedBox(
                 width: 420,
@@ -1898,16 +2410,28 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       initialValue: selectedUnit,
                       isExpanded: true,
                       decoration: const InputDecoration(labelText: 'Unit'),
-                      items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                      items: units
+                          .map(
+                            (u) => DropdownMenuItem(value: u, child: Text(u)),
+                          )
+                          .toList(),
                       onChanged: (val) {
                         if (val == null) return;
                         setDialogState(() {
                           selectedUnit = val;
-                          final newMultiplier = item.product.getMultiplier(selectedUnit);
-                          final newMaxQty = ((item.product.stock - otherBaseUnits) / newMultiplier).floor();
-                          final currentQty = int.tryParse(qtyController.text.trim()) ?? 1;
+                          final newMultiplier = item.product.getMultiplier(
+                            selectedUnit,
+                          );
+                          final newMaxQty =
+                              ((item.product.stock - otherBaseUnits) /
+                                      newMultiplier)
+                                  .floor();
+                          final currentQty =
+                              int.tryParse(qtyController.text.trim()) ?? 1;
                           if (currentQty > newMaxQty) {
-                            qtyController.text = newMaxQty.clamp(0, 999999).toString();
+                            qtyController.text = newMaxQty
+                                .clamp(0, 999999)
+                                .toString();
                           }
                         });
                       },
@@ -1927,13 +2451,18 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       alignment: Alignment.centerLeft,
                       child: Text(
                         'Price: Rs. ${pricePerUnit.toStringAsFixed(0)} / $selectedUnit',
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: gstController,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'GST %',
                         hintText: '0',
@@ -1942,18 +2471,26 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       onChanged: (_) => setDialogState(() {}),
                     ),
                     const SizedBox(height: 8),
-                    Builder(builder: (_) {
-                      final qty = int.tryParse(qtyController.text.trim()) ?? 0;
-                      final gst = double.tryParse(gstController.text.trim()) ?? 0.0;
-                      final total = (pricePerUnit * qty) * (1 + gst / 100);
-                      return Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Total (with GST): Rs. ${total.toStringAsFixed(0)}',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F4C81)),
-                        ),
-                      );
-                    }),
+                    Builder(
+                      builder: (_) {
+                        final qty =
+                            int.tryParse(qtyController.text.trim()) ?? 0;
+                        final gst =
+                            double.tryParse(gstController.text.trim()) ?? 0.0;
+                        final total = (pricePerUnit * qty) * (1 + gst / 100);
+                        return Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            'Total (with GST): Rs. ${total.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                              color: Color(0xFF0F4C81),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   ],
                 ),
               ),
@@ -2008,6 +2545,15 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   void _saveSale() async {
     if (_cart.isEmpty) return;
 
+    // Guard: discount cannot exceed the subtotal
+    if (_discountExceedsTotal) {
+      setState(() {
+        _validationError =
+            'Discount cannot exceed the total amount (Rs. ${_subtotal.toStringAsFixed(2)})';
+      });
+      return;
+    }
+
     double received = double.tryParse(_receivedController.text) ?? 0.0;
     if (_paymentMethod == 'Cash' &&
         received < _total &&
@@ -2030,7 +2576,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     setState(() => _isSaving = true);
 
     try {
-      final invoiceNumber = await DatabaseHelper.instance.nextSaleInvoiceNumber();
+      final invoiceNumber = await DatabaseHelper.instance
+          .nextSaleInvoiceNumber();
       final sale = Sale(
         invoiceNumber: invoiceNumber,
         dssId: widget.dssId,
@@ -2042,12 +2589,12 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
         balance: balance,
         paymentMethod: _paymentMethod,
         status: balance > 0 ? 'Partial' : 'Paid',
-          taxRate: _taxRate,
-          taxAmount: _taxAmount,
-          discount: _discountAmount,
-          createdByUserId: AuthService.instance.currentUserId,
-          createdByRole: AuthService.instance.currentUserRole,
-        );
+        taxRate: _taxRate,
+        taxAmount: _taxAmount,
+        discount: _discountAmount,
+        createdByUserId: AuthService.instance.currentUserId,
+        createdByRole: AuthService.instance.currentUserRole,
+      );
 
       final items = _cart
           .map(
@@ -2092,7 +2639,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 800,
-        height: 650,
+        height: 700,
         child: Column(
           children: [
             // Dialog header
@@ -2160,11 +2707,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                 ),
                               ),
                             ],
-                            onChanged: (val) =>
-                                setState(() {
-                                  _selectedCustomer = val;
-                                  _validationError = null;
-                                }),
+                            onChanged: (val) => setState(() {
+                              _selectedCustomer = val;
+                              _validationError = null;
+                            }),
                           ),
                         ),
                         const SizedBox(width: 16),
@@ -2208,7 +2754,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
-                            onChanged: (_) => setState(() => _validationError = null),
+                            onChanged: (_) =>
+                                setState(() => _validationError = null),
                             decoration: InputDecoration(
                               labelText: 'Amount Received (Rs)',
                               errorText: _validationError,
@@ -2248,30 +2795,62 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                               ),
                               filled: true,
                               fillColor: const Color(0xFFF9FAFB),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: BorderSide.none),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(9),
+                                borderSide: BorderSide.none,
+                              ),
                             ),
                             initialValue: _discountType,
-                            items: ['Rupees', 'Percentage'].map((m) => DropdownMenuItem(value: m, child: Text(m))).toList(),
-                            onChanged: (val) => setState(() => _discountType = val!),
+                            items: ['Rupees', 'Percentage']
+                                .map(
+                                  (m) => DropdownMenuItem(
+                                    value: m,
+                                    child: Text(m),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (val) =>
+                                setState(() => _discountType = val!),
                           ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextFormField(
                             controller: _discountController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             decoration: InputDecoration(
                               labelText: 'Discount Value',
                               prefixIcon: Icon(
-                                _discountType == 'Percentage' ? Icons.percent : Icons.money,
+                                _discountType == 'Percentage'
+                                    ? Icons.percent
+                                    : Icons.money,
                                 size: 17,
-                                color: Colors.grey.shade400,
+                                color: _discountExceedsTotal
+                                    ? Colors.red
+                                    : Colors.grey.shade400,
                               ),
                               filled: true,
-                              fillColor: const Color(0xFFF9FAFB),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(9), borderSide: BorderSide.none),
+                              fillColor: _discountExceedsTotal
+                                  ? const Color(0xFFFFF0F0)
+                                  : const Color(0xFFF9FAFB),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(9),
+                                borderSide: BorderSide.none,
+                              ),
+                              errorText: _discountExceedsTotal
+                                  ? 'Exceeds total (Rs. ${_subtotal.toStringAsFixed(2)})'
+                                  : null,
+                              errorMaxLines: 1,
                             ),
                             onChanged: (_) => setState(() {}),
                           ),
@@ -2339,178 +2918,194 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                           children: [
                             Row(
                               children: [
-                            Expanded(
-                              flex: 3,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    _stagedProduct!.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 13,
-                                      color: Color(0xFF0F4C81),
-                                    ),
-                                  ),
-                                  Text(
-                                    'Stock: ${_stagedProduct!.formattedStock}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            // Unit dropdown
-                            if (_stagedProduct!.packaging.isNotEmpty)
-                              Expanded(
-                                flex: 2,
-                                child: DropdownButtonFormField<String>(
-                                  initialValue: _stagedUnit,
-                                  isDense: true,
-                                  decoration: InputDecoration(
-                                    labelText: 'Unit',
-                                    filled: true,
-                                    fillColor: Colors.white,
-                                    contentPadding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 10,
-                                    ),
-                                    border: OutlineInputBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                      borderSide: BorderSide.none,
-                                    ),
-                                  ),
-                                  items: _stagedProduct!.packaging
-                                      .map(
-                                        (u) => DropdownMenuItem(
-                                          value: u.name,
-                                          child: Text(u.name),
+                                Expanded(
+                                  flex: 3,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _stagedProduct!.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                          color: Color(0xFF0F4C81),
                                         ),
-                                      )
-                                      .toList(),
-                                  onChanged: (val) =>
-                                      setState(() => _stagedUnit = val),
-                                ),
-                              ),
-                            const SizedBox(width: 10),
-                            // Qty field
-                            SizedBox(
-                              width: 75,
-                              child: TextFormField(
-                                controller: _qtyController,
-                                keyboardType: TextInputType.number,
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  labelText: 'Qty',
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 10,
-                                  ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide.none,
+                                      ),
+                                      Text(
+                                        'Stock: ${_stagedProduct!.formattedStock}',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                onChanged: (val) => setState(
-                                  () => _stagedQty = int.tryParse(val) ?? 1,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            // GST field
-                            SizedBox(
-                              width: 80,
-                              child: TextFormField(
-                                controller: _stagedGstController,
-                                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                textAlign: TextAlign.center,
-                                decoration: InputDecoration(
-                                  labelText: 'GST %',
-                                  filled: true,
-                                  fillColor: Colors.white,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 10,
+                                const SizedBox(width: 10),
+                                // Unit dropdown
+                                if (_stagedProduct!.packaging.isNotEmpty)
+                                  Expanded(
+                                    flex: 2,
+                                    child: DropdownButtonFormField<String>(
+                                      initialValue: _stagedUnit,
+                                      isDense: true,
+                                      decoration: InputDecoration(
+                                        labelText: 'Unit',
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          borderSide: BorderSide.none,
+                                        ),
+                                      ),
+                                      items: _stagedProduct!.packaging
+                                          .map(
+                                            (u) => DropdownMenuItem(
+                                              value: u.name,
+                                              child: Text(u.name),
+                                            ),
+                                          )
+                                          .toList(),
+                                      onChanged: (val) =>
+                                          setState(() => _stagedUnit = val),
+                                    ),
                                   ),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                    borderSide: BorderSide.none,
+                                const SizedBox(width: 10),
+                                // Qty field
+                                SizedBox(
+                                  width: 75,
+                                  child: TextFormField(
+                                    controller: _qtyController,
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    decoration: InputDecoration(
+                                      labelText: 'Qty',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 10,
+                                          ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    onChanged: (val) => setState(
+                                      () => _stagedQty = int.tryParse(val) ?? 1,
+                                    ),
                                   ),
                                 ),
-                                onChanged: (_) => setState(() {}),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            // Price preview
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  'Rs. ${_stagedPricePerUnit.toStringAsFixed(0)}/unit',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade600,
+                                const SizedBox(width: 10),
+                                // GST field
+                                SizedBox(
+                                  width: 80,
+                                  child: TextFormField(
+                                    controller: _stagedGstController,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                    textAlign: TextAlign.center,
+                                    decoration: InputDecoration(
+                                      labelText: 'GST %',
+                                      filled: true,
+                                      fillColor: Colors.white,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 10,
+                                          ),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                    ),
+                                    onChanged: (_) => setState(() {}),
                                   ),
                                 ),
-                                Text(
-                                  '= Rs. ${_stagedLineTotal.toStringAsFixed(0)}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    color: _primary,
-                                    fontSize: 14,
+                                const SizedBox(width: 10),
+                                // Price preview
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      'Rs. ${_stagedPricePerUnit.toStringAsFixed(0)}/unit',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey.shade600,
+                                      ),
+                                    ),
+                                    Text(
+                                      '= Rs. ${_stagedLineTotal.toStringAsFixed(0)}',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: _primary,
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 10),
+                                ElevatedButton.icon(
+                                  onPressed: _addStagedToCart,
+                                  icon: const Icon(
+                                    Icons.add_shopping_cart,
+                                    size: 15,
+                                  ),
+                                  label: const Text('Add'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: _primary,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 14,
+                                      vertical: 11,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(width: 10),
-                            ElevatedButton.icon(
-                              onPressed: _addStagedToCart,
-                              icon: const Icon(
-                                Icons.add_shopping_cart,
-                                size: 15,
-                              ),
-                              label: const Text('Add'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _primary,
-                                foregroundColor: Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 11,
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: Icon(
+                                    Icons.close,
+                                    size: 18,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                  onPressed: () =>
+                                      setState(() => _stagedProduct = null),
+                                  tooltip: 'Cancel',
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            IconButton(
-                              icon: Icon(
-                                Icons.close,
-                                size: 18,
-                                color: Colors.grey.shade500,
-                              ),
-                              onPressed: () =>
-                                  setState(() => _stagedProduct = null),
-                              tooltip: 'Cancel',
-                            ),
                               ],
                             ),
                             if (_stagedError != null) ...[
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  const Icon(Icons.error_outline, color: Colors.red, size: 14),
+                                  const Icon(
+                                    Icons.error_outline,
+                                    color: Colors.red,
+                                    size: 14,
+                                  ),
                                   const SizedBox(width: 4),
                                   Expanded(
                                     child: Text(
                                       _stagedError!,
-                                      style: const TextStyle(color: Colors.red, fontSize: 12),
+                                      style: const TextStyle(
+                                        color: Colors.red,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -2728,18 +3323,41 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                                     onTap: () {
                                                       final item = _cart[i];
                                                       final p = item.product;
-                                                      final currentBaseUnits = _cart
-                                                          .where((c) => c.product.id == p.id)
-                                                          .fold(0, (sum, c) => sum + c.baseUnits);
-                                                      final extraBaseUnits = p.getMultiplier(item.unit);
-                                                      
-                                                      if (currentBaseUnits + extraBaseUnits > p.stock) {
-                                                        AppFeedback.show(context, 'Not enough stock! Available: ${p.formattedStock}', type: AppFeedbackType.error);
+                                                      final currentBaseUnits =
+                                                          _cart
+                                                              .where(
+                                                                (c) =>
+                                                                    c
+                                                                        .product
+                                                                        .id ==
+                                                                    p.id,
+                                                              )
+                                                              .fold(
+                                                                0,
+                                                                (sum, c) =>
+                                                                    sum +
+                                                                    c.baseUnits,
+                                                              );
+                                                      final extraBaseUnits = p
+                                                          .getMultiplier(
+                                                            item.unit,
+                                                          );
+
+                                                      if (currentBaseUnits +
+                                                              extraBaseUnits >
+                                                          p.stock) {
+                                                        AppFeedback.show(
+                                                          context,
+                                                          'Not enough stock! Available: ${p.formattedStock}',
+                                                          type: AppFeedbackType
+                                                              .error,
+                                                        );
                                                         return;
                                                       }
-                                                      
+
                                                       setState(
-                                                        () => _cart[i].unitQty++,
+                                                        () =>
+                                                            _cart[i].unitQty++,
                                                       );
                                                     },
                                                     child: Icon(
@@ -2783,7 +3401,8 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                                   size: 16,
                                                   color: _primary,
                                                 ),
-                                                onPressed: () => _editCartItem(i),
+                                                onPressed: () =>
+                                                    _editCartItem(i),
                                                 tooltip: 'Edit',
                                               ),
                                             ),
@@ -2816,16 +3435,31 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Subtotal: ', style: TextStyle(color: Colors.grey.shade600)),
-                          Text('Rs. ${_subtotal.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                          Text(
+                            'Subtotal: ',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                          Text(
+                            'Rs. ${_subtotal.toStringAsFixed(0)}',
+                            style: const TextStyle(fontWeight: FontWeight.w600),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          Text('Discount: ', style: TextStyle(color: Colors.grey.shade600)),
-                          Text('- Rs. ${_discountAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.red)),
+                          Text(
+                            'Discount: ',
+                            style: TextStyle(color: Colors.grey.shade600),
+                          ),
+                          Text(
+                            '- Rs. ${_discountAmount.toStringAsFixed(2)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.red,
+                            ),
+                          ),
                         ],
                       ),
                       if (_taxAmount > 0) ...[
@@ -2833,8 +3467,17 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
-                            Text('Tax (${_taxRate.toStringAsFixed(1)}%): ', style: TextStyle(color: Colors.grey.shade600)),
-                            Text('+ Rs. ${_taxAmount.toStringAsFixed(2)}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.orange)),
+                            Text(
+                              'Tax (${_taxRate.toStringAsFixed(1)}%): ',
+                              style: TextStyle(color: Colors.grey.shade600),
+                            ),
+                            Text(
+                              '+ Rs. ${_taxAmount.toStringAsFixed(2)}',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                color: Colors.orange,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -2842,7 +3485,13 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
-                          const Text('Total: ', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+                          const Text(
+                            'Total: ',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                           Text(
                             'Rs. ${_total.toStringAsFixed(0)}',
                             style: const TextStyle(
@@ -2901,7 +3550,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                             ),
                           )
                         : const Text(
-                            'Save & Print',
+                            'Save Invoice',
                             style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                   ),
@@ -3081,10 +3730,16 @@ class _DSSClosedReportDialogState extends State<_DSSClosedReportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    int invoicesCount = widget.sales.where((s) => s.status != 'Returned').length;
+    int invoicesCount = widget.sales
+        .where((s) => s.status != 'Returned')
+        .length;
     int returnsCount = widget.sales.where((s) => s.status == 'Returned').length;
-    double salesValue = widget.sales.where((s) => s.status != 'Returned').fold(0.0, (s, i) => s + i.total);
-    double returnValue = widget.sales.where((s) => s.status == 'Returned').fold(0.0, (s, i) => s + i.total);
+    double salesValue = widget.sales
+        .where((s) => s.status != 'Returned')
+        .fold(0.0, (s, i) => s + i.total);
+    double returnValue = widget.sales
+        .where((s) => s.status == 'Returned')
+        .fold(0.0, (s, i) => s + i.total);
     double netSales = salesValue - returnValue;
 
     final currency = NumberFormat.currency(symbol: 'Rs. ', decimalDigits: 0);
@@ -3101,144 +3756,253 @@ class _DSSClosedReportDialogState extends State<_DSSClosedReportDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF0F2FA),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.bar_chart, color: Color(0xFF5A67D8), size: 24),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'DSS Close Report',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1A202C)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '$dssName closed successfully. Here is the end-of-day summary.',
-                        style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: Icon(Icons.close, color: Colors.grey.shade400, size: 20),
-                )
-              ],
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFFECFDF5),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFD1FAE5)),
-              ),
-              child: Row(
+              Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(12),
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: const Color(0xFFF0F2FA),
                       borderRadius: BorderRadius.circular(10),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.02),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        )
-                      ],
                     ),
-                    child: const Icon(Icons.account_balance_wallet_outlined, color: Color(0xFF059669), size: 24),
+                    child: const Icon(
+                      Icons.bar_chart,
+                      color: Color(0xFF5A67D8),
+                      size: 24,
+                    ),
                   ),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Cash in hand after close', style: TextStyle(fontSize: 13, color: Color(0xFF4B5563))),
+                        const Text(
+                          'DSS Close Report',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF1A202C),
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text(currency.format(widget.actualCash), style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF059669))),
-                        const SizedBox(height: 4),
-                        Text('$dssName closed on $dateStr', style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                        Text(
+                          '$dssName closed successfully. Here is the end-of-day summary.',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
                       ],
                     ),
-                  )
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.grey.shade200),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Daily Sales Sheet Summary', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1A202C))),
-                  const SizedBox(height: 4),
-                  Text('A quick end-of-day snapshot of invoices, returns, quantities, and cash movement for this sheet.', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                  const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGridItem(Icons.receipt_long_outlined, const Color(0xFF5A67D8), 'Invoices in DSS', invoicesCount.toString())),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildGridItem(Icons.assignment_return_outlined, const Color(0xFFD97706), 'Returns in DSS', returnsCount.toString(), isOrange: true)),
-                    ],
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGridItem(Icons.trending_up, const Color(0xFF2563EB), 'Sales value', currency.format(salesValue))),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildGridItem(Icons.undo, const Color(0xFFDC2626), 'Return value', currency.format(returnValue), isRed: true)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(child: _buildGridItem(Icons.inventory_2_outlined, const Color(0xFF5A67D8), 'Qty sold', _loading ? '...' : _qtySold.toString())),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildGridItem(Icons.show_chart, const Color(0xFF059669), 'Net sales', currency.format(netSales), isGreen: true)),
-                    ],
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(
+                      Icons.close,
+                      color: Colors.grey.shade400,
+                      size: 20,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF5A67D8),
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFECFDF5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFD1FAE5)),
                 ),
-                child: const Text('Done', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        color: Color(0xFF059669),
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Cash in hand after close',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Color(0xFF4B5563),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            currency.format(widget.actualCash),
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF059669),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$dssName closed on $dateStr',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF6B7280),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Daily Sales Sheet Summary',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF1A202C),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'A quick end-of-day snapshot of invoices, returns, quantities, and cash movement for this sheet.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildGridItem(
+                            Icons.receipt_long_outlined,
+                            const Color(0xFF5A67D8),
+                            'Invoices in DSS',
+                            invoicesCount.toString(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildGridItem(
+                            Icons.assignment_return_outlined,
+                            const Color(0xFFD97706),
+                            'Returns in DSS',
+                            returnsCount.toString(),
+                            isOrange: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildGridItem(
+                            Icons.trending_up,
+                            const Color(0xFF2563EB),
+                            'Sales value',
+                            currency.format(salesValue),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildGridItem(
+                            Icons.undo,
+                            const Color(0xFFDC2626),
+                            'Return value',
+                            currency.format(returnValue),
+                            isRed: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildGridItem(
+                            Icons.inventory_2_outlined,
+                            const Color(0xFF5A67D8),
+                            'Qty sold',
+                            _loading ? '...' : _qtySold.toString(),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildGridItem(
+                            Icons.show_chart,
+                            const Color(0xFF059669),
+                            'Net sales',
+                            currency.format(netSales),
+                            isGreen: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF5A67D8),
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    'Done',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildGridItem(IconData icon, Color color, String title, String value, {bool isOrange = false, bool isRed = false, bool isGreen = false}) {
+  Widget _buildGridItem(
+    IconData icon,
+    Color color,
+    String title,
+    String value, {
+    bool isOrange = false,
+    bool isRed = false,
+    bool isGreen = false,
+  }) {
     Color bgColor = const Color(0xFFF3F4F6);
     if (isOrange) bgColor = const Color(0xFFFFFBEB);
     if (isRed) bgColor = const Color(0xFFFEF2F2);
@@ -3250,10 +4014,17 @@ class _DSSClosedReportDialogState extends State<_DSSClosedReportDialog> {
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: bgColor == const Color(0xFFF0F2FA) ? const Color(0xFFE0E7FF) : 
-                                 isOrange ? const Color(0xFFFEF3C7) : 
-                                 isRed ? const Color(0xFFFEE2E2) : 
-                                 isGreen ? const Color(0xFFD1FAE5) : Colors.transparent),
+        border: Border.all(
+          color: bgColor == const Color(0xFFF0F2FA)
+              ? const Color(0xFFE0E7FF)
+              : isOrange
+              ? const Color(0xFFFEF3C7)
+              : isRed
+              ? const Color(0xFFFEE2E2)
+              : isGreen
+              ? const Color(0xFFD1FAE5)
+              : Colors.transparent,
+        ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3264,8 +4035,12 @@ class _DSSClosedReportDialogState extends State<_DSSClosedReportDialog> {
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),
               boxShadow: [
-                BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 4, offset: const Offset(0, 2))
-              ]
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.03),
+                  blurRadius: 4,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Icon(icon, color: color, size: 20),
           ),
@@ -3274,16 +4049,27 @@ class _DSSClosedReportDialogState extends State<_DSSClosedReportDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF6B7280),
+                  ),
+                ),
                 const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF111827))),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF111827),
+                  ),
+                ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
   }
 }
-
-

@@ -82,12 +82,13 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
       final isFirstSync = lastSyncTs == 0;
 
       final result = await FirebaseSyncService.instance
-          .sync(forceInitial: isFirstSync)
-          .timeout(const Duration(seconds: 60));
+          .sync(forceInitial: isFirstSync, forceReset: true);
 
       if (!mounted) return;
 
-      if (result.offline) {
+      if (result.busy) {
+        AppFeedback.show(context, 'Sync already in progress. Please wait.', type: AppFeedbackType.warning);
+      } else if (result.offline) {
         AppFeedback.show(context, 'Sync failed: No internet connection or route to Google', type: AppFeedbackType.error);
         setState(() => _isPending = true);
       } else if (result.notAuthenticated) {
@@ -95,9 +96,10 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
         setState(() => _isPending = true);
       } else {
         final hasErrors = result.errors.isNotEmpty;
+        final errorDetail = hasErrors ? '\nErrors: ${result.errors.take(3).join('; ')}' : '';
         AppFeedback.show(
           context,
-          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.${hasErrors ? ' Some tables had errors.' : ''}',
+          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.$errorDetail',
           type: hasErrors ? AppFeedbackType.warning : AppFeedbackType.success,
         );
         await _loadLastSyncTime();

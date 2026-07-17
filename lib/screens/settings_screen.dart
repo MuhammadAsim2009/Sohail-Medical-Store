@@ -73,11 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         title: 'Synchronization',
                         child: const _SyncSettingsContent(),
                       ),
-                      const SizedBox(height: 24),
-                      _SettingsCard(
-                        title: 'Danger Zone',
-                        child: const _DangerZoneContent(),
-                      ),
+
                     ],
                   ),
                 ),
@@ -820,20 +816,26 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
     setState(() => _isSyncing = true);
 
     try {
-      final result = await FirebaseSyncService.instance.sync(forceInitial: true);
+      final result = await FirebaseSyncService.instance.sync(forceInitial: true, forceReset: true);
 
       if (!mounted) return;
 
-      if (result.offline) {
+      if (result.busy) {
         AppFeedback.show(
           context,
-          'Sync failed: No internet connection or route to Google',
+          'Sync already in progress. Please wait a moment and try again.',
+          type: AppFeedbackType.warning,
+        );
+      } else if (result.offline) {
+        AppFeedback.show(
+          context,
+          'Sync failed: Could not reach Firebase servers. Check your internet connection.',
           type: AppFeedbackType.error,
         );
       } else if (result.notAuthenticated) {
         AppFeedback.show(
           context,
-          'Sync failed: Not authenticated with Firebase',
+          'Sync failed: Not authenticated with Firebase. Please log in again.',
           type: AppFeedbackType.error,
         );
       } else {
@@ -841,9 +843,12 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
         final type = hasErrors
             ? AppFeedbackType.warning
             : AppFeedbackType.success;
+        final errorDetail = hasErrors
+            ? '\nErrors: ${result.errors.take(3).join('; ')}'
+            : '';
         AppFeedback.show(
           context,
-          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.${hasErrors ? ' Some tables had errors.' : ''}',
+          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.$errorDetail',
           type: type,
         );
       }
@@ -902,145 +907,3 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
 }
 
 // ---------------------------------------------------------------------------
-// DANGER ZONE
-// ---------------------------------------------------------------------------
-class _DangerZoneContent extends StatefulWidget {
-  const _DangerZoneContent();
-
-  @override
-  State<_DangerZoneContent> createState() => _DangerZoneContentState();
-}
-
-class _DangerZoneContentState extends State<_DangerZoneContent> {
-  bool _isWiping = false;
-
-  Future<void> _handleWipeData() async {
-    final confirmCtrl = TextEditingController();
-    bool? confirm = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text(
-            'Delete All Data',
-            style: TextStyle(color: Colors.red),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'This will permanently delete all records locally and on the cloud. '
-                'This action cannot be undone. To proceed, please type "DELETE" below.',
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: confirmCtrl,
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'Type DELETE',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                if (confirmCtrl.text.trim() == 'DELETE') {
-                  Navigator.of(context).pop(true);
-                } else {
-                  AppFeedback.show(
-                    context,
-                    'You must type DELETE to confirm.',
-                    type: AppFeedbackType.error,
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-              child: const Text('Wipe Data'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirm == true) {
-      if (!mounted) return;
-      setState(() => _isWiping = true);
-
-      try {
-        await FirebaseSyncService.instance.wipeAllData();
-
-        if (!mounted) return;
-        AppFeedback.show(
-          context,
-          'All data deleted successfully.',
-          type: AppFeedbackType.success,
-        );
-
-        // Restart the app / Go to Login
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const LoginScreen()),
-          (route) => false,
-        );
-      } catch (e) {
-        if (mounted) {
-          AppFeedback.show(
-            context,
-            'Error wiping data: $e',
-            type: AppFeedbackType.error,
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _isWiping = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Wipe all data from the device and the cloud. This will completely reset the database.',
-          style: TextStyle(fontSize: 14, color: Color(0xFF666666), height: 1.5),
-        ),
-        const SizedBox(height: 24),
-        Align(
-          alignment: Alignment.centerRight,
-          child: ElevatedButton.icon(
-            onPressed: _isWiping ? null : _handleWipeData,
-            icon: _isWiping
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : const Icon(Icons.delete_forever, size: 18),
-            label: Text(_isWiping ? 'Wiping Data...' : 'Delete All Data'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red.shade600,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              elevation: 0,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}

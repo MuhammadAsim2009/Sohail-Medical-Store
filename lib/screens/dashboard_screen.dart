@@ -55,8 +55,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       _AppScreen(label: 'Suppliers', icon: Icons.business_outlined, screen: const SuppliersScreen()),
       _AppScreen(label: 'Ledger', icon: Icons.account_balance_wallet_outlined, screen: const LedgerScreen()),
       _AppScreen(label: 'Reports', icon: Icons.bar_chart_outlined, screen: const ReportsScreen()),
-      _AppScreen(label: 'Settings', icon: Icons.settings_outlined, screen: const SettingsScreen()),
       _AppScreen(label: 'Cashiers', icon: Icons.manage_accounts_outlined, screen: const CashierManagementScreen()),
+      _AppScreen(label: 'Settings', icon: Icons.settings_outlined, screen: const SettingsScreen()),
     ];
     
     _availableScreens = allScreens.where((s) {
@@ -959,14 +959,17 @@ class _SalesTrendCard extends StatelessWidget {
                   final dateStr =
                       date.substring(8, 10) + '/' + date.substring(5, 7);
                   final total = (t['total'] as num).toDouble();
-                  final heightRatio = total / maxVal;
+                  // clamp ratio to [0,1] — guards against negative or NaN totals
+                  final heightRatio = (total / maxVal).clamp(0.0, 1.0);
+                  // always render at least 2px so the bar is visible
+                  final barHeight = (120 * heightRatio).clamp(2.0, 120.0);
 
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       Container(
                         width: 24,
-                        height: 120 * heightRatio,
+                        height: barHeight,
                         decoration: BoxDecoration(
                           color: const Color(0xFF5A66F9),
                           borderRadius: const BorderRadius.vertical(

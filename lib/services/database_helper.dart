@@ -52,7 +52,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 24,
+      version: 25,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -364,6 +364,10 @@ CREATE TABLE IF NOT EXISTS users (
       try { await db.execute('ALTER TABLE purchase_order_items ADD COLUMN gst REAL DEFAULT 0.0'); } catch (_) {}
       try { await db.execute('ALTER TABLE sale_items ADD COLUMN gst REAL DEFAULT 0.0'); } catch (_) {}
     }
+    if (oldVersion < 25) {
+      // Add is_deleted to users so _applySnapshot can push/pull without column errors
+      try { await db.execute('ALTER TABLE users ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -375,6 +379,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name TEXT NOT NULL,
   role TEXT NOT NULL,
   is_active INTEGER NOT NULL DEFAULT 1,
+  is_deleted INTEGER NOT NULL DEFAULT 0,
   created_by TEXT,
   created_at TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -1961,6 +1966,18 @@ CREATE TABLE IF NOT EXISTS product_categories (
     final db = await instance.database;
     final maps = await db.query('sales_returns', orderBy: 'id DESC');
     return maps.map((m) => SalesReturn.fromMap(m)).toList();
+  }
+
+  Future<bool> hasInvoiceBeenReturned(String invoiceNumber) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'sales_returns',
+      columns: ['id'],
+      where: 'invoice_number = ?',
+      whereArgs: [invoiceNumber],
+      limit: 1,
+    );
+    return result.isNotEmpty;
   }
 
   Future<int> insertSalesReturn(SalesReturn returnData) async {

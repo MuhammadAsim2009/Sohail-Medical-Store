@@ -1,10 +1,8 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import 'database_helper.dart';
 
 /// Manages bidirectional synchronisation between local SQLite and Firestore.
@@ -73,33 +71,42 @@ class FirebaseSyncService {
   ///
   /// Set [forceInitial] = true to redo the smart initial-sync regardless of
   /// whether a previous sync has run (useful for "Reset Sync" in settings).
-  Future<SyncResult> sync({bool forceInitial = false}) async {
-    if (_isSyncing) return SyncResult.offline(); // Prevent concurrent syncs
+  ///
+  /// Set [forceReset] = true (from the manual "Sync Now" button) to override
+  /// a stuck [_isSyncing] flag and always attempt a fresh sync.
+  Future<SyncResult> sync({bool forceInitial = false, bool forceReset = false}) async {
+    if (_isSyncing && !forceReset) return SyncResult.busy();
 
-    // Guard: check real internet connectivity via DNS lookup.
-    // connectivity_plus is unreliable on Windows Desktop (often reports 'none'
-    // even when online), so we skip it and do a direct TCP reachability check.
-    try {
-      final result = await InternetAddress.lookup('google.com')
-          .timeout(const Duration(seconds: 5));
-      if (result.isEmpty || result.first.rawAddress.isEmpty) {
-        return SyncResult.offline();
-      }
-    } on SocketException catch (_) {
-      return SyncResult.offline();
-    } on TimeoutException catch (_) {
-      return SyncResult.offline();
-    } catch (_) {
-      return SyncResult.offline();
+    // If forceReset, cancel any debounce timer and clear the stuck flag
+    if (forceReset) {
+      _debounceTimer?.cancel();
+      _isSyncing = false;
     }
-
-
 
     // Guard: user must be authenticated (check BEFORE setting _isSyncing)
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return SyncResult.notAuthenticated();
 
     _isSyncing = true;
+    try {
+      // Wrap entire sync in a 5-minute timeout to handle large initial pushes
+      return await _runSyncBody(forceInitial).timeout(
+        const Duration(seconds: 300),
+        onTimeout: () {
+          return SyncResult(
+            pushed: 0,
+            pulled: 0,
+            errors: ['Sync timed out after 5 minutes. Your product catalog is large — try again on a faster connection.'],
+          );
+        },
+      );
+    } finally {
+      _isSyncing = false;
+    }
+  }
+
+  /// The actual sync logic, separated so it can be wrapped in a timeout.
+  Future<SyncResult> _runSyncBody(bool forceInitial) async {
     try {
       int pushed = 0;
       int pulled = 0;
@@ -111,31 +118,20 @@ class FirebaseSyncService {
       for (final table in _syncTables) {
         try {
           if (lastSync == 0) {
-            // ── First-time / forced: richness-based direction decision ──────────
-            final localCountResult =
-                await db.rawQuery('SELECT COUNT(*) as count FROM $table');
-            final int localCount = Sqflite.firstIntValue(localCountResult) ?? 0;
+            // ── First-time / forced: full bidirectional merge ──────────────────
+            // Always push local AND pull cloud — _applySnapshot handles
+            // conflict resolution (higher updated_at wins).
 
-            final AggregateQuerySnapshot cloudCountSnap =
-                await _col(table).count().get();
-            final int cloudCount = cloudCountSnap.count ?? 0;
-
-            if (localCount == 0 && cloudCount > 0) {
-              // Cloud only → pull everything
-              final snap = await _col(table).get();
-              pulled += await _applySnapshot(db, table, snap);
-            } else if (cloudCount > localCount) {
-              // Cloud richer → pull everything, then push any local extras
-              final snap = await _col(table).get();
-              pulled += await _applySnapshot(db, table, snap);
-              pushed += await _deltaPush(db, table, 0);
-            } else if (localCount > 0) {
-              // Local richer (or equal with data) → push all local, delta-pull cloud
-              final localRows =
-                  List<Map<String, dynamic>>.from(await db.query(table));
+            // Step 1: Push all local rows to cloud
+            final localRows =
+                List<Map<String, dynamic>>.from(await db.query(table));
+            if (localRows.isNotEmpty) {
               pushed += await _pushRows(db, table, localRows);
-              // Pull anything from cloud that we don't have yet
-              final snap = await _col(table).get();
+            }
+
+            // Step 2: Pull all cloud rows and merge into local
+            final snap = await _col(table).get();
+            if (snap.docs.isNotEmpty) {
               pulled += await _applySnapshot(db, table, snap);
             }
           } else {
@@ -163,8 +159,8 @@ class FirebaseSyncService {
       } catch (_) {} // Don't fail the sync just because metadata write failed
 
       return SyncResult(pushed: pushed, pulled: pulled, errors: errors);
-    } finally {
-      _isSyncing = false;
+    } catch (e) {
+      return SyncResult(pushed: 0, pulled: 0, errors: ['Sync error: $e']);
     }
   }
 
@@ -177,6 +173,7 @@ class FirebaseSyncService {
         table,
         where: 'updated_at > ? OR sync_id IS NULL',
         whereArgs: [lastSync],
+        orderBy: 'updated_at ASC', // oldest first so partial pushes make progress
       ));
     } catch (_) {
       rows = List<Map<String, dynamic>>.from(await db.query(table));
@@ -245,7 +242,8 @@ class FirebaseSyncService {
       await batch.commit(noResult: true);
     }
 
-    // Now push all rows to Firestore in 490-op batches
+    // Push to Firestore in 200-op batches (well within Firestore's 500-op limit).
+    // Smaller batches = faster per-commit round trips = less risk of overall timeout.
     var fbBatch = _firestore.batch();
     int total = 0;
     int batchSize = 0;
@@ -257,7 +255,7 @@ class FirebaseSyncService {
       total++;
       batchSize++;
 
-      if (batchSize == 490) {
+      if (batchSize == 200) {
         await fbBatch.commit();
         fbBatch = _firestore.batch();
         batchSize = 0;
@@ -281,7 +279,12 @@ class FirebaseSyncService {
     print('DEBUG: _applySnapshot called for table: $table with ${snapshot.docs.length} docs.');
     if (snapshot.docs.isEmpty) return 0;
 
-    // Load all existing sync_ids for this table into a map: sync_id → row
+    // Read actual column names from local schema to safely filter Firestore data
+    final List<Map<String, dynamic>> pragmaRows =
+        List<Map<String, dynamic>>.from(await db.rawQuery('PRAGMA table_info($table)'));
+    final localColumns = pragmaRows.map((r) => r['name'] as String).toSet();
+
+    // Load all existing sync_ids for this table into a map: sync_id -> updated_at
     final List<Map<String, dynamic>> existingRows =
         List<Map<String, dynamic>>.from(
       await db.query(table, columns: ['sync_id', 'updated_at']),
@@ -299,10 +302,17 @@ class FirebaseSyncService {
     final updateBatch = db.batch();
 
     for (final doc in snapshot.docs) {
-      final data =
+      final rawData =
           Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
-      data['sync_id'] = doc.id;
-      data['is_deleted'] = (data['is_deleted'] as int?) ?? 0;
+      rawData['sync_id'] = doc.id;
+      if (localColumns.contains('is_deleted')) {
+        rawData['is_deleted'] = (rawData['is_deleted'] as int?) ?? 0;
+      }
+
+      // Strip any fields that don't exist locally to avoid "no such column" errors
+      final data = Map<String, dynamic>.fromEntries(
+        rawData.entries.where((e) => localColumns.contains(e.key)),
+      );
 
       try {
         final localTs = existingMap[doc.id];
@@ -310,15 +320,14 @@ class FirebaseSyncService {
         print('DEBUG: table $table, doc ${doc.id} - localTs: $localTs, remoteTs: $remoteTs');
 
         if (localTs == null) {
-          // New record — insert without the cloud's id (let SQLite auto-assign)
-          final insertData = Map<String, dynamic>.from(data)..remove('id');
-          print('DEBUG: Inserting into $table: $insertData');
-          insertBatch.insert(table, insertData, conflictAlgorithm: ConflictAlgorithm.replace);
+          // New record from cloud — preserve the integer 'id' so foreign keys
+          // in child tables (e.g. sale_id, product_id) remain valid.
+          insertBatch.insert(table, Map<String, dynamic>.from(data),
+              conflictAlgorithm: ConflictAlgorithm.replace);
           count++;
         } else if (remoteTs >= localTs) {
-          // Remote is newer — update local
+          // Remote is newer — update local (don't overwrite local integer id)
           final updateData = Map<String, dynamic>.from(data)..remove('id');
-          print('DEBUG: Updating $table where sync_id=${doc.id}: $updateData');
           updateBatch.update(
             table,
             updateData,
@@ -397,32 +406,45 @@ class SyncResult {
   final List<String> errors;
   final bool notAuthenticated;
   final bool offline;
+  final bool busy;
 
   SyncResult({
     required this.pushed,
     required this.pulled,
     required this.errors,
   })  : notAuthenticated = false,
-        offline = false;
+        offline = false,
+        busy = false;
 
   SyncResult.notAuthenticated()
       : pushed = 0,
         pulled = 0,
         errors = const ['User not authenticated.'],
         notAuthenticated = true,
-        offline = false;
+        offline = false,
+        busy = false;
 
   SyncResult.offline()
       : pushed = 0,
         pulled = 0,
         errors = const ['Device is offline.'],
         notAuthenticated = false,
-        offline = true;
+        offline = true,
+        busy = false;
+
+  SyncResult.busy()
+      : pushed = 0,
+        pulled = 0,
+        errors = const [],
+        notAuthenticated = false,
+        offline = false,
+        busy = true;
 
   bool get hasErrors => errors.isNotEmpty;
-  bool get isSuccess => !hasErrors && !notAuthenticated && !offline;
+  bool get isSuccess => !hasErrors && !notAuthenticated && !offline && !busy;
 
   @override
   String toString() =>
       'SyncResult(pushed: $pushed, pulled: $pulled, errors: $errors)';
 }
+

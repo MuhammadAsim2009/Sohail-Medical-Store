@@ -521,6 +521,7 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
   List<Sale> _allSales = [];
   Sale? _selectedSale;
   final TextEditingController _invoiceCtrl = TextEditingController();
+  String? _invoiceError;
 
   // ── Open Return ───────────────────────────────────────────────────────────
   bool _isLoadingOpenData = true;
@@ -560,9 +561,12 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
   // ── Invoice Return: proceed to process dialog ─────────────────────────────
   Future<void> _proceedWithInvoice() async {
     if (_selectedSale == null) {
-      AppFeedback.show(context, 'Please select an invoice first.', type: AppFeedbackType.error);
+      setState(() => _invoiceError = 'Please select an invoice first.');
       return;
     }
+    
+    if (_invoiceError != null) return;
+
     setState(() => _isLoadingSales = true);
     final items = await DatabaseHelper.instance.getSaleItems(_selectedSale!.id!);
     if (!mounted) return;
@@ -743,7 +747,12 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
                         (s.customerName ?? '').toLowerCase().contains(q));
                   },
                   displayStringForOption: (Sale s) => s.invoiceNumber,
-                  onSelected: (Sale s) => setState(() { _selectedSale = s; _invoiceCtrl.text = s.invoiceNumber; }),
+                  onSelected: (Sale s) async { 
+                    setState(() { _selectedSale = s; _invoiceCtrl.text = s.invoiceNumber; _invoiceError = null; });
+                    final hasBeenReturned = await DatabaseHelper.instance.hasInvoiceBeenReturned(s.invoiceNumber);
+                    if (!mounted) return;
+                    if (hasBeenReturned) setState(() => _invoiceError = 'This invoice has already been returned.');
+                  },
                   fieldViewBuilder: (ctx, ctrl, fn, submit) {
                     return TextField(
                       controller: ctrl,
@@ -752,14 +761,14 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
                         hintText: 'Search by invoice number or customer...',
                         hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                         prefixIcon: const Icon(Icons.search, size: 18),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey.shade300)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: _kPrimary, width: 1.5)),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _invoiceError != null ? Colors.red.shade300 : Colors.grey.shade300)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _invoiceError != null ? Colors.red.shade300 : Colors.grey.shade300)),
+                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _invoiceError != null ? Colors.red : _kPrimary, width: 1.5)),
                         filled: true,
-                        fillColor: Colors.grey.shade50,
+                        fillColor: _invoiceError != null ? Colors.red.shade50 : Colors.grey.shade50,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
                       ),
-                      onChanged: (val) { if (_selectedSale?.invoiceNumber != val) setState(() => _selectedSale = null); },
+                      onChanged: (val) { if (_selectedSale?.invoiceNumber != val) setState(() { _selectedSale = null; _invoiceError = null; }); },
                     );
                   },
                   optionsViewBuilder: (ctx, onSelected, options) {
@@ -840,6 +849,16 @@ class _NewReturnDialogState extends State<_NewReturnDialog> with SingleTickerPro
                   ),
                 ],
               ),
+            ),
+          ],
+          if (_invoiceError != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 14),
+                const SizedBox(width: 6),
+                Text(_invoiceError!, style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w500)),
+              ],
             ),
           ],
 
@@ -1540,11 +1559,9 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
   }
 
   double _unitPriceFor(SaleItem item, String unit) {
-    final product = _productFor(item);
-    if (product == null) return item.price;
-    if (product.packaging.isEmpty) return product.sellPrice;
-    final firstMultiplier = product.getMultiplier(product.packaging.first.name);
-    return product.sellPrice * _multiplierFor(item, unit) / firstMultiplier;
+    if (item.quantity == 0) return 0.0;
+    final pricePerBaseUnit = item.total / item.quantity;
+    return pricePerBaseUnit * _multiplierFor(item, unit);
   }
 
   int _maxQtyFor(SaleItem item, String unit) {
@@ -1554,12 +1571,55 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
   }
 
   double get _total {
-    return widget.items.fold(0, (sum, item) {
+    double itemsTotal = 0;
+    double originalItemsTotal = 0;
+    bool isFullReturn = true;
+
+    for (var item in widget.items) {
+      originalItemsTotal += item.total;
+      
       final qty = _returnQty[item.id!] ?? 0;
-      if (qty <= 0) return sum;
-      final unit = _selectedUnitFor(item);
-      return sum + qty * _unitPriceFor(item, unit);
-    });
+      final maxQty = _maxQtyFor(item, _selectedUnitFor(item));
+      
+      if (qty < maxQty) isFullReturn = false;
+      if (qty > 0) {
+        itemsTotal += qty * _unitPriceFor(item, _selectedUnitFor(item));
+      }
+    }
+
+    if (itemsTotal == 0) return 0.0;
+    if (isFullReturn) return widget.sale.total;
+
+    if (originalItemsTotal > 0) {
+      final refundFraction = itemsTotal / originalItemsTotal;
+      return (widget.sale.total * refundFraction).roundToDouble();
+    }
+
+    return itemsTotal.roundToDouble();
+  }
+
+  double get _refundFraction {
+    double originalItemsTotal = 0.0;
+    double itemsTotal = 0.0;
+    for (var item in widget.items) {
+      originalItemsTotal += item.total;
+      final qty = _returnQty[item.id!] ?? 0;
+      if (qty > 0) {
+        itemsTotal += qty * _unitPriceFor(item, _selectedUnitFor(item));
+      }
+    }
+    if (originalItemsTotal == 0) return 0.0;
+    return itemsTotal / originalItemsTotal;
+  }
+
+  double get _proratedDiscount {
+    if (_total == 0) return 0.0;
+    return widget.sale.discount * _refundFraction;
+  }
+
+  double get _proratedTax {
+    if (_total == 0) return 0.0;
+    return widget.sale.taxAmount * _refundFraction;
   }
 
   Future<void> _process() async {
@@ -1756,7 +1816,25 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Total Refund', style: TextStyle(fontSize: 12, color: Colors.grey.shade500)),
-                      Text('Rs. ${_total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _kPrimary)),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Text('Rs. ${_total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: _kPrimary)),
+                          if (_proratedDiscount > 0 || _proratedTax > 0) ...[
+                            const SizedBox(width: 12),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_proratedDiscount > 0)
+                                  Text('Discount: -Rs. ${_proratedDiscount.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, color: Colors.red)),
+                                if (_proratedTax > 0)
+                                  Text('GST: +Rs. ${_proratedTax.toStringAsFixed(0)}', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
                     ],
                   ),
                   const Spacer(),
@@ -1832,6 +1910,7 @@ class _ViewReturnDialog extends StatefulWidget {
 
 class _ViewReturnDialogState extends State<_ViewReturnDialog> {
   List<SalesReturnItem> _items = [];
+  Map<int, Product> _productById = {};
   bool _loading = true;
 
   @override
@@ -1842,8 +1921,10 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
 
   Future<void> _loadItems() async {
     final items = await DatabaseHelper.instance.getReturnItems(widget.salesReturn.id!);
+    final products = await DatabaseHelper.instance.getAllProducts();
+    final pMap = {for (var p in products) if (p.id != null) p.id!: p};
     if (!mounted) return;
-    setState(() { _items = items; _loading = false; });
+    setState(() { _items = items; _productById = pMap; _loading = false; });
   }
 
   @override
@@ -1973,6 +2054,10 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                                 ..._items.asMap().entries.map((e) {
                                   final idx = e.key;
                                   final item = e.value;
+                                  final product = _productById[item.productId];
+                                  final multiplier = product?.getMultiplier(item.unitName) ?? 1;
+                                  final displayQty = multiplier > 0 ? item.quantityReturned / multiplier : item.quantityReturned;
+                                  
                                   return Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
                                     decoration: BoxDecoration(
@@ -1990,7 +2075,7 @@ class _ViewReturnDialogState extends State<_ViewReturnDialog> {
                                           Expanded(child: Text(item.productName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500), overflow: TextOverflow.ellipsis)),
                                         ])),
                                         Expanded(flex: 2, child: Text(item.unitName, style: const TextStyle(fontSize: 13))),
-                                        Expanded(flex: 2, child: Text(item.quantityReturned.toStringAsFixed(0), style: const TextStyle(fontSize: 13))),
+                                        Expanded(flex: 2, child: Text(displayQty.toStringAsFixed(displayQty.truncateToDouble() == displayQty ? 0 : 2), style: const TextStyle(fontSize: 13))),
                                         Expanded(flex: 2, child: Text('Rs. ${item.price.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13))),
                                         Expanded(flex: 2, child: Text('Rs. ${item.total.toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)))),
                                       ],
