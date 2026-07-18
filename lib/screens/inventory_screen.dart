@@ -28,6 +28,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
   List<Product> _products = [];
+  Map<int, String?> _expiryMap = {}; // productId -> nearest expiry ISO string
   bool _isLoading = true;
 
   @override
@@ -39,9 +40,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
   Future<void> _loadProducts() async {
     setState(() => _isLoading = true);
     final products = await DatabaseHelper.instance.getAllProducts();
+    final expiryMap = await DatabaseHelper.instance.getEarliestExpiryPerProduct();
     if (mounted) {
       setState(() {
         _products = products;
+        _expiryMap = expiryMap;
         _isLoading = false;
       });
     }
@@ -452,6 +455,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                 _TH('COST',     flex: 2),
                 _TH('SELL',     flex: 2),
                 _TH('STOCK',    flex: 2),
+                _TH('EXPIRY',   flex: 3),
                 _TH('STATUS',   flex: 2),
                 _TH('ACTIONS',  flex: 2),
               ],
@@ -487,6 +491,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   return _ProductRow(
                     product: p,
                     isEven: index.isEven,
+                    nearestExpiry: _expiryMap[p.id],
                     onEdit: () => _showProductDialog(product: p),
                     onDelete: () => _confirmDelete(p),
                     onView: () => _viewProduct(p),
@@ -561,10 +566,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4)),
                   ],
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     Row(
                       children: [
                         Container(
@@ -625,6 +631,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         ],
                       ),
                     ),
+                    // Batch breakdown section
+                    if (p.id != null) ...[  
+                      const SizedBox(height: 20),
+                      const Text('Batch Stock (FEFO Order)', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: Color(0xFF1E3A5F))),
+                      const SizedBox(height: 10),
+                      _BatchBreakdown(productId: p.id!),
+                    ],
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
@@ -640,7 +653,8 @@ class _InventoryScreenState extends State<InventoryScreen> {
                         child: const Text('Close Details', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
                       ),
                     ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -786,6 +800,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
 class _ProductRow extends StatelessWidget {
   final Product product;
   final bool isEven;
+  final String? nearestExpiry;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
   final VoidCallback onView;
@@ -793,6 +808,7 @@ class _ProductRow extends StatelessWidget {
   const _ProductRow({
     required this.product,
     required this.isEven,
+    this.nearestExpiry,
     required this.onEdit,
     required this.onDelete,
     required this.onView,
@@ -801,6 +817,22 @@ class _ProductRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = product;
+
+    // Parse expiry for colour coding
+    DateTime? expiryDt;
+    if (nearestExpiry != null) expiryDt = DateTime.tryParse(nearestExpiry!);
+    final now = DateTime.now();
+    final daysLeft = expiryDt != null ? expiryDt.difference(now).inDays : null;
+    Color expiryColor = const Color(0xFF64748B);
+    if (daysLeft != null) {
+      if (daysLeft <= 0)        expiryColor = const Color(0xFFEF4444); // expired
+      else if (daysLeft <= 30)  expiryColor = const Color(0xFFF59E0B); // near
+      else                      expiryColor = const Color(0xFF10B981); // safe
+    }
+    final expiryLabel = expiryDt != null
+        ? '${expiryDt.day.toString().padLeft(2,'0')}/${expiryDt.month.toString().padLeft(2,'0')}/${expiryDt.year}'
+        : '—';
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
@@ -878,6 +910,27 @@ class _ProductRow extends StatelessWidget {
             ),
           ),
 
+          // Nearest Expiry
+          Expanded(
+            flex: 3,
+            child: Row(
+              children: [
+                if (daysLeft != null) Container(
+                  width: 8, height: 8,
+                  margin: const EdgeInsets.only(right: 6),
+                  decoration: BoxDecoration(color: expiryColor, shape: BoxShape.circle),
+                ),
+                Expanded(
+                  child: Text(
+                    expiryLabel,
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: expiryColor),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Status badge
           Expanded(
             flex: 2,
@@ -922,7 +975,106 @@ class _ProductRow extends StatelessWidget {
   }
 }
 
+/// Async widget that loads and displays the batch breakdown for a single product.
+class _BatchBreakdown extends StatefulWidget {
+  final int productId;
+  const _BatchBreakdown({required this.productId});
 
+  @override
+  State<_BatchBreakdown> createState() => _BatchBreakdownState();
+}
+
+class _BatchBreakdownState extends State<_BatchBreakdown> {
+  List<Map<String, dynamic>> _batches = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    DatabaseHelper.instance.getBatchesForProduct(widget.productId).then((b) {
+      if (mounted) setState(() { _batches = b; _loading = false; });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const Center(child: Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2)));
+    if (_batches.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: const Text('No active batches tracked.', style: TextStyle(color: Color(0xFF94A3B8), fontSize: 13)),
+      );
+    }
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1E3A5F),
+              borderRadius: BorderRadius.only(topLeft: Radius.circular(11), topRight: Radius.circular(11)),
+            ),
+            child: const Row(
+              children: [
+                Expanded(flex: 2, child: Text('Expiry', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600))),
+                Expanded(flex: 2, child: Text('Qty (base)', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600))),
+                Expanded(flex: 2, child: Text('Status', style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600))),
+              ],
+            ),
+          ),
+          // Rows
+          ...List.generate(_batches.length, (i) {
+            final b = _batches[i];
+            final expiryStr = b['expiry_date'] as String?;
+            DateTime? expiryDt = expiryStr != null ? DateTime.tryParse(expiryStr) : null;
+            final qty = (b['batch_quantity'] as num).toDouble();
+            final now = DateTime.now();
+            final daysLeft = expiryDt != null ? expiryDt.difference(now).inDays : null;
+
+            Color statusColor = const Color(0xFF10B981);
+            String statusLabel = 'OK';
+            if (daysLeft == null) { statusColor = const Color(0xFF94A3B8); statusLabel = 'No Expiry'; }
+            else if (daysLeft <= 0) { statusColor = const Color(0xFFEF4444); statusLabel = 'Expired'; }
+            else if (daysLeft <= 30) { statusColor = const Color(0xFFF59E0B); statusLabel = '${daysLeft}d left'; }
+            else { statusLabel = '${daysLeft}d'; }
+
+            final expiryLabel = expiryDt != null
+                ? '${expiryDt.day.toString().padLeft(2,'0')}/${expiryDt.month.toString().padLeft(2,'0')}/${expiryDt.year}'
+                : 'No date';
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: i.isEven ? Colors.white : const Color(0xFFF8FAFC),
+                border: i < _batches.length - 1 ? const Border(bottom: BorderSide(color: Color(0xFFF1F5F9))) : null,
+                borderRadius: i == _batches.length - 1
+                    ? const BorderRadius.only(bottomLeft: Radius.circular(11), bottomRight: Radius.circular(11))
+                    : null,
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 2, child: Text(expiryLabel, style: const TextStyle(fontSize: 13, color: Color(0xFF0F172A)))),
+                  Expanded(flex: 2, child: Text(qty.toStringAsFixed(0), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF0F172A)))),
+                  Expanded(flex: 2, child: Text(statusLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: statusColor))),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+}
 
 
 class _StatusBadge extends StatelessWidget {

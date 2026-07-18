@@ -52,7 +52,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 25,
+      version: 26,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -368,6 +368,59 @@ CREATE TABLE IF NOT EXISTS users (
       // Add is_deleted to users so _applySnapshot can push/pull without column errors
       try { await db.execute('ALTER TABLE users ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
     }
+    if (oldVersion < 26) {
+      // Create product_batches table
+      await db.execute("""
+CREATE TABLE IF NOT EXISTS product_batches (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id           TEXT UNIQUE,
+  product_id        INTEGER NOT NULL,
+  batch_quantity    REAL NOT NULL,
+  purchase_quantity REAL NOT NULL,
+  expiry_date       TEXT,
+  purchase_price    REAL,
+  purchase_date     TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  is_deleted        INTEGER NOT NULL DEFAULT 0,
+  is_dirty          INTEGER NOT NULL DEFAULT 1
+)""");
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_product_expiry ON product_batches(product_id, expiry_date)');
+      await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_sync_id ON product_batches(sync_id)');
+
+      // Migrate existing stock into opening batches
+      final products = await db.query('products', where: 'is_deleted = 0 AND stock > 0');
+      final now = DateTime.now();
+      for (final p in products) {
+        final productId = p['id'] as int;
+        // Try to get the most recent expiry_date for this product from purchase_order_items
+        final expiryRows = await db.rawQuery(
+          'SELECT poi.expiry_date FROM purchase_order_items poi '
+          'JOIN purchase_orders po ON po.id = poi.order_id '
+          'WHERE poi.product_id = ? AND poi.expiry_date IS NOT NULL '
+          'ORDER BY po.order_date DESC LIMIT 1',
+          [productId],
+        );
+        final expiryDate = expiryRows.isNotEmpty ? expiryRows.first['expiry_date'] as String? : null;
+        final stock = (p['stock'] as num).toDouble();
+        final costPrice = (p['cost_price'] as num?)?.toDouble() ?? 0.0;
+        try {
+          await db.insert('product_batches', {
+            'sync_id': _uuid.v4(),
+            'product_id': productId,
+            'batch_quantity': stock,
+            'purchase_quantity': stock,
+            'expiry_date': expiryDate,
+            'purchase_price': costPrice,
+            'purchase_date': now.toIso8601String(),
+            'created_at': now.toIso8601String(),
+            'updated_at': now.millisecondsSinceEpoch,
+            'is_deleted': 0,
+            'is_dirty': 1,
+          });
+        } catch (_) {}
+      }
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -631,6 +684,24 @@ CREATE TABLE IF NOT EXISTS settings (
 )""");
 
     await db.execute("""
+CREATE TABLE IF NOT EXISTS product_batches (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  sync_id           TEXT UNIQUE,
+  product_id        INTEGER NOT NULL,
+  batch_quantity    REAL NOT NULL,
+  purchase_quantity REAL NOT NULL,
+  expiry_date       TEXT,
+  purchase_price    REAL,
+  purchase_date     TEXT,
+  created_at        TEXT NOT NULL,
+  updated_at        INTEGER NOT NULL,
+  is_deleted        INTEGER NOT NULL DEFAULT 0,
+  is_dirty          INTEGER NOT NULL DEFAULT 1
+)""");
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_product_expiry ON product_batches(product_id, expiry_date)');
+    await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_sync_id ON product_batches(sync_id)');
+
+    await db.execute("""
 CREATE TABLE IF NOT EXISTS product_categories (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   sync_id     TEXT UNIQUE,
@@ -852,15 +923,63 @@ CREATE TABLE IF NOT EXISTS product_categories (
     return null; // safe to delete
   }
 
+  // -- PRODUCT BATCHES ---------------------------------------------------------
+
+  /// Returns all active batches for a product ordered by FEFO.
+  Future<List<Map<String, dynamic>>> getBatchesForProduct(int productId) async {
+    final db = await instance.database;
+    return db.rawQuery(
+      'SELECT * FROM product_batches '
+      'WHERE product_id = ? AND is_deleted = 0 AND batch_quantity > 0 '
+      'ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC',
+      [productId],
+    );
+  }
+
+  /// Returns batches expiring within [daysAhead] days (default 30).
+  Future<List<Map<String, dynamic>>> getNearExpiryBatches({int daysAhead = 30}) async {
+    final db = await instance.database;
+    final cutoff = DateTime.now().add(Duration(days: daysAhead)).toIso8601String();
+    return db.rawQuery(
+      'SELECT pb.*, p.name AS product_name, p.sku '
+      'FROM product_batches pb '
+      'JOIN products p ON p.id = pb.product_id '
+      'WHERE pb.is_deleted = 0 AND pb.batch_quantity > 0 '
+      '  AND pb.expiry_date IS NOT NULL AND pb.expiry_date <= ? '
+      'ORDER BY pb.expiry_date ASC',
+      [cutoff],
+    );
+  }
+
+  /// Returns the nearest expiry date per product (for product list display).
+  Future<Map<int, String?>> getEarliestExpiryPerProduct() async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT product_id, MIN(expiry_date) AS nearest_expiry '
+      'FROM product_batches '
+      'WHERE is_deleted = 0 AND batch_quantity > 0 AND expiry_date IS NOT NULL '
+      'GROUP BY product_id',
+    );
+    return {for (final r in rows) r['product_id'] as int: r['nearest_expiry'] as String?};
+  }
+
   Future<int> deleteProduct(int id) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
-    return db.update(
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    await db.update(
+      'product_batches',
+      {'is_deleted': 1, 'is_dirty': 1, 'updated_at': ts},
+      where: 'product_id = ? AND is_deleted = 0',
+      whereArgs: [id],
+    );
+    final result = await db.update(
       'products',
       _stamp({'is_deleted': 1}, isUpdate: true),
       where: 'id = ?',
       whereArgs: [id],
     );
+    FirebaseSyncService.instance.triggerAutoSync();
+    return result;
   }
 
   Future<void> purchaseStock(
@@ -1077,6 +1196,25 @@ CREATE TABLE IF NOT EXISTS product_categories (
             'cost_price': item.purchasePrice,
             'total_cost': item.quantity * item.purchasePrice,
           }),
+        );
+        // Insert a new batch row for FEFO tracking
+        final batchQty = item.quantity * multiplier; // store in base units
+        final nowTs = DateTime.now();
+        await txn.insert(
+          'product_batches',
+          {
+            'sync_id': _uuid.v4(),
+            'product_id': item.productId,
+            'batch_quantity': batchQty,
+            'purchase_quantity': batchQty,
+            'expiry_date': item.expiryDate?.toIso8601String(),
+            'purchase_price': item.purchasePrice,
+            'purchase_date': nowTs.toIso8601String(),
+            'created_at': nowTs.toIso8601String(),
+            'updated_at': nowTs.millisecondsSinceEpoch,
+            'is_deleted': 0,
+            'is_dirty': 1,
+          },
         );
       }
 
@@ -1324,6 +1462,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
         itemMap.remove('id');
         itemMap['sale_id'] = saleId;
         await txn.insert('sale_items', itemMap);
+        // Deduct from product overall stock
         await txn.rawUpdate(
           'UPDATE products SET stock = stock - ?, updated_at = ? WHERE id = ?',
           [
@@ -1332,6 +1471,25 @@ CREATE TABLE IF NOT EXISTS product_categories (
             item.productId,
           ],
         );
+        // FEFO: deduct from batches ordered by earliest expiry first
+        double remaining = (item.quantity as num).toDouble();
+        final batches = await txn.rawQuery(
+          'SELECT id, batch_quantity FROM product_batches '
+          'WHERE product_id = ? AND batch_quantity > 0 AND is_deleted = 0 '
+          'ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC',
+          [item.productId],
+        );
+        for (final batch in batches) {
+          if (remaining <= 0) break;
+          final batchId = batch['id'] as int;
+          final batchQty = (batch['batch_quantity'] as num).toDouble();
+          final deduct = remaining <= batchQty ? remaining : batchQty;
+          await txn.rawUpdate(
+            'UPDATE product_batches SET batch_quantity = batch_quantity - ?, updated_at = ?, is_dirty = 1 WHERE id = ?',
+            [deduct, DateTime.now().millisecondsSinceEpoch, batchId],
+          );
+          remaining -= deduct;
+        }
       }
       if (sale.customerId != null && sale.customerId!.isNotEmpty) {
         final dueAmount = (sale.total - sale.received).clamp(
@@ -1405,7 +1563,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<String> getNextSupplierPaymentReference() async {
     final db = await instance.database;
-    final result = await db.rawQuery('SELECT reference FROM supplier_payments WHERE reference LIKE "PAY-SUP-%" ORDER BY id DESC LIMIT 1');
+    final result = await db.rawQuery("SELECT reference FROM supplier_payments WHERE reference LIKE 'PAY-SUP-%' ORDER BY id DESC LIMIT 1");
     if (result.isNotEmpty) {
       final lastRef = result.first['reference'] as String;
       final parts = lastRef.split('-');
@@ -2032,11 +2190,45 @@ CREATE TABLE IF NOT EXISTS product_categories (
         itemMap.remove('id');
         itemMap['sales_return_id'] = returnId;
         await txn.insert('sales_return_items', itemMap);
-        // Restock
+        // Restock overall product stock
         await txn.rawUpdate(
           'UPDATE products SET stock = stock + ?, updated_at = ? WHERE id = ?',
           [item.quantityReturned, DateTime.now().millisecondsSinceEpoch, item.productId],
         );
+        // FEFO return: re-credit the closest matching batch or create a new one
+        final nowTs = DateTime.now();
+        if (item.expiryDate != null) {
+          // Find batch with closest expiry_date where batch_quantity > 0
+          final allBatches = await txn.rawQuery(
+            'SELECT id, expiry_date, batch_quantity FROM product_batches '
+            'WHERE product_id = ? AND is_deleted = 0 AND batch_quantity > 0 AND expiry_date IS NOT NULL '
+            'ORDER BY ABS(julianday(expiry_date) - julianday(?)) ASC LIMIT 1',
+            [item.productId, item.expiryDate!.toIso8601String()],
+          );
+          if (allBatches.isNotEmpty) {
+            final batchId = allBatches.first['id'] as int;
+            await txn.rawUpdate(
+              'UPDATE product_batches SET batch_quantity = batch_quantity + ?, updated_at = ?, is_dirty = 1 WHERE id = ?',
+              [item.quantityReturned, nowTs.millisecondsSinceEpoch, batchId],
+            );
+          } else {
+            // All batches depleted or none exist — create a new batch
+            await txn.insert('product_batches', {
+              'sync_id': _uuid.v4(),
+              'product_id': item.productId,
+              'batch_quantity': item.quantityReturned,
+              'purchase_quantity': item.quantityReturned,
+              'expiry_date': item.expiryDate!.toIso8601String(),
+              'purchase_price': item.price,
+              'purchase_date': nowTs.toIso8601String(),
+              'created_at': nowTs.toIso8601String(),
+              'updated_at': nowTs.millisecondsSinceEpoch,
+              'is_deleted': 0,
+              'is_dirty': 1,
+            });
+          }
+        }
+        // If no expiryDate provided, only the overall stock is updated (no batch impact)
       }
 
       // Update original sale's balance and status

@@ -31,9 +31,9 @@ class _AppScreen {
   final Widget screen;
   final bool cashierAllowed;
   const _AppScreen({
-    required this.label, 
-    required this.icon, 
-    required this.screen, 
+    required this.label,
+    required this.icon,
+    required this.screen,
     this.cashierAllowed = false,
   });
 }
@@ -46,22 +46,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
     final allScreens = [
-      _AppScreen(label: 'Dashboard', icon: Icons.dashboard_outlined, screen: _DashboardBody(onNavigate: _navigateToScreen), cashierAllowed: true),
-      _AppScreen(label: 'Sales (POS)', icon: Icons.shopping_cart_outlined, screen: const BillingScreen(), cashierAllowed: true),
-      _AppScreen(label: 'Sales Return', icon: Icons.assignment_return_outlined, screen: const SalesReturnScreen(), cashierAllowed: true),
-      _AppScreen(label: 'Inventory', icon: Icons.inventory_2_outlined, screen: const InventoryScreen(), cashierAllowed: true),
-      _AppScreen(label: 'Purchases', icon: Icons.local_shipping_outlined, screen: const PurchaseOrdersScreen()),
-      _AppScreen(label: 'Customers', icon: Icons.people_outline, screen: const CustomersScreen(), cashierAllowed: true),
-      _AppScreen(label: 'Suppliers', icon: Icons.business_outlined, screen: const SuppliersScreen()),
-      _AppScreen(label: 'Ledger', icon: Icons.account_balance_wallet_outlined, screen: const LedgerScreen()),
-      _AppScreen(label: 'Reports', icon: Icons.bar_chart_outlined, screen: const ReportsScreen()),
-      _AppScreen(label: 'Cashiers', icon: Icons.manage_accounts_outlined, screen: const CashierManagementScreen()),
-      _AppScreen(label: 'Settings', icon: Icons.settings_outlined, screen: const SettingsScreen()),
+      _AppScreen(
+        label: 'Dashboard',
+        icon: Icons.dashboard_outlined,
+        screen: _DashboardBody(onNavigate: _navigateToScreen),
+        cashierAllowed: true,
+      ),
+      _AppScreen(
+        label: 'Sales (POS)',
+        icon: Icons.shopping_cart_outlined,
+        screen: const BillingScreen(),
+        cashierAllowed: true,
+      ),
+      _AppScreen(
+        label: 'Sales Return',
+        icon: Icons.assignment_return_outlined,
+        screen: const SalesReturnScreen(),
+        cashierAllowed: true,
+      ),
+      _AppScreen(
+        label: 'Inventory',
+        icon: Icons.inventory_2_outlined,
+        screen: const InventoryScreen(),
+        cashierAllowed: true,
+      ),
+      _AppScreen(
+        label: 'Purchases',
+        icon: Icons.local_shipping_outlined,
+        screen: const PurchaseOrdersScreen(),
+      ),
+      _AppScreen(
+        label: 'Customers',
+        icon: Icons.people_outline,
+        screen: const CustomersScreen(),
+        cashierAllowed: true,
+      ),
+      _AppScreen(
+        label: 'Suppliers',
+        icon: Icons.business_outlined,
+        screen: const SuppliersScreen(),
+      ),
+      _AppScreen(
+        label: 'Ledger',
+        icon: Icons.account_balance_wallet_outlined,
+        screen: const LedgerScreen(),
+      ),
+      _AppScreen(
+        label: 'Reports',
+        icon: Icons.bar_chart_outlined,
+        screen: const ReportsScreen(),
+      ),
+      _AppScreen(
+        label: 'Cashiers',
+        icon: Icons.manage_accounts_outlined,
+        screen: const CashierManagementScreen(),
+      ),
+      _AppScreen(
+        label: 'Settings',
+        icon: Icons.settings_outlined,
+        screen: const SettingsScreen(),
+      ),
     ];
-    
+
     _availableScreens = allScreens.where((s) {
-       if (AuthService.instance.isAdmin) return true;
-       return s.cashierAllowed;
+      if (AuthService.instance.isAdmin) return true;
+      return s.cashierAllowed;
     }).toList();
   }
 
@@ -73,6 +122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       });
     }
   }
+
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
@@ -88,7 +138,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             // -- Sidebar ----------------------------------------------------
             _Sidebar(
-              navItems: _availableScreens.map((s) => _NavItem(label: s.label, icon: s.icon)).toList(),
+              navItems: _availableScreens
+                  .map((s) => _NavItem(label: s.label, icon: s.icon))
+                  .toList(),
               selectedIndex: _selectedIndex,
               onItemSelected: (i) => setState(() => _selectedIndex = i),
               onLogout: _handleLogout,
@@ -100,7 +152,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   // Scrollable body
                   Expanded(
-                    child: _availableScreens[_selectedIndex].label == 'Dashboard'
+                    child:
+                        _availableScreens[_selectedIndex].label == 'Dashboard'
                         ? SingleChildScrollView(
                             padding: const EdgeInsets.fromLTRB(28, 20, 28, 28),
                             child: Column(
@@ -558,6 +611,9 @@ class _DashboardBodyState extends State<_DashboardBody> {
             );
           },
         ),
+
+        const SizedBox(height: 24),
+        const _NearExpiryCard(),
 
         const SizedBox(height: 24),
 
@@ -1259,6 +1315,261 @@ class _WatchlistItem extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// NEAR-EXPIRY DASHBOARD CARD
+// ---------------------------------------------------------------------------
+class _NearExpiryCard extends StatefulWidget {
+  const _NearExpiryCard();
+
+  @override
+  State<_NearExpiryCard> createState() => _NearExpiryCardState();
+}
+
+class _NearExpiryCardState extends State<_NearExpiryCard> {
+  List<Map<String, dynamic>> _batches = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final data = await DatabaseHelper.instance.getNearExpiryBatches(
+      daysAhead: 120,
+    );
+    if (mounted)
+      setState(() {
+        _batches = data;
+        _loading = false;
+      });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) return const SizedBox.shrink();
+    if (_batches.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFFFEDD5)),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF97316).withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFEA580C), Color(0xFFF97316)],
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+              ),
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(19),
+                topRight: Radius.circular(19),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Near-Expiry Alert',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 17,
+                      ),
+                    ),
+                    Text(
+                      '${_batches.length} batch${_batches.length == 1 ? '' : 'es'} expiring within 4 Months',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Column headers
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+            child: Row(
+              children: const [
+                Expanded(
+                  flex: 4,
+                  child: Text(
+                    'Product',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Expiry',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Qty',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Days Left',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF94A3B8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFF1F5F9)),
+
+          // Rows
+          ...List.generate(_batches.length, (i) {
+            final b = _batches[i];
+            final expiryStr = b['expiry_date'] as String? ?? '';
+            final expiryDt = DateTime.tryParse(expiryStr);
+            final qty = (b['batch_quantity'] as num).toDouble();
+            final now = DateTime.now();
+            final daysLeft = expiryDt != null
+                ? expiryDt.difference(now).inDays
+                : 0;
+            final expiryLabel = expiryDt != null
+                ? '${expiryDt.day.toString().padLeft(2, '0')}/${expiryDt.month.toString().padLeft(2, '0')}/${expiryDt.year}'
+                : '—';
+            final Color rowColor = daysLeft <= 0
+                ? const Color(0xFFFEF2F2)
+                : daysLeft <= 7
+                ? const Color(0xFFFFFBEB)
+                : Colors.white;
+            final Color textColor = daysLeft <= 0
+                ? const Color(0xFFEF4444)
+                : daysLeft <= 7
+                ? const Color(0xFFD97706)
+                : const Color(0xFF059669);
+
+            return Container(
+              color: i.isEven ? rowColor : Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 4,
+                    child: Text(
+                      b['product_name'] as String? ?? '—',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF1E293B),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      expiryLabel,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Text(
+                      qty.toStringAsFixed(0),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: textColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        daysLeft <= 0 ? 'Expired' : '${daysLeft}d',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: textColor,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          const SizedBox(height: 8),
+        ],
+      ),
     );
   }
 }

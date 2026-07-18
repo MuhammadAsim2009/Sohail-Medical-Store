@@ -38,6 +38,7 @@ class FirebaseSyncService {
     'customers',
     'purchase_orders',
     'purchase_order_items',
+    'product_batches',     // must come after products
     'purchase_history',
     'daily_sales_sheets',
     'sales',
@@ -91,12 +92,12 @@ class FirebaseSyncService {
     try {
       // Wrap entire sync in a 5-minute timeout to handle large initial pushes
       return await _runSyncBody(forceInitial).timeout(
-        const Duration(seconds: 300),
+        const Duration(seconds: 60),
         onTimeout: () {
           return SyncResult(
             pushed: 0,
             pulled: 0,
-            errors: ['Sync timed out after 5 minutes. Your product catalog is large — try again on a faster connection.'],
+            errors: ['Sync timed out. Your connection may be slow or offline.'],
           );
         },
       );
@@ -130,7 +131,7 @@ class FirebaseSyncService {
             }
 
             // Step 2: Pull all cloud rows and merge into local
-            final snap = await _col(table).get();
+            final snap = await _col(table).get().timeout(const Duration(seconds: 15));
             if (snap.docs.isNotEmpty) {
               pulled += await _applySnapshot(db, table, snap);
             }
@@ -190,7 +191,8 @@ class FirebaseSyncService {
     try {
       final QuerySnapshot snap = await _col(table)
           .where('updated_at', isGreaterThan: lastSync)
-          .get();
+          .get()
+          .timeout(const Duration(seconds: 15));
       print('DEBUG: _deltaPull query for $table returned ${snap.docs.length} docs.');
       if (snap.docs.isEmpty) return 0;
       return await _applySnapshot(db, table, snap);
@@ -256,13 +258,15 @@ class FirebaseSyncService {
       batchSize++;
 
       if (batchSize == 200) {
-        await fbBatch.commit();
+        await fbBatch.commit().timeout(const Duration(seconds: 15));
         fbBatch = _firestore.batch();
         batchSize = 0;
       }
     }
 
-    if (batchSize > 0) await fbBatch.commit();
+    if (batchSize > 0) {
+      await fbBatch.commit().timeout(const Duration(seconds: 15));
+    }
     return total;
   }
 

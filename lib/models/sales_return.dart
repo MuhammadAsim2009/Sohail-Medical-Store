@@ -7,6 +7,7 @@ class SalesReturnItem {
   double quantityReturned;
   double price;
   double total;
+  DateTime? expiryDate; // For batch matching on returns
 
   SalesReturnItem({
     this.id,
@@ -17,6 +18,7 @@ class SalesReturnItem {
     required this.quantityReturned,
     required this.price,
     required this.total,
+    this.expiryDate,
   });
 
   Map<String, dynamic> toMap() {
@@ -29,6 +31,8 @@ class SalesReturnItem {
       'quantity_returned': quantityReturned,
       'price': price,
       'total': total,
+      // expiryDate is NOT persisted to sales_return_items — it's only used
+      // for batch look-up at the time of insertion.
     };
   }
 
@@ -42,6 +46,7 @@ class SalesReturnItem {
       quantityReturned: map['quantity_returned'],
       price: map['price'],
       total: map['total'],
+      // expiryDate is transient — not stored in DB, only for batch matching
     );
   }
 }

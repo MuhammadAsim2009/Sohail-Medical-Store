@@ -1485,6 +1485,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
   final Map<int, int> _returnQty = {};
   final Map<int, String> _selectedUnits = {};
   final Map<int, Product> _productById = {};
+  final Map<int, DateTime?> _returnExpiry = {}; // per sale-item expiry for batch matching
   bool _isProcessing = false;
 
   @override
@@ -1493,6 +1494,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
     _loadProducts();
     for (var item in widget.items) {
       _returnQty[item.id!] = 0;
+      _returnExpiry[item.id!] = null;
     }
   }
 
@@ -1643,6 +1645,7 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
             quantityReturned: (qty * multiplier).toDouble(),
             price: unitPrice,
             total: qty * unitPrice,
+            expiryDate: _returnExpiry[i.id!], // pass expiry for batch matching
           );
         })
         .toList();
@@ -1756,44 +1759,89 @@ class _ProcessReturnDialogState extends State<_ProcessReturnDialog> {
                             final unitPrice = _unitPriceFor(item, unit);
                             final purchasedUnit = _saleUnitFor(item);
                             final purchasedQty = _saleQtyInUnit(item);
+                            final expiry = _returnExpiry[item.id!];
+                            final expiryLabel = expiry != null
+                                ? '${expiry.day.toString().padLeft(2,'0')}/${expiry.month.toString().padLeft(2,'0')}/${expiry.year}'
+                                : 'Set expiry date (optional)';
                             return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(border: Border(top: BorderSide(color: Colors.grey.shade100))),
-                              child: Row(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(flex: 4, child: Text(item.productName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
-                                  Expanded(
-                                    flex: 2,
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        isExpanded: true,
-                                        value: unit,
-                                        items: _unitOptionsFor(item).map((u) => DropdownMenuItem(value: u, child: Text(u, overflow: TextOverflow.ellipsis))).toList(),
-                                        onChanged: (val) {
-                                          if (val != null) _setUnit(item, val);
-                                        },
+                                  Row(
+                                    children: [
+                                      Expanded(flex: 4, child: Text(item.productName, style: const TextStyle(fontSize: 13), overflow: TextOverflow.ellipsis)),
+                                      Expanded(
+                                        flex: 2,
+                                        child: DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            isExpanded: true,
+                                            value: unit,
+                                            items: _unitOptionsFor(item).map((u) => DropdownMenuItem(value: u, child: Text(u, overflow: TextOverflow.ellipsis))).toList(),
+                                            onChanged: (val) { if (val != null) _setUnit(item, val); },
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: Text(
+                                          '${purchasedQty.toStringAsFixed(purchasedQty == purchasedQty.roundToDouble() ? 0 : 2)} $purchasedUnit',
+                                          style: const TextStyle(fontSize: 13),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 3,
+                                        child: Row(
+                                          children: [
+                                            _QtyBtn(icon: Icons.remove, onTap: qty > 0 ? () => setState(() => _returnQty[item.id!] = qty - 1) : null),
+                                            Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text(qty.toString(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
+                                            _QtyBtn(icon: Icons.add, onTap: qty < maxQty ? () => setState(() => _returnQty[item.id!] = qty + 1) : null),
+                                          ],
+                                        ),
+                                      ),
+                                      Expanded(flex: 2, child: Text('Rs. ${(qty * unitPrice).toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)))),
+                                    ],
+                                  ),
+                                  if (qty > 0) ...[  
+                                    const SizedBox(height: 6),
+                                    GestureDetector(
+                                      onTap: () async {
+                                        final picked = await showDatePicker(
+                                          context: context,
+                                          initialDate: expiry ?? DateTime.now(),
+                                          firstDate: DateTime(2020),
+                                          lastDate: DateTime(2035),
+                                          helpText: 'Return Batch Expiry Date',
+                                        );
+                                        if (picked != null && mounted) setState(() => _returnExpiry[item.id!] = picked);
+                                      },
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                        decoration: BoxDecoration(
+                                          color: expiry != null ? const Color(0xFFEFF6FF) : const Color(0xFFF8FAFC),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(color: expiry != null ? const Color(0xFF93C5FD) : Colors.grey.shade300),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.event_outlined, size: 13, color: expiry != null ? const Color(0xFF2563EB) : Colors.grey.shade500),
+                                            const SizedBox(width: 6),
+                                            Text(expiryLabel, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: expiry != null ? const Color(0xFF2563EB) : Colors.grey.shade500)),
+                                            if (expiry != null) ...[
+                                              const SizedBox(width: 6),
+                                              GestureDetector(
+                                                onTap: () => setState(() => _returnExpiry[item.id!] = null),
+                                                child: Icon(Icons.close, size: 13, color: Colors.grey.shade500),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    flex: 2,
-                                    child: Text(
-                                      '${purchasedQty.toStringAsFixed(purchasedQty == purchasedQty.roundToDouble() ? 0 : 2)} $purchasedUnit',
-                                      style: const TextStyle(fontSize: 13),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    flex: 3,
-                                    child: Row(
-                                      children: [
-                                        _QtyBtn(icon: Icons.remove, onTap: qty > 0 ? () => setState(() => _returnQty[item.id!] = qty - 1) : null),
-                                        Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: Text(qty.toString(), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14))),
-                                        _QtyBtn(icon: Icons.add, onTap: qty < maxQty ? () => setState(() => _returnQty[item.id!] = qty + 1) : null),
-                                      ],
-                                    ),
-                                  ),
-                                  Expanded(flex: 2, child: Text('Rs. ${(qty * unitPrice).toStringAsFixed(0)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)))),
+                                  ],
                                 ],
                               ),
                             );
