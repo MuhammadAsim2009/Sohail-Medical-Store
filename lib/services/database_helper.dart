@@ -1848,6 +1848,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
       LEFT JOIN sale_items si ON si.product_id = p.id
       LEFT JOIN sales s ON s.id = si.sale_id
         AND date(s.date) BETWEEN date(?) AND date(?)
+      WHERE p.is_deleted = 0
       GROUP BY p.id
       ORDER BY revenue DESC
     ''',
@@ -1871,6 +1872,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
       FROM customers c
       LEFT JOIN sales s ON s.customer_id = c.id
         AND date(s.date) BETWEEN date(?) AND date(?)
+      WHERE c.is_deleted = 0
       GROUP BY c.id
       ORDER BY total_purchases DESC
     ''',
@@ -1892,6 +1894,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
         ROUND(stock * sell_price, 2) AS stock_value,
         CASE WHEN stock <= threshold THEN 'Low' ELSE 'OK' END AS status
       FROM products
+      WHERE is_deleted = 0
       ORDER BY stock ASC
     ''');
   }
@@ -2052,6 +2055,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
       FROM suppliers s
       LEFT JOIN purchase_orders po ON po.supplier = s.companyName
         AND date(po.order_date) BETWEEN date(?) AND date(?)
+      WHERE s.is_deleted = 0
       GROUP BY s.id
       ORDER BY COALESCE(s.pendingAmount, 0) DESC
     ''',

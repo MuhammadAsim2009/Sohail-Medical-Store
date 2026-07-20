@@ -449,8 +449,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   ),
                   onChanged: (val) {
                     if (_reportData != null) {
-                      // We would trigger a local filter here if needed, 
-                      // or just clear data to force re-generation
+                      setState(() {}); // trigger rebuild to filter table
                     }
                   },
                 ),
@@ -648,12 +647,33 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 20),
 
           // Report-specific content dispatched by subFilter
-          if (report.id == 'sales')    _buildSalesReport(data, fmt, fmtInt, subFilter)
-          else if (report.id == 'product')  _buildProductReport(data, fmt, fmtInt, subFilter)
-          else if (report.id == 'customer') _buildCustomerReport(data, fmt, fmtInt, subFilter)
-          else if (report.id == 'supplier') _buildSupplierReport(data, fmt, fmtInt, subFilter)
-          else if (report.id == 'expense')  _buildExpenseReport(data, fmt, fmtInt, subFilter)
-          else if (report.id == 'ledger')   _buildLedgerReport(data, fmt, subFilter),
+          Builder(
+            builder: (context) {
+              var displayData = data;
+              final query = _searchController.text.trim().toLowerCase();
+              if (query.isNotEmpty) {
+                displayData = Map<String, dynamic>.from(data);
+                List<dynamic> filterList(List<dynamic> list) {
+                  return list.where((item) {
+                    if (item is Map) {
+                      return item.values.any((val) => val != null && val.toString().toLowerCase().contains(query));
+                    }
+                    return false;
+                  }).toList();
+                }
+                if (displayData['rows'] is List) displayData['rows'] = filterList(displayData['rows']);
+                if (displayData['customers'] is List) displayData['customers'] = filterList(displayData['customers']);
+              }
+
+              if (report.id == 'sales')    return _buildSalesReport(displayData, fmt, fmtInt, subFilter);
+              if (report.id == 'product')  return _buildProductReport(displayData, fmt, fmtInt, subFilter);
+              if (report.id == 'customer') return _buildCustomerReport(displayData, fmt, fmtInt, subFilter);
+              if (report.id == 'supplier') return _buildSupplierReport(displayData, fmt, fmtInt, subFilter);
+              if (report.id == 'expense')  return _buildExpenseReport(displayData, fmt, fmtInt, subFilter);
+              if (report.id == 'ledger')   return _buildLedgerReport(displayData, fmt, subFilter);
+              return const SizedBox.shrink();
+            },
+          ),
         ],
       ),
     );
