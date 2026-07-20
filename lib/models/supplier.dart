@@ -11,6 +11,7 @@ class Supplier {
   final DateTime lastOrderDate;
   final double pendingAmount;
   final double advanceAmount;
+  final bool isDeleted;
 
   Supplier({
     required this.id,
@@ -23,6 +24,7 @@ class Supplier {
     required this.lastOrderDate,
     this.pendingAmount = 0.0,
     this.advanceAmount = 0.0,
+    this.isDeleted = false,
   });
 
   Supplier copyWith({
@@ -36,6 +38,7 @@ class Supplier {
     DateTime? lastOrderDate,
     double? pendingAmount,
     double? advanceAmount,
+    bool? isDeleted,
   }) {
     return Supplier(
       id: id ?? this.id,
@@ -48,6 +51,7 @@ class Supplier {
       lastOrderDate: lastOrderDate ?? this.lastOrderDate,
       pendingAmount: pendingAmount ?? this.pendingAmount,
       advanceAmount: advanceAmount ?? this.advanceAmount,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
@@ -82,6 +86,7 @@ class Supplier {
           : DateTime.now(),
       pendingAmount: (map['pendingAmount'] as num?)?.toDouble() ?? 0.0,
       advanceAmount: (map['advanceAmount'] as num?)?.toDouble() ?? 0.0,
+      isDeleted: (map['is_deleted'] as int?) == 1,
     );
   }
 }

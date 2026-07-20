@@ -169,8 +169,8 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
     setState(() => _isLoading = true);
     try {
       // Load accounts
-      _customers = await DatabaseHelper.instance.getCustomers();
-      _suppliers = await DatabaseHelper.instance.getSuppliers();
+      _customers = await DatabaseHelper.instance.getCustomers(includeDeleted: true);
+      _suppliers = await DatabaseHelper.instance.getSuppliers(includeDeleted: true);
       
       if (_customers.isNotEmpty) _selectedCustomerId = _customers.first.id;
       if (_suppliers.isNotEmpty) _selectedSupplierId = _suppliers.first.id;
@@ -722,7 +722,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               value: _selectedCustomerId,
               items: _customers.isEmpty 
                   ? const [DropdownMenuItem<String>(value: null, child: Text('No customers'))]
-                  : _customers.map((c) => DropdownMenuItem<String>(value: c.id, child: Text(c.name))).toList(),
+                  : _customers.map((c) => DropdownMenuItem<String>(value: c.id, child: Text('${c.name}${c.isDeleted ? ' (Deleted)' : ''}'))).toList(),
               onChanged: _customers.isEmpty ? null : (val) {
                 if (val != null) {
                   setState(() => _selectedCustomerId = val);
@@ -760,7 +760,12 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_selectedCustomerObj?.name ?? 'No Customer Selected', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary)),
+                    Text(
+                      _selectedCustomerObj != null 
+                          ? '${_selectedCustomerObj!.name}${_selectedCustomerObj!.isDeleted ? ' (Deleted)' : ''}'
+                          : 'No Customer Selected',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary),
+                    ),
                     Text(_selectedCustomerObj?.phone ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),
@@ -828,7 +833,7 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
               value: _selectedSupplierId,
               items: _suppliers.isEmpty 
                   ? const [DropdownMenuItem<String>(value: null, child: Text('No suppliers'))]
-                  : _suppliers.map((s) => DropdownMenuItem<String>(value: s.id, child: Text(s.companyName))).toList(),
+                  : _suppliers.map((s) => DropdownMenuItem<String>(value: s.id, child: Text('${s.companyName}${s.isDeleted ? ' (Deleted)' : ''}'))).toList(),
               onChanged: _suppliers.isEmpty ? null : (val) {
                 if (val != null) {
                   setState(() => _selectedSupplierId = val);
@@ -866,7 +871,12 @@ class _LedgerScreenState extends State<LedgerScreen> with SingleTickerProviderSt
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(_selectedSupplierObj?.companyName ?? 'No Supplier Selected', style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary)),
+                    Text(
+                      _selectedSupplierObj != null 
+                          ? '${_selectedSupplierObj!.companyName}${_selectedSupplierObj!.isDeleted ? ' (Deleted)' : ''}'
+                          : 'No Supplier Selected',
+                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: _primary),
+                    ),
                     Text(_selectedSupplierObj?.contactPerson ?? '', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                   ],
                 ),

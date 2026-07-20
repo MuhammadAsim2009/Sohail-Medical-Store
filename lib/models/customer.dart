@@ -10,6 +10,7 @@ class Customer {
   final double pendingAmount;
   final double advanceAmount;
   final DateTime lastVisit;
+  final bool isDeleted;
 
   Customer({
     this.id,
@@ -21,6 +22,7 @@ class Customer {
     this.pendingAmount = 0.0,
     this.advanceAmount = 0.0,
     required this.lastVisit,
+    this.isDeleted = false,
   });
 
   Customer copyWith({
@@ -33,6 +35,7 @@ class Customer {
     double? pendingAmount,
     double? advanceAmount,
     DateTime? lastVisit,
+    bool? isDeleted,
   }) {
     return Customer(
       id: id ?? this.id,
@@ -44,6 +47,7 @@ class Customer {
       pendingAmount: pendingAmount ?? this.pendingAmount,
       advanceAmount: advanceAmount ?? this.advanceAmount,
       lastVisit: lastVisit ?? this.lastVisit,
+      isDeleted: isDeleted ?? this.isDeleted,
     );
   }
 
@@ -72,6 +76,7 @@ class Customer {
       pendingAmount: (map['pendingAmount'] ?? 0).toDouble(),
       advanceAmount: (map['advanceAmount'] ?? 0).toDouble(),
       lastVisit: map['lastVisit'] != null ? DateTime.parse(map['lastVisit']) : DateTime.now(),
+      isDeleted: (map['is_deleted'] as int? ?? 0) == 1,
     );
   }
 

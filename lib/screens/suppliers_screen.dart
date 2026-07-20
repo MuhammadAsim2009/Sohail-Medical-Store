@@ -431,9 +431,33 @@ class _SupplierRowState extends State<_SupplierRow> {
           children: [
             Expanded(
               flex: 2,
-              child: Text(
-                s.companyName,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              child: Row(
+                children: [
+                  Text(
+                    s.companyName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600, 
+                      fontSize: 14,
+                      decoration: s.isDeleted ? TextDecoration.lineThrough : null,
+                      color: s.isDeleted ? Colors.grey : Colors.black,
+                    ),
+                  ),
+                  if (s.isDeleted) ...[
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.red.shade200),
+                      ),
+                      child: Text(
+                        'Deleted',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.red.shade700),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             Expanded(
@@ -491,33 +515,37 @@ class _SupplierRowState extends State<_SupplierRow> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    _ActionButton(
-                      icon: Icons.credit_card_outlined,
-                      color: Colors.green.shade600,
-                      onTap: widget.onPayment,
-                      tooltip: 'Record Payment',
-                    ),
-                    const SizedBox(width: 8),
+                    if (!s.isDeleted) ...[
+                      _ActionButton(
+                        icon: Icons.credit_card_outlined,
+                        color: Colors.green.shade600,
+                        onTap: widget.onPayment,
+                        tooltip: 'Record Payment',
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     _ActionButton(
                       icon: Icons.visibility_outlined,
                       color: const Color(0xFF7E57C2),
                       onTap: widget.onView,
                       tooltip: 'View Ledger',
                     ),
-                    const SizedBox(width: 8),
-                    _ActionButton(
-                      icon: Icons.edit_outlined,
-                      color: const Color(0xFF1976D2),
-                      onTap: widget.onEdit,
-                      tooltip: 'Edit',
-                    ),
-                    const SizedBox(width: 8),
-                    _ActionButton(
-                      icon: Icons.delete_outline,
-                      color: Colors.red.shade400,
-                      onTap: widget.onDelete,
-                      tooltip: 'Delete',
-                    ),
+                    if (!s.isDeleted) ...[
+                      const SizedBox(width: 8),
+                      _ActionButton(
+                        icon: Icons.edit_outlined,
+                        color: const Color(0xFF1976D2),
+                        onTap: widget.onEdit,
+                        tooltip: 'Edit',
+                      ),
+                      const SizedBox(width: 8),
+                      _ActionButton(
+                        icon: Icons.delete_outline,
+                        color: Colors.red.shade400,
+                        onTap: widget.onDelete,
+                        tooltip: 'Delete',
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1327,32 +1355,87 @@ class _RecordPaymentDialogState extends State<_RecordPaymentDialog> {
                       const SizedBox(height: 4),
                       Text(
                         _availableInvoices.isEmpty
-                            ? 'No open purchase orders found for this supplier. You can still record a general receipt.'
-                            : 'Select an open purchase order or record a general receipt.',
+                            ? 'No open purchase orders found for this supplier. You can still record a general payment.'
+                            : 'Select an open purchase order or record a general payment.',
                         style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                       ),
                       const SizedBox(height: 16),
-                      if (_availableInvoices.isNotEmpty)
-                        DropdownButtonFormField<String>(
-                          value: _selectedInvoiceNumber,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: 'Apply to purchase order',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          items: _availableInvoices
-                              .map((order) => DropdownMenuItem<String>(
-                                    value: order.poNumber,
-                                    child: Text('${order.poNumber}  •  Rs. ${order.balance.toStringAsFixed(0)} due', overflow: TextOverflow.ellipsis),
-                                  ))
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              _syncSelectedInvoice(value);
-                              setState(() => _isGeneralReceipt = false);
-                            }
-                          },
+                      if (_availableInvoices.isNotEmpty) ...[
+                        // Toggle: Specific Invoice vs General Payment
+                        Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() => _isGeneralReceipt = false),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: !_isGeneralReceipt ? const Color(0xFF7E57C2) : Colors.white,
+                                    borderRadius: const BorderRadius.horizontal(left: Radius.circular(10)),
+                                    border: Border.all(color: !_isGeneralReceipt ? const Color(0xFF7E57C2) : Colors.grey.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.receipt_long_outlined, size: 16, color: !_isGeneralReceipt ? Colors.white : Colors.grey.shade700),
+                                      const SizedBox(width: 6),
+                                      Text('Apply to Invoice', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: !_isGeneralReceipt ? Colors.white : Colors.grey.shade700)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () => setState(() {
+                                  _isGeneralReceipt = true;
+                                  _selectedInvoiceNumber = null;
+                                  _amountController.text = '0';
+                                }),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    color: _isGeneralReceipt ? const Color(0xFF7E57C2) : Colors.white,
+                                    borderRadius: const BorderRadius.horizontal(right: Radius.circular(10)),
+                                    border: Border.all(color: _isGeneralReceipt ? const Color(0xFF7E57C2) : Colors.grey.shade300),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.payments_outlined, size: 16, color: _isGeneralReceipt ? Colors.white : Colors.grey.shade700),
+                                      const SizedBox(width: 6),
+                                      Text('General Payment', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: _isGeneralReceipt ? Colors.white : Colors.grey.shade700)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 16),
+                        if (!_isGeneralReceipt)
+                          DropdownButtonFormField<String>(
+                            value: _selectedInvoiceNumber,
+                            isExpanded: true,
+                            decoration: InputDecoration(
+                              labelText: 'Apply to purchase order',
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                            items: _availableInvoices
+                                .map((order) => DropdownMenuItem<String>(
+                                      value: order.poNumber,
+                                      child: Text('${order.poNumber}  •  Rs. ${order.balance.toStringAsFixed(0)} due', overflow: TextOverflow.ellipsis),
+                                    ))
+                                .toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                _syncSelectedInvoice(value);
+                              }
+                            },
+                          ),
+                      ],
                     ],
                   ),
                 ),

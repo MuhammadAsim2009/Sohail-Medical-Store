@@ -52,7 +52,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 28,
+      version: 29,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -378,6 +378,17 @@ CREATE TABLE IF NOT EXISTS users (
       try { await db.execute('ALTER TABLE sale_items ADD COLUMN batch_id INTEGER'); } catch (_) {}
       try { await db.execute('ALTER TABLE sale_items ADD COLUMN discount REAL DEFAULT 0.0'); } catch (_) {}
       try { await db.execute('ALTER TABLE sale_items ADD COLUMN discount_type TEXT DEFAULT "Rupee"'); } catch (_) {}
+    }
+    if (oldVersion < 29) {
+      // Add sync & soft-delete columns to suppliers (missing on DBs created before v14 schema rewrite)
+      try { await db.execute('ALTER TABLE suppliers ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE suppliers ADD COLUMN sync_id TEXT'); } catch (_) {}
+      try { await db.execute('ALTER TABLE suppliers ADD COLUMN updated_at INTEGER'); } catch (_) {}
+      // Add is_deleted to supplier_payments if missing
+      try { await db.execute('ALTER TABLE supplier_payments ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      // Add is_deleted to purchase_orders if missing (old v3 schema lacked it)
+      try { await db.execute('ALTER TABLE purchase_orders ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE purchase_orders ADD COLUMN sync_id TEXT'); } catch (_) {}
     }
     if (oldVersion < 26) {
       // Create product_batches table
@@ -1065,6 +1076,7 @@ CREATE TABLE IF NOT EXISTS product_categories (
           'tax_amount': order.taxAmount,
           'paid_amount': order.paidAmount,
           'discount': order.discount,
+          'discount_type': order.discountType,
         }),
       );
       final savedItems = <PurchaseOrderItem>[];
@@ -1080,6 +1092,8 @@ CREATE TABLE IF NOT EXISTS product_categories (
             'purchase_price': item.purchasePrice,
             'selling_price': item.sellingPrice,
             'discount': item.discount,
+            'discount_type': item.discountType,
+            'gst': item.gst,
             'expiry_date': item.expiryDate?.toIso8601String(),
           }),
         );
@@ -1100,16 +1114,18 @@ CREATE TABLE IF NOT EXISTS product_categories (
     final orderRows = await db.query('purchase_orders', orderBy: 'id DESC');
     final orders = <PurchaseOrder>[];
     for (final row in orderRows) {
-      final orderId = row['id'] as int;
+      if ((row['is_deleted'] as int?) == 1) continue;
+      
       final itemRows = await db.query(
         'purchase_order_items',
         where: 'order_id = ?',
-        whereArgs: [orderId],
+        whereArgs: [row['id'] as int],
       );
+      
       orders.add(
         PurchaseOrder.fromMap(
           row,
-          itemRows.map(PurchaseOrderItem.fromMap).toList(),
+          itemRows.map((r) => PurchaseOrderItem.fromMap(r)).toList(),
         ),
       );
     }
@@ -1139,13 +1155,16 @@ CREATE TABLE IF NOT EXISTS product_categories (
           'tax_amount': order.taxAmount,
           'paid_amount': order.paidAmount,
           'discount': order.discount,
+          'discount_type': order.discountType,
           'status': order.status,
-        }),
+        }, isUpdate: true),
         where: 'id = ?',
         whereArgs: [order.id],
       );
-      await txn.delete(
+      // Soft delete old items to ensure Firebase sync catches the removal
+      await txn.update(
         'purchase_order_items',
+        _stamp({'is_deleted': 1}, isUpdate: true),
         where: 'order_id = ?',
         whereArgs: [order.id],
       );
@@ -1161,6 +1180,8 @@ CREATE TABLE IF NOT EXISTS product_categories (
             'purchase_price': item.purchasePrice,
             'selling_price': item.sellingPrice,
             'discount': item.discount,
+            'discount_type': item.discountType,
+            'gst': item.gst,
             'expiry_date': item.expiryDate?.toIso8601String(),
           }),
         );
@@ -1300,9 +1321,11 @@ CREATE TABLE IF NOT EXISTS product_categories (
     FirebaseSyncService.instance.triggerAutoSync();
   }
 
-  Future<List<Supplier>> getSuppliers() async {
+  Future<List<Supplier>> getSuppliers({bool includeDeleted = false}) async {
     final db = await instance.database;
-    final result = await db.query('suppliers', where: 'is_deleted = 0');
+    final result = includeDeleted
+        ? await db.query('suppliers')
+        : await db.query('suppliers', where: 'is_deleted = 0');
     return result.map((json) => Supplier.fromMap(json)).toList();
   }
 
@@ -1376,11 +1399,11 @@ CREATE TABLE IF NOT EXISTS product_categories (
     );
   }
 
-  Future<List<Customer>> getCustomers() async {
+  Future<List<Customer>> getCustomers({bool includeDeleted = false}) async {
     final db = await instance.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'customers',
-      where: 'is_deleted = 0',
+      where: includeDeleted ? null : 'is_deleted = 0',
       orderBy: 'name ASC',
     );
     return maps.map((map) => Customer.fromMap(map)).toList();
@@ -1650,6 +1673,114 @@ CREATE TABLE IF NOT EXISTS product_categories (
         );
       }
       return id;
+    });
+  }
+
+  /// Record a general (unlinked) supplier payment.
+  /// Automatically applies the amount to the oldest unpaid purchase orders
+  /// first, marks them Paid when cleared, and stores a single payment record
+  /// whose description lists all cleared invoice numbers.
+  Future<void> insertGeneralSupplierPayment({
+    required String supplierId,
+    required String supplierName,
+    required double amount,
+    required String reference,
+    String notes = '',
+  }) async {
+    final db = await instance.database;
+    FirebaseSyncService.instance.triggerAutoSync();
+
+    await db.transaction((txn) async {
+      final ts = DateTime.now().millisecondsSinceEpoch;
+
+      // 1. Fetch open POs for this supplier, oldest first
+      final openPoRows = await txn.rawQuery('''
+        SELECT id, po_number, paid_amount,
+               (tax_amount + (
+                 SELECT COALESCE(SUM(
+                   CASE
+                     WHEN discount_type = 'Percentage'
+                       THEN quantity * purchase_price * (1 + gst/100) * (1 - discount/100)
+                     ELSE quantity * purchase_price * (1 + gst/100) - discount * quantity
+                   END
+                 ), 0) FROM purchase_order_items WHERE order_id = purchase_orders.id AND is_deleted = 0
+               ) - discount) AS total_amount
+        FROM purchase_orders
+        WHERE supplier = ? AND is_deleted = 0 AND status != 'Paid'
+        ORDER BY order_date ASC
+      ''', [supplierName]);
+
+      double remaining = amount;
+      final List<String> clearedInvoices = [];
+
+      for (final row in openPoRows) {
+        if (remaining <= 0.001) break;
+        final poId = row['id'] as int;
+        final poNumber = row['po_number'] as String;
+        final totalAmount = (row['total_amount'] as num?)?.toDouble() ?? 0.0;
+        final paidAmount = (row['paid_amount'] as num?)?.toDouble() ?? 0.0;
+        final balance = (totalAmount - paidAmount).clamp(0.0, double.infinity);
+        if (balance <= 0.001) continue;
+
+        final payNow = remaining >= balance ? balance : remaining;
+        remaining -= payNow;
+        final newPaid = paidAmount + payNow;
+        final newBalance = (totalAmount - newPaid).clamp(0.0, double.infinity);
+        final newStatus = newBalance <= 0.01 ? 'Paid' : 'Partial';
+
+        await txn.update(
+          'purchase_orders',
+          _stamp({
+            'paid_amount': newPaid,
+            'status': newStatus,
+          }, isUpdate: true),
+          where: 'id = ?',
+          whereArgs: [poId],
+        );
+        clearedInvoices.add(poNumber);
+      }
+
+      // 2. Build description with invoice numbers
+      final invoiceDesc = clearedInvoices.isEmpty
+          ? 'General Payment'
+          : 'General Payment (${clearedInvoices.join(', ')})';
+
+      // 3. Insert single payment record
+      final paymentMap = _stamp({
+        'supplier_id': supplierId,
+        'amount': amount,
+        'reference': reference,
+        'notes': notes.isEmpty ? invoiceDesc : '$invoiceDesc — $notes',
+        'invoice_number': null,
+        'date': DateTime.now().toIso8601String(),
+      });
+      paymentMap.remove('id');
+      await txn.insert('supplier_payments', paymentMap);
+
+      // 4. Update supplier pending/advance balances
+      final supplierRows = await txn.query(
+        'suppliers',
+        where: 'id = ?',
+        whereArgs: [supplierId],
+        limit: 1,
+      );
+      if (supplierRows.isNotEmpty) {
+        final s = supplierRows.first;
+        final existingPending = (s['pendingAmount'] as num?)?.toDouble() ?? 0.0;
+        final existingAdvance = (s['advanceAmount'] as num?)?.toDouble() ?? 0.0;
+        final applied = amount <= existingPending ? amount : existingPending;
+        final extra = amount > existingPending ? amount - existingPending : 0.0;
+        await txn.update(
+          'suppliers',
+          {
+            'pendingAmount': (existingPending - applied).clamp(0.0, double.infinity),
+            'advanceAmount': existingAdvance + extra,
+            'updated_at': ts,
+          },
+          where: 'id = ?',
+          whereArgs: [supplierId],
+        );
+      }
     });
   }
 
@@ -2105,40 +2236,89 @@ CREATE TABLE IF NOT EXISTS product_categories (
     if (supplier.isEmpty) return [];
     final name = supplier.first['companyName'] as String;
 
-    final transactions = await db.rawQuery(
-      '''
-      SELECT order_date AS date, po_number AS reference, 'Purchase Order' AS description, 'Purchase' AS type,
-        COALESCE((SELECT SUM(quantity * purchase_price) FROM purchase_order_items WHERE order_id = purchase_orders.id), 0) + tax_amount AS debit, 0.0 AS credit, 2 AS sort_order
-      FROM purchase_orders WHERE supplier = ? AND date(order_date) BETWEEN date(?) AND date(?)
-      UNION ALL
-      SELECT order_date AS date, po_number AS reference, 'Payment at Purchase' AS description, 'Purchase Payment' AS type,
-        0.0 AS debit, paid_amount AS credit, 1 AS sort_order
-      FROM purchase_orders WHERE supplier = ? AND paid_amount > 0 AND date(order_date) BETWEEN date(?) AND date(?)
-      UNION ALL
-      SELECT date, reference AS reference, 'Payment to Supplier' AS description, 'Payment' AS type, 0.0 AS debit, amount AS credit, 0 AS sort_order
-      FROM supplier_payments WHERE supplier_id = ? AND date(date) BETWEEN date(?) AND date(?)
-    ''',
-      [name, f, t, name, f, t, supplierId, f, t],
+    final all = <Map<String, dynamic>>[];
+
+    // 1. Fetch Purchase Orders and compute totals in Dart
+    final poRows = await db.query(
+      'purchase_orders',
+      where: 'supplier = ? AND COALESCE(is_deleted, 0) = 0 AND date(order_date) BETWEEN date(?) AND date(?)',
+      whereArgs: [name, f, t],
     );
 
-    final all = List<Map<String, dynamic>>.from(transactions);
+    for (final poRow in poRows) {
+      final orderId = poRow['id'] as int;
+      final itemRows = await db.query(
+        'purchase_order_items',
+        where: 'order_id = ? AND COALESCE(is_deleted, 0) = 0',
+        whereArgs: [orderId],
+      );
+      final items = itemRows.map((r) => PurchaseOrderItem.fromMap(r)).toList();
+      final po = PurchaseOrder.fromMap(poRow, items);
+
+      final totalAmount = po.totalAmount;
+      all.add({
+        'date': poRow['order_date'],
+        'reference': poRow['po_number'],
+        'description': 'Purchase Order',
+        'type': 'Purchase',
+        'debit': totalAmount,
+        'credit': 0.0,
+        'sort_order': 2,
+      });
+
+      if (po.paidAmount > 0) {
+        all.add({
+          'date': poRow['order_date'],
+          'reference': poRow['po_number'],
+          'description': 'Payment at Purchase',
+          'type': 'Purchase Payment',
+          'debit': 0.0,
+          'credit': po.paidAmount,
+          'sort_order': 1,
+        });
+      }
+    }
+
+    // 2. Fetch Supplier Payments
+    final payments = await db.query(
+      'supplier_payments',
+      where: 'supplier_id = ? AND date(date) BETWEEN date(?) AND date(?)',
+      whereArgs: [supplierId, f, t],
+    );
+
+    for (final pay in payments) {
+      all.add({
+        'date': pay['date'],
+        'reference': pay['reference'] ?? 'Payment',
+        'description': 'Payment to Supplier',
+        'type': 'Payment',
+        'debit': 0.0,
+        'credit': (pay['amount'] as num?)?.toDouble() ?? 0.0,
+        'sort_order': 0,
+      });
+    }
+
+    // Sort ascending first to calculate running balance
     all.sort((a, b) {
       final dateCmp = (a['date'] as String).compareTo(b['date'] as String);
       if (dateCmp != 0) return dateCmp;
       return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
     });
+
     double balance = 0.0;
     for (int i = 0; i < all.length; i++) {
       balance += (all[i]['debit'] as num) - (all[i]['credit'] as num);
       all[i] = {...all[i], 'balance': balance};
     }
     final closingBalance = balance;
+
     // Sort descending for UI
     all.sort((a, b) {
       final dateCmp = (b['date'] as String).compareTo(a['date'] as String);
       if (dateCmp != 0) return dateCmp;
       return (a['sort_order'] as int).compareTo(b['sort_order'] as int);
     });
+
     balance = closingBalance;
     for (var i = 0; i < all.length; i++) {
       final row = all[i];
