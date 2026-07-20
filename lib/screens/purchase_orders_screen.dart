@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:intl/intl.dart';
 import '../widgets/executive_header.dart';
 import '../models/product.dart';
@@ -1081,6 +1082,8 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
   final _taxCtrl = TextEditingController(text: '0');
   final _paidCtrl = TextEditingController(text: '0');
   final _invoiceDiscCtrl = TextEditingController(text: '0');
+  String _invoiceDiscType = 'Rupee';
+  final _itemSearchCtrl = TextEditingController();
 
   List<Supplier> _suppliers = [];
   bool _loadingSuppliers = true;
@@ -1103,6 +1106,7 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
         _taxCtrl.text = o.taxRate.toString();
         _paidCtrl.text = o.paidAmount.toString();
         _invoiceDiscCtrl.text = o.discount.toString();
+        _invoiceDiscType = o.discountType;
         _items = o.items.map((i) {
           final prod = widget.products.firstWhere(
             (p) => p.id == i.productId,
@@ -1141,33 +1145,35 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
     _taxCtrl.dispose();
     _paidCtrl.dispose();
     _invoiceDiscCtrl.dispose();
+    _itemSearchCtrl.dispose();
     super.dispose();
   }
 
   void _addItem() {
     if (widget.products.isEmpty) return;
     final p = widget.products.first;
-    setState(
-      () => _items.add(
-        _ItemRow(
-          product: p,
-          unitPurchased: p.packaging.isNotEmpty
-              ? p.packaging.first.name
-              : 'Unit',
-          quantity: 1,
-          purchasePrice: p.costPrice,
-          sellingPrice: p.sellPrice,
-          gst: p.gst,
-        ),
-      ),
-    );
+    setState(() => _items.add(_ItemRow(
+      product: p,
+      unitPurchased: p.packaging.isNotEmpty ? p.packaging.first.name : 'Unit',
+      quantity: 1,
+      purchasePrice: p.costPrice,
+      sellingPrice: p.sellPrice,
+      gst: p.gst,
+    )));
   }
 
   double get _subtotal => _items.fold(
     0.0,
-    (s, i) => s + (i.quantity * i.purchasePrice * (1 + i.gst / 100)),
+    (s, i) {
+      final base = i.quantity * i.purchasePrice * (1 + i.gst / 100);
+      final disc = i.discountType == 'Percentage' ? base * (i.discount / 100) : (i.discount * i.quantity);
+      return s + (base - disc);
+    },
   );
-  double get _invoiceDiscount => double.tryParse(_invoiceDiscCtrl.text) ?? 0;
+  double get _invoiceDiscount {
+    final val = double.tryParse(_invoiceDiscCtrl.text) ?? 0;
+    return _invoiceDiscType == 'Percentage' ? _subtotal * (val / 100) : val;
+  }
   double get _tax =>
       (_subtotal - _invoiceDiscount) *
       (double.tryParse(_taxCtrl.text) ?? 0) /
@@ -1194,7 +1200,8 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
       taxRate: double.tryParse(_taxCtrl.text) ?? 0,
       taxAmount: _tax,
       paidAmount: double.tryParse(_paidCtrl.text) ?? 0,
-      discount: _invoiceDiscount,
+      discount: double.tryParse(_invoiceDiscCtrl.text) ?? 0.0,
+      discountType: _invoiceDiscType,
       items: _items
           .map(
             (r) => PurchaseOrderItem(
@@ -1204,7 +1211,8 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
               quantity: r.quantity,
               purchasePrice: r.purchasePrice,
               sellingPrice: r.sellingPrice,
-              discount: 0.0,
+              discount: r.discount,
+              discountType: r.discountType,
               gst: r.gst,
               expiryDate: r.expiryDate,
             ),
@@ -1336,41 +1344,10 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
                                                       color: Color(0xFFD1D5DB),
                                                     ),
                                                   ),
-                                                  enabledBorder:
-                                                      OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius.all(
-                                                              Radius.circular(
-                                                                8,
-                                                              ),
-                                                            ),
-                                                        borderSide: BorderSide(
-                                                          color: Color(
-                                                            0xFFD1D5DB,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                  focusedBorder:
-                                                      OutlineInputBorder(
-                                                        borderRadius:
-                                                            BorderRadius.all(
-                                                              Radius.circular(
-                                                                8,
-                                                              ),
-                                                            ),
-                                                        borderSide: BorderSide(
-                                                          color: Color(
-                                                            0xFF0F4C81,
-                                                          ),
-                                                          width: 1.5,
-                                                        ),
-                                                      ),
                                                 ),
                                             dropdownMenuEntries: _suppliers.map(
                                               (s) {
-                                                return DropdownMenuEntry<
-                                                  String
-                                                >(
+                                                return DropdownMenuEntry<String>(
                                                   value: s.companyName,
                                                   label: s.companyName,
                                                 );
@@ -1408,51 +1385,122 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
                                   ),
                                 ),
                               ),
-                              child: _items.isEmpty
-                                  ? Container(
-                                      padding: const EdgeInsets.all(20),
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade50,
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(
-                                          color: Colors.grey.shade200,
-                                        ),
-                                      ),
-                                      child: Center(
-                                        child: Text(
-                                          widget.products.isEmpty
-                                              ? 'No products in inventory. Add products first.'
-                                              : 'Click "+ Add Item" to begin.',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade500,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : Column(
-                                      children: _items.asMap().entries.map((e) {
-                                        return Padding(
-                                          padding: const EdgeInsets.only(
-                                            bottom: 12,
-                                          ),
-                                          child: _ItemCard(
-                                            key: ValueKey(e.key),
-                                            row: e.value,
-                                            products: widget.products,
-                                            index: e.key,
-                                            onRemove: () => setState(
-                                              () => _items.removeAt(e.key),
+                              child: StatefulBuilder(
+                                builder: (context, setSearchState) {
+                                  final q = _itemSearchCtrl.text.trim().toLowerCase();
+                                  List<MapEntry<int, _ItemRow>> displayed;
+                                  if (q.isEmpty) {
+                                    displayed = _items.asMap().entries.toList().reversed.toList();
+                                  } else {
+                                    final all = _items.asMap().entries.where((e) {
+                                      final name = e.value.product.name.toLowerCase();
+                                      final sku = e.value.product.sku.toLowerCase();
+                                      return name.contains(q) || sku.contains(q);
+                                    }).toList();
+                                    all.sort((a, b) {
+                                      final aScore = a.value.product.name.toLowerCase().startsWith(q) ? 0 : 1;
+                                      final bScore = b.value.product.name.toLowerCase().startsWith(q) ? 0 : 1;
+                                      return aScore.compareTo(bScore);
+                                    });
+                                    displayed = all;
+                                  }
+
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                                    children: [
+                                      if (_items.isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 16),
+                                          child: TextField(
+                                            controller: _itemSearchCtrl,
+                                            decoration: InputDecoration(
+                                              hintText: 'Search by product name or SKU...',
+                                              prefixIcon: const Icon(Icons.search, size: 18, color: Colors.grey),
+                                              suffixIcon: _itemSearchCtrl.text.isNotEmpty
+                                                  ? IconButton(
+                                                      icon: const Icon(Icons.close, size: 16, color: Colors.grey),
+                                                      onPressed: () {
+                                                        _itemSearchCtrl.clear();
+                                                        setSearchState(() {});
+                                                      },
+                                                    )
+                                                  : null,
+                                              isDense: true,
+                                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                              border: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(8),
+                                                borderSide: BorderSide(color: Colors.grey.shade300),
+                                              ),
+                                              enabledBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(8),
+                                                borderSide: BorderSide(color: Colors.grey.shade300),
+                                              ),
+                                              focusedBorder: OutlineInputBorder(
+                                                borderRadius: BorderRadius.circular(8),
+                                                borderSide: const BorderSide(color: Color(0xFF0F4C81)),
+                                              ),
                                             ),
-                                            onChanged: () => setState(() {}),
+                                            onChanged: (val) => setSearchState(() {}),
                                           ),
-                                        );
-                                      }).toList(),
-                                    ),
+                                        ),
+                                      _items.isEmpty
+                                          ? Container(
+                                              padding: const EdgeInsets.all(20),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey.shade50,
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(
+                                                  color: Colors.grey.shade200,
+                                                ),
+                                              ),
+                                              child: Center(
+                                                child: Text(
+                                                  widget.products.isEmpty
+                                                      ? 'No products in inventory. Add products first.'
+                                                      : 'Click "+ Add Item" to begin.',
+                                                  style: TextStyle(
+                                                    color: Colors.grey.shade500,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
+                                            )
+                                           : displayed.isEmpty
+                                              ? Padding(
+                                                  padding: const EdgeInsets.all(20),
+                                                  child: Center(
+                                                    child: Text(
+                                                      'No items match "$q".',
+                                                      style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                                                    ),
+                                                  ),
+                                                )
+                                              : Column(
+                                                  children: displayed.map((e) {
+                                                    return Padding(
+                                                      padding: const EdgeInsets.only(bottom: 12),
+                                                      child: _ItemCard(
+                                                        key: ValueKey(e.key),
+                                                        row: e.value,
+                                                        products: widget.products,
+                                                        index: e.key,
+                                                        onRemove: () => setState(
+                                                          () => _items.removeAt(e.key),
+                                                        ),
+                                                        onChanged: () => setState(() {}),
+                                                      ),
+                                                    );
+                                                  }).toList(),
+                                                ),
+                                    ],
+                                  );
+                                },
+                              ),
                             ),
                           ],
                         ),
                       ),
+
 
                       const SizedBox(width: 16),
 
@@ -1471,10 +1519,38 @@ class _OrderFormDialogState extends State<_OrderFormDialog> {
                                     onChanged: () => setState(() {}),
                                   ),
                                   const SizedBox(height: 10),
-                                  _SummaryField(
-                                    label: 'Discount (Rs.)',
-                                    controller: _invoiceDiscCtrl,
-                                    onChanged: () => setState(() {}),
+                                  Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Expanded(
+                                        child: _SummaryField(
+                                          label: 'Discount',
+                                          controller: _invoiceDiscCtrl,
+                                          onChanged: () => setState(() {}),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Row(
+                                        children: [
+                                          Radio<String>(
+                                            value: 'Percentage',
+                                            groupValue: _invoiceDiscType,
+                                            onChanged: (val) {
+                                              setState(() => _invoiceDiscType = val!);
+                                            },
+                                          ),
+                                          const Text('%'),
+                                          Radio<String>(
+                                            value: 'Rupee',
+                                            groupValue: _invoiceDiscType,
+                                            onChanged: (val) {
+                                              setState(() => _invoiceDiscType = val!);
+                                            },
+                                          ),
+                                          const Text('Rs.'),
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                   const SizedBox(height: 10),
                                   _SummaryField(
@@ -1623,6 +1699,8 @@ class _ItemRow {
   double purchasePrice;
   double sellingPrice;
   double gst;
+  double discount;
+  String discountType;
   DateTime? expiryDate;
 
   _ItemRow({
@@ -1632,6 +1710,8 @@ class _ItemRow {
     required this.purchasePrice,
     required this.sellingPrice,
     this.gst = 0.0,
+    this.discount = 0.0,
+    this.discountType = 'Rupee',
     this.expiryDate,
   });
 }
@@ -1661,6 +1741,7 @@ class _ItemCardState extends State<_ItemCard> {
   late final TextEditingController _priceCtrl;
   late final TextEditingController _sellCtrl;
   late final TextEditingController _gstCtrl;
+  late final TextEditingController _discountCtrl;
   late final TextEditingController _expiryCtrl;
   late double _baseSellPrice; // base selling price before GST
 
@@ -1674,24 +1755,48 @@ class _ItemCardState extends State<_ItemCard> {
     _baseSellPrice = widget.row.sellingPrice;
     _sellCtrl = TextEditingController(text: widget.row.sellingPrice.toString());
     _gstCtrl = TextEditingController(text: widget.row.gst.toString());
+    _discountCtrl = TextEditingController(text: widget.row.discount.toString());
     _expiryCtrl = TextEditingController(
       text: widget.row.expiryDate != null
-          ? DateFormat('MMM d, yyyy').format(widget.row.expiryDate!)
+          ? DateFormat('MM/yyyy').format(widget.row.expiryDate!)
           : '',
     );
   }
 
   Future<void> _pickExpiry() async {
-    final date = await showDatePicker(
+    DateTime? selectedDate = widget.row.expiryDate ?? DateTime.now();
+    await showDialog(
       context: context,
-      initialDate: widget.row.expiryDate ?? DateTime.now(),
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Select Expiry Date'),
+          content: SizedBox(
+            height: 250,
+            width: 300,
+            child: CupertinoDatePicker(
+              mode: CupertinoDatePickerMode.monthYear,
+              initialDateTime: selectedDate,
+              minimumYear: 2000,
+              maximumYear: 2100,
+              onDateTimeChanged: (DateTime newDateTime) {
+                selectedDate = newDateTime;
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Done'),
+            ),
+          ],
+        );
+      },
     );
-    if (date != null) {
+    if (selectedDate != null) {
+      final selectedMonthYear = DateTime(selectedDate!.year, selectedDate!.month, 1);
       setState(() {
-        widget.row.expiryDate = date;
-        _expiryCtrl.text = DateFormat('MMM d, yyyy').format(date);
+        widget.row.expiryDate = selectedMonthYear;
+        _expiryCtrl.text = DateFormat('MM/yyyy').format(selectedMonthYear);
       });
       widget.onChanged();
     }
@@ -1703,6 +1808,7 @@ class _ItemCardState extends State<_ItemCard> {
     _priceCtrl.dispose();
     _sellCtrl.dispose();
     _gstCtrl.dispose();
+    _discountCtrl.dispose();
     _expiryCtrl.dispose();
     super.dispose();
   }
@@ -1772,15 +1878,16 @@ class _ItemCardState extends State<_ItemCard> {
                     color: Color(0xFF0F4C81),
                   ),
                 ),
-                InkWell(
-                  onTap: widget.onRemove,
-                  borderRadius: BorderRadius.circular(6),
-                  child: Icon(
-                    Icons.delete_outline,
-                    size: 18,
-                    color: Colors.red.shade400,
+                if (widget.index >= 0)
+                  InkWell(
+                    onTap: widget.onRemove,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Icon(
+                      Icons.delete_outline,
+                      size: 18,
+                      color: Colors.red.shade400,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -1878,6 +1985,7 @@ class _ItemCardState extends State<_ItemCard> {
                                   return TextField(
                                     controller: controller,
                                     focusNode: focusNode,
+                                    onSubmitted: (_) => onFieldSubmitted(),
                                     style: const TextStyle(
                                       fontSize: 14,
                                       color: Color(0xFF1A2E2B),
@@ -1893,10 +2001,11 @@ class _ItemCardState extends State<_ItemCard> {
                                   );
                                 },
                             optionsViewBuilder: (context, onSelected, options) {
+                              final highlighted = AutocompleteHighlightedOption.of(context);
                               return Align(
                                 alignment: Alignment.topLeft,
                                 child: Material(
-                                  elevation: 4,
+                                  elevation: 6,
                                   borderRadius: BorderRadius.circular(8),
                                   child: ConstrainedBox(
                                     constraints: const BoxConstraints(
@@ -1909,15 +2018,41 @@ class _ItemCardState extends State<_ItemCard> {
                                       itemCount: options.length,
                                       itemBuilder: (context, index) {
                                         final option = options.elementAt(index);
+                                        final isHighlighted = index == highlighted;
                                         return InkWell(
                                           onTap: () => onSelected(option),
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(12),
-                                            child: Text(
-                                              option.name,
-                                              style: const TextStyle(
-                                                fontSize: 14,
-                                              ),
+                                          child: Container(
+                                            color: isHighlighted
+                                                ? const Color(0xFF0F4C81).withValues(alpha: 0.1)
+                                                : null,
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 10,
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  option.name,
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: isHighlighted
+                                                        ? FontWeight.w600
+                                                        : FontWeight.normal,
+                                                    color: isHighlighted
+                                                        ? const Color(0xFF0F4C81)
+                                                        : const Color(0xFF1A2E2B),
+                                                  ),
+                                                ),
+                                                if (option.sku.isNotEmpty)
+                                                  Text(
+                                                    option.sku,
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      color: Colors.grey.shade500,
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
                                           ),
                                         );
@@ -2127,12 +2262,77 @@ class _ItemCardState extends State<_ItemCard> {
                             border: Border.all(color: Colors.grey.shade300),
                           ),
                           child: Text(
-                            (r.sellingPrice * (1 + r.gst / 100))
-                                .toStringAsFixed(2),
+                            (() {
+                              double newUnitSell = r.sellingPrice;
+                              if (r.discountType == 'Percentage') {
+                                newUnitSell = r.sellingPrice * (1 - r.discount / 100);
+                              } else {
+                                newUnitSell = r.sellingPrice - r.discount;
+                              }
+                              return (newUnitSell * (1 + r.gst / 100)).toStringAsFixed(2);
+                            })(),
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF0F4C81),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Row 3: Discount + Expiry
+                Row(
+                  children: [
+                    // Discount
+                    Expanded(
+                      child: _LabelField(
+                        label: 'Discount',
+                        child: TextFormField(
+                          controller: _discountCtrl,
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          style: const TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                            isDense: true,
+                          ),
+                          onChanged: (v) {
+                            r.discount = double.tryParse(v) ?? 0;
+                            widget.onChanged();
+                          },
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Discount Type
+                    Expanded(
+                      child: _LabelField(
+                        label: 'Type',
+                        child: Container(
+                          height: 38,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.grey.shade400),
+                            color: Colors.white,
+                          ),
+                          child: DropdownButtonHideUnderline(
+                            child: DropdownButton<String>(
+                              value: r.discountType,
+                              isExpanded: true,
+                              isDense: false,
+                              items: ['Rupee', 'Percentage'].map((t) {
+                                return DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 14)));
+                              }).toList(),
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => r.discountType = v);
+                                  widget.onChanged();
+                                }
+                              },
                             ),
                           ),
                         ),
@@ -2144,8 +2344,19 @@ class _ItemCardState extends State<_ItemCard> {
                         label: 'Expiry Date',
                         child: TextFormField(
                           controller: _expiryCtrl,
-                          readOnly: true,
-                          onTap: _pickExpiry,
+                          readOnly: false,
+                          onChanged: (val) {
+                            if (val.length >= 5 && val.contains('/')) {
+                              try {
+                                final parts = val.split('/');
+                                int m = int.parse(parts[0].trim());
+                                int y = int.parse(parts[1].trim());
+                                if (y < 100) y += 2000;
+                                widget.row.expiryDate = DateTime(y, m, 1);
+                                widget.onChanged();
+                              } catch (_) {}
+                            }
+                          },
                           style: const TextStyle(fontSize: 14),
                           decoration: InputDecoration(
                             contentPadding: const EdgeInsets.symmetric(
@@ -2156,10 +2367,13 @@ class _ItemCardState extends State<_ItemCard> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             isDense: true,
-                            hintText: 'Select Date',
-                            suffixIcon: const Icon(
-                              Icons.calendar_today,
-                              size: 16,
+                            hintText: 'MM/YYYY',
+                            suffixIcon: InkWell(
+                              onTap: _pickExpiry,
+                              child: const Icon(
+                                Icons.calendar_today,
+                                size: 16,
+                              ),
                             ),
                           ),
                         ),

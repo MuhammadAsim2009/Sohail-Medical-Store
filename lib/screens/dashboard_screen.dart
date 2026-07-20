@@ -10,6 +10,8 @@ import 'suppliers_screen.dart';
 import 'ledger_screen.dart';
 import 'reports_screen.dart';
 import 'settings_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'purchase_orders_screen.dart';
 import 'sales_return_screen.dart';
 import 'cashier_management_screen.dart';
@@ -175,7 +177,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _handleLogout() async {
-    // TODO: Call FirebaseAuth.instance.signOut() here before navigating.
+    await FirebaseAuth.instance.signOut();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('last_activity');
+    AuthService.instance.clear();
+
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -1341,7 +1347,7 @@ class _NearExpiryCardState extends State<_NearExpiryCard> {
 
   Future<void> _load() async {
     final data = await DatabaseHelper.instance.getNearExpiryBatches(
-      daysAhead: 120,
+      daysAhead: 215,
     );
     if (mounted)
       setState(() {

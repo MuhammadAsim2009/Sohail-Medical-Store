@@ -173,12 +173,14 @@ class _SalesReturnScreenState extends State<SalesReturnScreen> {
         _FilterChip(label: 'All posted', icon: Icons.check_circle_outline, selected: _activeFilter == 'All posted', selectedColor: Colors.blue, onTap: () => setState(() => _activeFilter = 'All posted')),
         const Spacer(),
         ElevatedButton.icon(
-          onPressed: _showNewReturnDialog,
+          onPressed: _dssOpen ? _showNewReturnDialog : null,
           icon: const Icon(Icons.add, size: 18),
           label: const Text('New Return', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
           style: ElevatedButton.styleFrom(
             backgroundColor: _kPrimary,
             foregroundColor: Colors.white,
+            disabledBackgroundColor: Colors.grey.shade300,
+            disabledForegroundColor: Colors.grey.shade500,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             elevation: 0,

@@ -2197,10 +2197,16 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
   bool _isLoading = true;
   bool _isSaving = false;
 
+
   // Staging: product selected from autocomplete, awaiting unit+qty confirmation
   Product? _stagedProduct;
   String? _stagedUnit;
   int _stagedQty = 1;
+
+  List<Map<String, dynamic>> _stagedBatches = [];
+  Map<String, dynamic>? _selectedBatch;
+  final TextEditingController _stagedDiscountController = TextEditingController(text: '0');
+
 
   final TextEditingController _receivedController = TextEditingController();
   final TextEditingController _qtyController = TextEditingController(text: '1');
@@ -2244,7 +2250,18 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     return basePrice * (1 + stagedGst / 100);
   }
 
-  double get _stagedLineTotal => _stagedPricePerUnit * _stagedQty;
+  double get _stagedPricePerUnitAfterDiscount {
+    final withGst = _stagedPricePerUnit;
+    final discount = double.tryParse(_stagedDiscountController.text) ?? 0.0;
+    final discountType = _selectedBatch?['discount_type'] as String? ?? 'Rupee';
+    if (discountType == 'Percentage') {
+      return withGst - (withGst * (discount / 100));
+    } else {
+      return withGst - discount;
+    }
+  }
+
+  double get _stagedLineTotal => _stagedPricePerUnitAfterDiscount * _stagedQty;
 
   @override
   void initState() {
@@ -2286,7 +2303,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
     }
   }
 
-  void _stageProduct(Product p) {
+  Future<void> _stageProduct(Product p) async {
     setState(() {
       _stagedProduct = p;
       _stagedUnit = p.packaging.isNotEmpty ? p.packaging.first.name : null;
@@ -2296,7 +2313,17 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
           .toStringAsFixed(1)
           .replaceAll(RegExp(r'([.]*0+)(?!.*\d)'), '');
       if (_stagedGstController.text.isEmpty) _stagedGstController.text = '0';
+      _stagedBatches = [];
+      _selectedBatch = null;
+      _stagedDiscountController.text = '0';
     });
+    final dbHelper = DatabaseHelper.instance;
+    final batches = await dbHelper.getBatchesForProduct(p.id!);
+    if (mounted && _stagedProduct?.id == p.id) {
+      setState(() {
+        _stagedBatches = batches.where((b) => (b['batch_quantity'] as num).toDouble() > 0).toList();
+      });
+    }
   }
 
   void _addStagedToCart() {
@@ -2345,6 +2372,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
             unitQty: _stagedQty,
             pricePerUnit: pricePerUnit,
             gst: double.tryParse(_stagedGstController.text) ?? 0.0,
+            batchId: _selectedBatch?['id'] as int?,
+            discount: double.tryParse(_stagedDiscountController.text) ?? 0.0,
+            discountType: (_selectedBatch?['discount_type'] as String?) ?? 'Rupee',
+            maxDiscount: (_selectedBatch?['discount'] as num?)?.toDouble() ?? 0.0,
           ),
         );
       }
@@ -2605,6 +2636,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
               price: c.pricePerUnit,
               gst: c.gst,
               total: c.total,
+              batchId: c.batchId,
+              discount: c.discount,
+              discountType: c.discountType,
             ),
           )
           .toList();
@@ -2669,7 +2703,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
               ),
             ),
             Expanded(
-              child: Padding(
+              child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
@@ -2878,6 +2912,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                             return TextFormField(
                               controller: controller,
                               focusNode: focusNode,
+                              onFieldSubmitted: (String value) {
+                                onFieldSubmitted();
+                              },
                               decoration: InputDecoration(
                                 labelText: 'Add Medicine',
                                 hintText: 'Search by name...',
@@ -2902,229 +2939,536 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                     ),
                     // Staging area: unit + qty picker
                     if (_stagedProduct != null) ...[
-                      const SizedBox(height: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  flex: 3,
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _stagedProduct!.name,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 13,
-                                          color: Color(0xFF0F4C81),
+                        Container(
+                          margin: const EdgeInsets.only(top: 8, bottom: 16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4),
+                              )
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // Header: Product Info & Cancel
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.vertical(
+                                    top: Radius.circular(12),
+                                  ),
+                                  border: Border(
+                                    bottom: BorderSide(
+                                      color: Color(0xFFE2E8F0),
+                                    ),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _stagedProduct!.name,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                              color: Color(0xFF1E293B),
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Container(
+                                            padding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFDBEAFE),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'Stock: ${_stagedProduct!.formattedStock}',
+                                              style: const TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF1E40AF),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 20),
+                                      color: Colors.grey.shade400,
+                                      onPressed: () => setState(
+                                          () => _stagedProduct = null),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Body: Inputs
+                              Padding(
+                                padding: const EdgeInsets.all(16),
+                                child: Wrap(
+                                  spacing: 16,
+                                  runSpacing: 16,
+                                  crossAxisAlignment: WrapCrossAlignment.end,
+                                  children: [
+                                    // Unit Dropdown
+                                    if (_stagedProduct!.packaging.isNotEmpty)
+                                      SizedBox(
+                                        width: 120,
+                                        child: DropdownButtonFormField<
+                                            String>(
+                                          value: _stagedUnit,
+                                          isDense: true,
+                                          decoration: InputDecoration(
+                                            labelText: 'Unit',
+                                            labelStyle: const TextStyle(
+                                                fontSize: 13,
+                                                color: Color(0xFF64748B)),
+                                            filled: true,
+                                            fillColor: Colors.white,
+                                            contentPadding:
+                                                const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 12,
+                                            ),
+                                            border: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              borderSide: const BorderSide(
+                                                  color: Color(0xFFE2E8F0)),
+                                            ),
+                                            enabledBorder: OutlineInputBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                              borderSide: const BorderSide(
+                                                  color: Color(0xFFE2E8F0)),
+                                            ),
+                                          ),
+                                          items: _stagedProduct!.packaging
+                                              .map(
+                                                (u) => DropdownMenuItem(
+                                                  value: u.name,
+                                                  child: Text(
+                                                    u.name,
+                                                    style: const TextStyle(
+                                                        fontSize: 13),
+                                                  ),
+                                                ),
+                                              )
+                                              .toList(),
+                                          onChanged: (val) {
+                                            setState(() {
+                                              _stagedUnit = val;
+                                              if (_selectedBatch != null) {
+                                                final unit = _stagedUnit ??
+                                                    (_stagedProduct!.packaging
+                                                            .isNotEmpty
+                                                        ? _stagedProduct!
+                                                            .packaging
+                                                            .first
+                                                            .name
+                                                        : 'Unit');
+                                                final reqBase = _stagedQty *
+                                                    _stagedProduct!
+                                                        .getMultiplier(unit);
+                                                final batchQty =
+                                                    (_selectedBatch![
+                                                                'batch_quantity']
+                                                            as num)
+                                                        .toDouble();
+                                                if (batchQty < reqBase) {
+                                                  _selectedBatch = null;
+                                                }
+                                              }
+                                            });
+                                          },
                                         ),
                                       ),
-                                      Text(
-                                        'Stock: ${_stagedProduct!.formattedStock}',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Colors.grey.shade600,
+                                    // Qty
+                                    SizedBox(
+                                      width: 90,
+                                      child: TextFormField(
+                                        controller: _qtyController,
+                                        keyboardType: TextInputType.number,
+                                        style: const TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w600),
+                                        decoration: InputDecoration(
+                                          labelText: 'Qty',
+                                          labelStyle: const TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF64748B)),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 12,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE2E8F0)),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE2E8F0)),
+                                          ),
+                                        ),
+                                        onChanged: (val) {
+                                          setState(() {
+                                            _stagedQty =
+                                                int.tryParse(val) ?? 0;
+                                            if (_stagedQty <= 0) {
+                                              _selectedBatch = null;
+                                            } else if (_selectedBatch !=
+                                                null) {
+                                              final unit = _stagedUnit ??
+                                                  (_stagedProduct!.packaging
+                                                          .isNotEmpty
+                                                      ? _stagedProduct!
+                                                          .packaging
+                                                          .first
+                                                          .name
+                                                      : 'Unit');
+                                              final reqBase = _stagedQty *
+                                                  _stagedProduct!
+                                                      .getMultiplier(unit);
+                                              final batchQty =
+                                                  (_selectedBatch![
+                                                              'batch_quantity']
+                                                          as num)
+                                                      .toDouble();
+                                              if (batchQty < reqBase) {
+                                                _selectedBatch = null;
+                                              }
+                                            }
+                                          });
+                                        },
+                                      ),
+                                    ),
+                                    // GST
+                                    SizedBox(
+                                      width: 90,
+                                      child: TextFormField(
+                                        controller: _stagedGstController,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                        style: const TextStyle(fontSize: 14),
+                                        decoration: InputDecoration(
+                                          labelText: 'GST %',
+                                          labelStyle: const TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF64748B)),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 12,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE2E8F0)),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE2E8F0)),
+                                          ),
+                                        ),
+                                        onChanged: (_) => setState(() {}),
+                                      ),
+                                    ),
+                                    // Discount
+                                    SizedBox(
+                                      width: 110,
+                                      child: TextFormField(
+                                        controller: _stagedDiscountController,
+                                        keyboardType: const TextInputType
+                                            .numberWithOptions(
+                                          decimal: true,
+                                        ),
+                                        style: const TextStyle(fontSize: 14),
+                                        decoration: InputDecoration(
+                                          labelText:
+                                              'Disc (${_selectedBatch?['discount_type'] == 'Percentage' ? '%' : 'Rs'})',
+                                          labelStyle: const TextStyle(
+                                              fontSize: 13,
+                                              color: Color(0xFF64748B)),
+                                          filled: true,
+                                          fillColor: Colors.white,
+                                          contentPadding:
+                                              const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 12,
+                                          ),
+                                          border: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE2E8F0)),
+                                          ),
+                                          enabledBorder: OutlineInputBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            borderSide: const BorderSide(
+                                                color: Color(0xFFE2E8F0)),
+                                          ),
+                                        ),
+                                        onChanged: (val) {
+                                          final entered =
+                                              double.tryParse(val) ?? 0.0;
+                                          final batchDisc =
+                                              (_selectedBatch?['discount']
+                                                      as num?)
+                                                  ?.toDouble() ??
+                                              0.0;
+                                          if (entered > batchDisc) {
+                                            _stagedDiscountController.text =
+                                                batchDisc.toStringAsFixed(2);
+                                            _stagedDiscountController
+                                                    .selection =
+                                                TextSelection.fromPosition(
+                                              TextPosition(
+                                                offset:
+                                                    _stagedDiscountController
+                                                        .text
+                                                        .length,
+                                              ),
+                                            );
+                                          }
+                                          setState(() {});
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // Batch Selection
+                              Builder(
+                                builder: (context) {
+                                  final unit = _stagedUnit ??
+                                      (_stagedProduct!.packaging.isNotEmpty
+                                          ? _stagedProduct!.packaging.first.name
+                                          : 'Unit');
+                                  final reqBase = _stagedQty *
+                                      _stagedProduct!.getMultiplier(unit);
+                                  final validBatches = _stagedBatches
+                                      .where(
+                                        (b) =>
+                                            (b['batch_quantity'] as num)
+                                                .toDouble() >=
+                                            reqBase,
+                                      )
+                                      .toList();
+                                  final effectiveSelectedBatchId =
+                                      (_selectedBatch != null &&
+                                              validBatches.any((b) =>
+                                                  b['id'] == _selectedBatch!['id']))
+                                          ? _selectedBatch!['id'] as int?
+                                          : null;
+                                  List<DropdownMenuItem<int?>> items = [];
+                                  if (_stagedQty <= 0) {
+                                    items.add(
+                                      const DropdownMenuItem<int?>(
+                                        value: null,
+                                        child: Text('Enter valid Qty first', style: TextStyle(color: Colors.grey)),
+                                      ),
+                                    );
+                                  } else if (validBatches.isEmpty) {
+                                    items.add(
+                                      const DropdownMenuItem<int?>(
+                                        value: null,
+                                        child: Text('No batches with sufficient stock', style: TextStyle(color: Colors.grey)),
+                                      ),
+                                    );
+                                  } else {
+                                    items.add(
+                                      const DropdownMenuItem<int?>(
+                                        value: null,
+                                        child: Text('Auto Select (No Discount)'),
+                                      ),
+                                    );
+                                    items.addAll(
+                                      validBatches.map((b) {
+                                        final discount = (b['discount'] as num?)?.toDouble() ?? 0.0;
+                                        final discountStr = discount > 0 ? ' - Disc: $discount ${b['discount_type']}' : '';
+                                        return DropdownMenuItem<int?>(
+                                          value: b['id'] as int,
+                                          child: Text('Batch #${b['id']} (Stock: ${b['batch_quantity']})$discountStr'),
+                                        );
+                                      }),
+                                    );
+                                  }
+                                  return Padding(
+                                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                    child: DropdownButtonFormField<int?>(
+                                      value: effectiveSelectedBatchId,
+                                      decoration: InputDecoration(
+                                        labelText: 'Select Batch / Discount',
+                                        labelStyle: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                        border: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: BorderRadius.circular(8),
+                                          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                                        ),
+                                      ),
+                                      items: items,
+                                      onChanged: _stagedQty <= 0 || validBatches.isEmpty
+                                          ? null
+                                          : (val) {
+                                              setState(() {
+                                                _selectedBatch = val == null
+                                                    ? null
+                                                    : _stagedBatches.firstWhere((b) => b['id'] == val);
+                                                    
+                                                final batchDisc = (_selectedBatch?['discount'] as num?)?.toDouble() ?? 0.0;
+                                                _stagedDiscountController.text = (val != null && batchDisc > 0)
+                                                    ? (batchDisc % 1 == 0 ? batchDisc.toInt().toString() : batchDisc.toStringAsFixed(2))
+                                                    : '0';
+                                              });
+                                            },
+                                    ),
+                                  );
+                                },
+                              ),
+                              if (_stagedError != null)
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.error_outline, color: Colors.red, size: 14),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          _stagedError!,
+                                          style: const TextStyle(color: Colors.red, fontSize: 12),
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                // Unit dropdown
-                                if (_stagedProduct!.packaging.isNotEmpty)
-                                  Expanded(
-                                    flex: 2,
-                                    child: DropdownButtonFormField<String>(
-                                      initialValue: _stagedUnit,
-                                      isDense: true,
-                                      decoration: InputDecoration(
-                                        labelText: 'Unit',
-                                        filled: true,
-                                        fillColor: Colors.white,
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 10,
-                                            ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          borderSide: BorderSide.none,
-                                        ),
-                                      ),
-                                      items: _stagedProduct!.packaging
-                                          .map(
-                                            (u) => DropdownMenuItem(
-                                              value: u.name,
-                                              child: Text(u.name),
-                                            ),
-                                          )
-                                          .toList(),
-                                      onChanged: (val) =>
-                                          setState(() => _stagedUnit = val),
-                                    ),
+                              // Footer: Totals and Action
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 12,
+                                ),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.vertical(
+                                    bottom: Radius.circular(12),
                                   ),
-                                const SizedBox(width: 10),
-                                // Qty field
-                                SizedBox(
-                                  width: 75,
-                                  child: TextFormField(
-                                    controller: _qtyController,
-                                    keyboardType: TextInputType.number,
-                                    textAlign: TextAlign.center,
-                                    decoration: InputDecoration(
-                                      labelText: 'Qty',
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 10,
-                                          ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                    ),
-                                    onChanged: (val) => setState(
-                                      () => _stagedQty = int.tryParse(val) ?? 1,
+                                  border: Border(
+                                    top: BorderSide(
+                                      color: Color(0xFFE2E8F0),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                // GST field
-                                SizedBox(
-                                  width: 80,
-                                  child: TextFormField(
-                                    controller: _stagedGstController,
-                                    keyboardType:
-                                        const TextInputType.numberWithOptions(
-                                          decimal: true,
-                                        ),
-                                    textAlign: TextAlign.center,
-                                    decoration: InputDecoration(
-                                      labelText: 'GST %',
-                                      filled: true,
-                                      fillColor: Colors.white,
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 10,
-                                          ),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                    ),
-                                    onChanged: (_) => setState(() {}),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                // Price preview
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                child: Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      'Rs. ${_stagedPricePerUnit.toStringAsFixed(0)}/unit',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey.shade600,
-                                      ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Rs. ${_stagedPricePerUnitAfterDiscount.toStringAsFixed(2)} / unit',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF64748B),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        Text(
+                                          'Total: Rs. ${_stagedLineTotal.toStringAsFixed(0)}',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            color: Color(0xFF0F4C81),
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    Text(
-                                      '= Rs. ${_stagedLineTotal.toStringAsFixed(0)}',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        color: _primary,
-                                        fontSize: 14,
+                                    ElevatedButton.icon(
+                                      onPressed: _addStagedToCart,
+                                      icon: const Icon(
+                                        Icons.add_shopping_cart,
+                                        size: 16,
+                                      ),
+                                      label: const Text(
+                                        'Add to Cart',
+                                        style: TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF1E40AF),
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 16,
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(width: 10),
-                                ElevatedButton.icon(
-                                  onPressed: _addStagedToCart,
-                                  icon: const Icon(
-                                    Icons.add_shopping_cart,
-                                    size: 15,
-                                  ),
-                                  label: const Text('Add'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _primary,
-                                    foregroundColor: Colors.white,
-                                    elevation: 0,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 14,
-                                      vertical: 11,
-                                    ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.close,
-                                    size: 18,
-                                    color: Colors.grey.shade500,
-                                  ),
-                                  onPressed: () =>
-                                      setState(() => _stagedProduct = null),
-                                  tooltip: 'Cancel',
-                                ),
-                              ],
-                            ),
-                            if (_stagedError != null) ...[
-                              const SizedBox(height: 8),
-                              Row(
-                                children: [
-                                  const Icon(
-                                    Icons.error_outline,
-                                    color: Colors.red,
-                                    size: 14,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: Text(
-                                      _stagedError!,
-                                      style: const TextStyle(
-                                        color: Colors.red,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                ],
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
                     ],
                     const SizedBox(height: 12),
                     // Cart
-                    Expanded(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade200),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: _cart.isEmpty
-                            ? Center(
+                    Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: _cart.isEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.all(32),
+                              child: Center(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -3143,9 +3487,10 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                     ),
                                   ],
                                 ),
-                              )
-                            : Column(
-                                children: [
+                              ),
+                            )
+                          : Column(
+                              children: [
                                   // Cart header
                                   Container(
                                     padding: const EdgeInsets.symmetric(
@@ -3233,11 +3578,12 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                       ],
                                     ),
                                   ),
-                                  Expanded(
-                                    child: ListView.separated(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 4,
-                                      ),
+                                  ListView.separated(
+                                    shrinkWrap: true,
+                                    physics: const NeverScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 4,
+                                    ),
                                       itemCount: _cart.length,
                                       separatorBuilder: (_, index) => Divider(
                                         height: 1,
@@ -3373,7 +3719,7 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                             Expanded(
                                               flex: 2,
                                               child: Text(
-                                                'Rs. ${_cart[i].pricePerUnit.toStringAsFixed(0)}',
+                                                'Rs. ${_cart[i].finalPricePerUnit.toStringAsFixed(2)}',
                                                 style: TextStyle(
                                                   fontSize: 13,
                                                   color: Colors.grey.shade600,
@@ -3410,11 +3756,9 @@ class _NewSaleDialogState extends State<_NewSaleDialog> {
                                         ),
                                       ),
                                     ),
-                                  ),
                                 ],
                               ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -3570,6 +3914,10 @@ class _CartItem {
   int unitQty; // quantity in the selected unit
   final double pricePerUnit; // price per selected unit
   double gst; // GST percentage
+  final int? batchId;
+  final double discount;
+  final String discountType;
+  final double maxDiscount;
 
   _CartItem({
     required this.product,
@@ -3577,9 +3925,25 @@ class _CartItem {
     required this.unitQty,
     required this.pricePerUnit,
     this.gst = 0.0,
+    this.batchId,
+    this.discount = 0.0,
+    this.discountType = 'Rupee',
+    this.maxDiscount = 0.0,
   });
 
-  double get total => (pricePerUnit * unitQty) * (1 + (gst / 100));
+  double get total {
+    final base = pricePerUnit * unitQty;
+    final withGst = base * (1 + (gst / 100));
+    if (discountType == 'Percentage') {
+      return withGst - (withGst * (discount / 100));
+    } else {
+      return withGst - (discount * unitQty);
+    }
+  }
+
+  double get finalPricePerUnit {
+    return unitQty > 0 ? (total / unitQty) : 0;
+  }
 
   /// Base units to deduct from stock
   int get baseUnits => unitQty * product.getMultiplier(unit);

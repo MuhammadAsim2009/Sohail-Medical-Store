@@ -7,6 +7,7 @@ class PurchaseOrderItem {
   final double purchasePrice;
   final double sellingPrice;
   final double discount;
+  final String discountType;
   final double gst;
   final DateTime? expiryDate;
 
@@ -19,11 +20,16 @@ class PurchaseOrderItem {
     required this.purchasePrice,
     this.sellingPrice = 0.0,
     this.discount = 0.0,
+    this.discountType = 'Rupee',
     this.gst = 0.0,
     this.expiryDate,
   });
 
-  double get subtotal => (quantity * purchasePrice * (1 + (gst / 100))) - discount;
+  double get subtotal {
+    final base = quantity * purchasePrice * (1 + (gst / 100));
+    final disc = discountType == 'Percentage' ? base * (discount / 100) : (discount * quantity);
+    return base - disc;
+  }
 
   PurchaseOrderItem copyWith({
     int? id,
@@ -34,6 +40,7 @@ class PurchaseOrderItem {
     double? purchasePrice,
     double? sellingPrice,
     double? discount,
+    String? discountType,
     double? gst,
     DateTime? expiryDate,
   }) {
@@ -46,6 +53,7 @@ class PurchaseOrderItem {
       purchasePrice: purchasePrice ?? this.purchasePrice,
       sellingPrice: sellingPrice ?? this.sellingPrice,
       discount: discount ?? this.discount,
+      discountType: discountType ?? this.discountType,
       gst: gst ?? this.gst,
       expiryDate: expiryDate ?? this.expiryDate,
     );
@@ -61,6 +69,7 @@ class PurchaseOrderItem {
       purchasePrice: (map['purchase_price'] as num).toDouble(),
       sellingPrice: (map['selling_price'] as num?)?.toDouble() ?? 0.0,
       discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
+      discountType: map['discount_type'] as String? ?? 'Rupee',
       gst: (map['gst'] as num?)?.toDouble() ?? 0.0,
       expiryDate: map['expiry_date'] != null
           ? DateTime.tryParse(map['expiry_date'] as String)
@@ -78,6 +87,7 @@ class PurchaseOrderItem {
         'purchase_price': purchasePrice,
         'selling_price': sellingPrice,
         'discount': discount,
+        'discount_type': discountType,
         'gst': gst,
         'expiry_date': expiryDate?.toIso8601String(),
       };
@@ -95,6 +105,7 @@ class PurchaseOrder {
   final double taxAmount;
   final double paidAmount;
   final double discount;
+  final String discountType;
 
   const PurchaseOrder({
     this.id,
@@ -108,6 +119,7 @@ class PurchaseOrder {
     this.taxAmount = 0.0,
     this.paidAmount = 0.0,
     this.discount = 0.0,
+    this.discountType = 'Rupee',
   });
 
   double get subtotal => items.fold(0, (s, i) => s + i.subtotal);
@@ -127,6 +139,7 @@ class PurchaseOrder {
     double? taxAmount,
     double? paidAmount,
     double? discount,
+    String? discountType,
   }) {
     return PurchaseOrder(
       id: id ?? this.id,
@@ -140,6 +153,7 @@ class PurchaseOrder {
       taxAmount: taxAmount ?? this.taxAmount,
       paidAmount: paidAmount ?? this.paidAmount,
       discount: discount ?? this.discount,
+      discountType: discountType ?? this.discountType,
     );
   }
 
@@ -157,6 +171,7 @@ class PurchaseOrder {
       taxAmount: (map['tax_amount'] as num?)?.toDouble() ?? 0.0,
       paidAmount: (map['paid_amount'] as num?)?.toDouble() ?? 0.0,
       discount: (map['discount'] as num?)?.toDouble() ?? 0.0,
+      discountType: map['discount_type'] as String? ?? 'Rupee',
     );
   }
 }

@@ -87,6 +87,9 @@ class SaleItem {
   final double price;
   final double gst;
   final double total;
+  final int? batchId;
+  final double discount;
+  final String discountType;
 
   SaleItem({
     this.id,
@@ -97,6 +100,9 @@ class SaleItem {
     required this.price,
     this.gst = 0.0,
     required this.total,
+    this.batchId,
+    this.discount = 0.0,
+    this.discountType = 'Rupee',
   });
 
   Map<String, dynamic> toMap() {
@@ -109,6 +115,9 @@ class SaleItem {
       'price': price,
       'gst': gst,
       'total': total,
+      'batch_id': batchId,
+      'discount': discount,
+      'discount_type': discountType,
     };
   }
 
@@ -122,6 +131,9 @@ class SaleItem {
       price: map['price']?.toDouble() ?? 0.0,
       gst: map['gst']?.toDouble() ?? 0.0,
       total: map['total']?.toDouble() ?? 0.0,
+      batchId: map['batch_id'],
+      discount: map['discount']?.toDouble() ?? 0.0,
+      discountType: map['discount_type'] ?? 'Rupee',
     );
   }
 }

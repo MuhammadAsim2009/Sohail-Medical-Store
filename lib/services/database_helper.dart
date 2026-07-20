@@ -52,7 +52,7 @@ class DatabaseHelper {
     final path = join(dbPath, filePath);
     return await openDatabase(
       path,
-      version: 26,
+      version: 28,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -368,6 +368,17 @@ CREATE TABLE IF NOT EXISTS users (
       // Add is_deleted to users so _applySnapshot can push/pull without column errors
       try { await db.execute('ALTER TABLE users ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0'); } catch (_) {}
     }
+        if (oldVersion < 27) {
+      try { await db.execute('ALTER TABLE purchase_order_items ADD COLUMN discount_type TEXT DEFAULT "Rupee"'); } catch (_) {}
+      try { await db.execute('ALTER TABLE purchase_orders ADD COLUMN discount_type TEXT DEFAULT "Rupee"'); } catch (_) {}
+      try { await db.execute('ALTER TABLE product_batches ADD COLUMN discount REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE product_batches ADD COLUMN discount_type TEXT DEFAULT "Rupee"'); } catch (_) {}
+    }
+    if (oldVersion < 28) {
+      try { await db.execute('ALTER TABLE sale_items ADD COLUMN batch_id INTEGER'); } catch (_) {}
+      try { await db.execute('ALTER TABLE sale_items ADD COLUMN discount REAL DEFAULT 0.0'); } catch (_) {}
+      try { await db.execute('ALTER TABLE sale_items ADD COLUMN discount_type TEXT DEFAULT "Rupee"'); } catch (_) {}
+    }
     if (oldVersion < 26) {
       // Create product_batches table
       await db.execute("""
@@ -383,7 +394,9 @@ CREATE TABLE IF NOT EXISTS product_batches (
   created_at        TEXT NOT NULL,
   updated_at        INTEGER NOT NULL,
   is_deleted        INTEGER NOT NULL DEFAULT 0,
-  is_dirty          INTEGER NOT NULL DEFAULT 1
+  is_dirty          INTEGER NOT NULL DEFAULT 1,
+  discount          REAL DEFAULT 0.0,
+  discount_type     TEXT DEFAULT "Rupee"
 )""");
       await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_product_expiry ON product_batches(product_id, expiry_date)');
       await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_sync_id ON product_batches(sync_id)');
@@ -395,7 +408,7 @@ CREATE TABLE IF NOT EXISTS product_batches (
         final productId = p['id'] as int;
         // Try to get the most recent expiry_date for this product from purchase_order_items
         final expiryRows = await db.rawQuery(
-          'SELECT poi.expiry_date FROM purchase_order_items poi '
+          'SELECT poi.expiry_date, poi.discount, poi.discount_type FROM purchase_order_items poi '
           'JOIN purchase_orders po ON po.id = poi.order_id '
           'WHERE poi.product_id = ? AND poi.expiry_date IS NOT NULL '
           'ORDER BY po.order_date DESC LIMIT 1',
@@ -417,6 +430,8 @@ CREATE TABLE IF NOT EXISTS product_batches (
             'updated_at': now.millisecondsSinceEpoch,
             'is_deleted': 0,
             'is_dirty': 1,
+            'discount': expiryRows.isNotEmpty ? (expiryRows.first['discount'] as num?)?.toDouble() ?? 0.0 : 0.0,
+            'discount_type': expiryRows.isNotEmpty ? (expiryRows.first['discount_type'] as String?) ?? 'Rupee' : 'Rupee',
           });
         } catch (_) {}
       }
@@ -590,6 +605,9 @@ CREATE TABLE IF NOT EXISTS sale_items (
   price           REAL NOT NULL,
   gst             REAL NOT NULL DEFAULT 0.0,
   total           REAL NOT NULL,
+  batch_id        INTEGER,
+  discount        REAL DEFAULT 0.0,
+  discount_type   TEXT DEFAULT "Rupee",
   FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
 )""");
 
@@ -696,7 +714,9 @@ CREATE TABLE IF NOT EXISTS product_batches (
   created_at        TEXT NOT NULL,
   updated_at        INTEGER NOT NULL,
   is_deleted        INTEGER NOT NULL DEFAULT 0,
-  is_dirty          INTEGER NOT NULL DEFAULT 1
+  is_dirty          INTEGER NOT NULL DEFAULT 1,
+  discount          REAL DEFAULT 0.0,
+  discount_type     TEXT DEFAULT "Rupee"
 )""");
     await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_product_expiry ON product_batches(product_id, expiry_date)');
     await db.execute('CREATE INDEX IF NOT EXISTS idx_batches_sync_id ON product_batches(sync_id)');
@@ -968,7 +988,9 @@ CREATE TABLE IF NOT EXISTS product_categories (
     final ts = DateTime.now().millisecondsSinceEpoch;
     await db.update(
       'product_batches',
-      {'is_deleted': 1, 'is_dirty': 1, 'updated_at': ts},
+      {'is_deleted': 1, 'is_dirty': 1,
+            'discount': 0.0,
+            'discount_type': 'Rupee', 'updated_at': ts},
       where: 'product_id = ? AND is_deleted = 0',
       whereArgs: [id],
     );
@@ -1214,6 +1236,8 @@ CREATE TABLE IF NOT EXISTS product_categories (
             'updated_at': nowTs.millisecondsSinceEpoch,
             'is_deleted': 0,
             'is_dirty': 1,
+            'discount': item.discount,
+            'discount_type': item.discountType,
           },
         );
       }
@@ -1471,24 +1495,31 @@ CREATE TABLE IF NOT EXISTS product_categories (
             item.productId,
           ],
         );
-        // FEFO: deduct from batches ordered by earliest expiry first
         double remaining = (item.quantity as num).toDouble();
-        final batches = await txn.rawQuery(
-          'SELECT id, batch_quantity FROM product_batches '
-          'WHERE product_id = ? AND batch_quantity > 0 AND is_deleted = 0 '
-          'ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC',
-          [item.productId],
-        );
-        for (final batch in batches) {
-          if (remaining <= 0) break;
-          final batchId = batch['id'] as int;
-          final batchQty = (batch['batch_quantity'] as num).toDouble();
-          final deduct = remaining <= batchQty ? remaining : batchQty;
+        if (item.batchId != null) {
           await txn.rawUpdate(
             'UPDATE product_batches SET batch_quantity = batch_quantity - ?, updated_at = ?, is_dirty = 1 WHERE id = ?',
-            [deduct, DateTime.now().millisecondsSinceEpoch, batchId],
+            [remaining, DateTime.now().millisecondsSinceEpoch, item.batchId],
           );
-          remaining -= deduct;
+        } else {
+          // FEFO: deduct from batches ordered by earliest expiry first
+          final batches = await txn.rawQuery(
+            'SELECT id, batch_quantity FROM product_batches '
+            'WHERE product_id = ? AND batch_quantity > 0 AND is_deleted = 0 '
+            'ORDER BY (expiry_date IS NULL) ASC, expiry_date ASC',
+            [item.productId],
+          );
+          for (final batch in batches) {
+            if (remaining <= 0) break;
+            final batchId = batch['id'] as int;
+            final batchQty = (batch['batch_quantity'] as num).toDouble();
+            final deduct = remaining <= batchQty ? remaining : batchQty;
+            await txn.rawUpdate(
+              'UPDATE product_batches SET batch_quantity = batch_quantity - ?, updated_at = ?, is_dirty = 1 WHERE id = ?',
+              [deduct, DateTime.now().millisecondsSinceEpoch, batchId],
+            );
+            remaining -= deduct;
+          }
         }
       }
       if (sale.customerId != null && sale.customerId!.isNotEmpty) {
@@ -2225,6 +2256,8 @@ CREATE TABLE IF NOT EXISTS product_categories (
               'updated_at': nowTs.millisecondsSinceEpoch,
               'is_deleted': 0,
               'is_dirty': 1,
+              'discount': 0.0,
+              'discount_type': 'Rupee',
             });
           }
         }
