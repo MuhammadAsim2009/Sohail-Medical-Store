@@ -1418,7 +1418,7 @@ class _NearExpiryCardState extends State<_NearExpiryCard> {
                       ),
                     ),
                     Text(
-                      '${_batches.length} batch${_batches.length == 1 ? '' : 'es'} expiring within 4 Months',
+                      '${_batches.length} batch${_batches.length == 1 ? '' : 'es'} expiring within 7 Months',
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 13,

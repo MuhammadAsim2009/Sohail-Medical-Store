@@ -1,18 +1,16 @@
 import 'dart:io';
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'screens/splash_screen.dart';
-import 'services/firebase_sync_service.dart';
 import 'services/database_helper.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
+  
   if (Platform.isWindows || Platform.isLinux) {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
@@ -32,25 +30,13 @@ class PharmacyApp extends StatefulWidget {
 }
 
 class _PharmacyAppState extends State<PharmacyApp> {
-  Timer? _syncTimer;
-
   @override
   void initState() {
     super.initState();
-    // Run an initial richness-based sync on app open
-    Future.microtask(() {
-      FirebaseSyncService.instance.sync(forceInitial: true);
-    });
-
-    // Background delta sync every 60 seconds — only pushes/pulls changed rows
-    _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
-      FirebaseSyncService.instance.sync();
-    });
   }
 
   @override
   void dispose() {
-    _syncTimer?.cancel();
     super.dispose();
   }
 

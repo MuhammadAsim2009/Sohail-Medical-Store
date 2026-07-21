@@ -13,7 +13,6 @@ import '../models/expense.dart';
 import '../models/sales_return.dart';
 import '../models/customer_payment.dart';
 import '../models/supplier_payment.dart';
-import 'firebase_sync_service.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
@@ -796,7 +795,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       'product_categories',
       _stamp({'name': name, 'packaging': packagingJson, 'is_deleted': 0}),
     );
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   Future<void> deleteCategory(int id) async {
@@ -807,7 +805,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       where: 'id = ?',
       whereArgs: [id],
     );
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   // ---------------------------------------------------------------------------
@@ -856,7 +853,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       data['key'] = key;
       await db.insert('settings', data);
     }
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   Future<Map<String, String>> getAllSettings() async {
@@ -875,7 +871,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
     final map = _stamp(product.toMap());
     final id = await db.insert('products', map);
     product.id = id;
-    FirebaseSyncService.instance.triggerAutoSync();
     return product;
   }
 
@@ -897,7 +892,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
   Future<int> updateProduct(Product product) async {
     final db = await instance.database;
     final map = _stamp(product.toMap());
-    FirebaseSyncService.instance.triggerAutoSync();
     return db.update(
       'products',
       _stamp(map, isUpdate: true),
@@ -1011,7 +1005,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       where: 'id = ?',
       whereArgs: [id],
     );
-    FirebaseSyncService.instance.triggerAutoSync();
     return result;
   }
 
@@ -1046,7 +1039,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
         }),
       );
     });
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   // -- PURCHASE ORDERS ---------------------------------------------------------
@@ -1105,7 +1097,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
         items: savedItems,
       );
     });
-    FirebaseSyncService.instance.triggerAutoSync();
     return saved;
   }
 
@@ -1140,7 +1131,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       where: 'id = ?',
       whereArgs: [orderId],
     );
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   Future<void> updatePurchaseOrder(PurchaseOrder order) async {
@@ -1187,7 +1177,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
         );
       }
     });
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   /// Mark as Received and atomically credit inventory stock.
@@ -1304,7 +1293,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
         }
       }
     });
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   // -- SUPPLIERS ---------------------------------------------------------------
@@ -1318,7 +1306,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       ), // isUpdate defaults to false → assigns new sync_id
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    FirebaseSyncService.instance.triggerAutoSync();
   }
 
   Future<List<Supplier>> getSuppliers({bool includeDeleted = false}) async {
@@ -1331,7 +1318,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> updateSupplier(Supplier supplier) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return db.update(
       'suppliers',
       _stamp(supplier.toMap(), isUpdate: true),
@@ -1342,7 +1328,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> deleteSupplier(String id) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return db.update(
       'suppliers',
       _stamp({'is_deleted': 1}, isUpdate: true),
@@ -1369,7 +1354,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> insertCustomer(Customer customer) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.insert(
       'customers',
       _stamp(customer.toMap()),
@@ -1411,7 +1395,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> updateCustomer(Customer customer) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.update(
       'customers',
       _stamp(customer.toMap(), isUpdate: true),
@@ -1422,7 +1405,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> deleteCustomer(String id) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.update(
       'customers',
       _stamp({'is_deleted': 1}, isUpdate: true),
@@ -1460,7 +1442,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       actualCash: 0.0,
       status: 'OPEN',
     );
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.insert('daily_sales_sheets', _stamp(dss.toMap()));
   }
 
@@ -1482,7 +1463,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
     if (dssMaps.isEmpty) throw Exception('DSS not found');
     final dss = DailySalesSheet.fromMap(dssMaps.first);
     final expectedCash = dss.openingBalance + totalCashSales;
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.update(
       'daily_sales_sheets',
       _stamp({
@@ -1566,13 +1546,11 @@ CREATE TABLE IF NOT EXISTS product_categories (
         );
       }
     });
-    FirebaseSyncService.instance.triggerAutoSync();
     return saleId;
   }
 
   Future<int> insertCustomerPayment(CustomerPayment payment) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.transaction((txn) async {
       final paymentMap = _stamp(payment.toMap());
       paymentMap.remove('id');
@@ -1633,7 +1611,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> insertSupplierPayment(SupplierPayment payment) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.transaction((txn) async {
       final paymentMap = _stamp(payment.toMap());
       paymentMap.remove('id');
@@ -1688,7 +1665,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
     String notes = '',
   }) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
 
     await db.transaction((txn) async {
       final ts = DateTime.now().millisecondsSinceEpoch;
@@ -2337,7 +2313,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
     final db = await instance.database;
     final map = _stamp(expense.toMap());
     map.remove('id');
-    FirebaseSyncService.instance.triggerAutoSync();
     return await db.insert('expenses', map);
   }
 
@@ -2461,7 +2436,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
         );
       }
     });
-    FirebaseSyncService.instance.triggerAutoSync();
     return returnId;
   }
 
@@ -2486,7 +2460,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
 
   Future<int> deleteSalesReturn(int id) async {
     final db = await instance.database;
-    FirebaseSyncService.instance.triggerAutoSync();
     return db.delete('sales_returns', where: 'id = ?', whereArgs: [id]);
   }
 
@@ -2498,7 +2471,6 @@ CREATE TABLE IF NOT EXISTS product_categories (
       throw ArgumentError('Sales return id is required for update.');
     }
     map.remove('id');
-    FirebaseSyncService.instance.triggerAutoSync();
     return db.update('sales_returns', _stamp(map, isUpdate: true), where: 'id = ?', whereArgs: [id]);
   }
 

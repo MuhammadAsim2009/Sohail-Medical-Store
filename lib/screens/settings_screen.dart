@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../services/firebase_sync_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:io';
 import 'dart:async';
@@ -813,54 +812,13 @@ class _SyncSettingsContentState extends State<_SyncSettingsContent> {
 
   Future<void> _runSync() async {
     if (_isSyncing) return;
-    setState(() => _isSyncing = true);
-
-    try {
-      final result = await FirebaseSyncService.instance.sync(forceInitial: true, forceReset: true);
-
-      if (!mounted) return;
-
-      if (result.busy) {
-        AppFeedback.show(
-          context,
-          'Sync already in progress. Please wait a moment and try again.',
-          type: AppFeedbackType.warning,
-        );
-      } else if (result.offline) {
-        AppFeedback.show(
-          context,
-          'Sync failed: Could not reach Firebase servers. Check your internet connection.',
-          type: AppFeedbackType.error,
-        );
-      } else if (result.notAuthenticated) {
-        AppFeedback.show(
-          context,
-          'Sync failed: Not authenticated with Firebase. Please log in again.',
-          type: AppFeedbackType.error,
-        );
-      } else {
-        final hasErrors = result.errors.isNotEmpty;
-        final type = hasErrors
-            ? AppFeedbackType.warning
-            : AppFeedbackType.success;
-        final errorDetail = hasErrors
-            ? '\nErrors: ${result.errors.take(3).join('; ')}'
-            : '';
-        AppFeedback.show(
-          context,
-          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.$errorDetail',
-          type: type,
-        );
-      }
-    } catch (e) {
-      if (mounted)
-        AppFeedback.show(
-          context,
-          'Sync Error: $e',
-          type: AppFeedbackType.error,
-        );
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
+    // Sync logic will be implemented with new architecture.
+    if (mounted) {
+      AppFeedback.show(
+        context,
+        'Sync coming soon with new architecture.',
+        type: AppFeedbackType.warning,
+      );
     }
   }
 

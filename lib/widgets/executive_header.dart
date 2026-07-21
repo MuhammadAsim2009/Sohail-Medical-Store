@@ -2,7 +2,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import '../services/firebase_sync_service.dart';
 import '../services/database_helper.dart';
 import '../utils/app_feedback.dart';
 
@@ -69,49 +68,9 @@ class _ExecutiveHeaderState extends State<ExecutiveHeader> {
 
   Future<void> _syncNow() async {
     if (_isSyncing) return;
-
-    setState(() {
-      _isSyncing = true;
-      _isPending = false;
-    });
-
-    try {
-      // Only force full richness sync on first-ever sync (timestamp == 0)
-      final lastSyncRaw = await DatabaseHelper.instance.getSetting('last_sync_timestamp');
-      final lastSyncTs = int.tryParse(lastSyncRaw ?? '0') ?? 0;
-      final isFirstSync = lastSyncTs == 0;
-
-      final result = await FirebaseSyncService.instance
-          .sync(forceInitial: isFirstSync, forceReset: true);
-
-      if (!mounted) return;
-
-      if (result.busy) {
-        AppFeedback.show(context, 'Sync already in progress. Please wait.', type: AppFeedbackType.warning);
-      } else if (result.offline) {
-        AppFeedback.show(context, 'Sync failed: No internet connection or route to Google', type: AppFeedbackType.error);
-        setState(() => _isPending = true);
-      } else if (result.notAuthenticated) {
-        AppFeedback.show(context, 'Sync failed: Not authenticated with Firebase', type: AppFeedbackType.error);
-        setState(() => _isPending = true);
-      } else {
-        final hasErrors = result.errors.isNotEmpty;
-        final errorDetail = hasErrors ? '\nErrors: ${result.errors.take(3).join('; ')}' : '';
-        AppFeedback.show(
-          context,
-          'Synced: ${result.pushed} pushed, ${result.pulled} pulled.$errorDetail',
-          type: hasErrors ? AppFeedbackType.warning : AppFeedbackType.success,
-        );
-        await _loadLastSyncTime();
-      }
-    } catch (e) {
-      debugPrint('Sync failed or timed out: $e');
-      if (mounted) {
-        AppFeedback.show(context, 'Sync Error: $e', type: AppFeedbackType.error);
-        setState(() => _isPending = true);
-      }
-    } finally {
-      if (mounted) setState(() => _isSyncing = false);
+    // Sync logic will be implemented with new architecture.
+    if (mounted) {
+      AppFeedback.show(context, 'Sync coming soon with new architecture.', type: AppFeedbackType.warning);
     }
   }
 
